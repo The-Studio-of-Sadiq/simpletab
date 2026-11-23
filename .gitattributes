@@ -1,0 +1,7 @@
+# Keep LF line endings in the repository and in working copies on every platform, so hashes of
+# committed fixtures and generated files match on Windows and Linux CI.
+* text=auto eol=lf
+*.png binary
+*.jpg binary
+*.pdf binary
+*.zip binary

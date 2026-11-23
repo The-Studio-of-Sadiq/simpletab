@@ -16,6 +16,18 @@ export default defineConfig({
           alias: { "@": path.resolve(__dirname, "packages/core/src") },
         },
       },
+      {
+        test: {
+          name: "tabbycat-diff",
+          root: "tools/tabbycat-diff",
+          include: ["**/*.test.ts"],
+          globals: true,
+          environment: "node",
+        },
+        resolve: {
+          alias: { "@": path.resolve(__dirname, "packages/core/src") },
+        },
+      },
     ],
   },
 });
