@@ -17,7 +17,9 @@
     "lint": "eslint . && npm run typecheck",
     "port-check": "node tools/port-check.mjs",
     "port-from-crabbytab": "node tools/port-from-crabbytab.mjs",
-    "tabbycat-diff": "vitest run --project tabbycat-diff"
+    "tabbycat-diff": "vitest run --project tabbycat-diff",
+    "determinism": "vitest run --project core packages/core/test/determinism",
+    "determinism:update": "node tools/update-draw-hashes.mjs"
   },
   "devDependencies": {
     "@types/node": "^22.13.9",
