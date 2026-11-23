@@ -117,7 +117,15 @@ describe("host storage and engine", () => {
     expect(generatedColumns.find((column) => column.name === "institution_id")?.hidden).toBe(3);
     expect(engine.database.pragma("foreign_keys", { simple: true })).toBe(1);
     expect(engine.database.prepare("SELECT value FROM meta WHERE key='schema_version'").get())
+      .toEqual({ value: "2" });
+    expect(engine.database.prepare("SELECT value FROM meta WHERE key='host_number'").get())
       .toEqual({ value: "1" });
+    expect(engine.database.prepare("SELECT value FROM meta WHERE key='host_rank'").get())
+      .toEqual({ value: "1" });
+    const hostIdRow = engine.database.prepare("SELECT value FROM meta WHERE key='host_id'").get() as
+      | { value: string }
+      | undefined;
+    expect(hostIdRow?.value).toBeTruthy();
   });
 
   it("commits the entity, op and changelog together and emits a post-commit event", async () => {

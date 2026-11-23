@@ -1,25 +1,56 @@
-import { makeEntry, GENESIS_HASH, type PublicChainItem } from "@simpletab/core/changelog";
+import {
+  GENESIS_HASH,
+  canonicalize,
+  makeEntry,
+  type PublicChainItem,
+} from "@simpletab/core/changelog";
 import {
   applyOp,
   canUndo,
   defaultRegistry,
   type Actor,
+  type ApplyErrorCode,
   type ApplyResult,
+  type ApplySuccess,
+  type OpDef,
   type OpRegistryLookup,
   type OpRequest,
   type RecordKey,
   type TournamentState,
 } from "@simpletab/core/ops";
-import { canonicalize } from "@simpletab/core/changelog";
 import type { SqliteDatabase } from "../db/database";
 import { openDatabase } from "../db/database";
 import { loadState, seedState, writeChangedRecords } from "../state/load";
 import { stateHash as computeStateHash } from "../state/state-hash";
+import {
+  fastCheck,
+  fastCheckWithStateSync,
+  fullCheck,
+  type IntegrityCheckResult,
+} from "./integrity";
+import { LockManager, type ActiveLock, type ManagedLock } from "./locks";
+import {
+  DEFAULT_SNAPSHOT_EVERY,
+  encodeSnapshot,
+  shouldTakeSnapshot,
+  writeSnapshot,
+} from "./snapshots";
+import {
+  LongOpWorkerPool,
+  WorkerCancelledError,
+  type RunningWorkerTask,
+} from "./workers";
 
 export interface HostEngineOptions {
   initialState?: TournamentState;
   clock?: () => Date;
   registry?: OpRegistryLookup;
+  /** Take a snapshot every N committed ops (defaults to 2,000). */
+  snapshotEvery?: number;
+  /** Override worker pool size (defaults to `max(1, cpus - 1)`). */
+  workerPoolSize?: number;
+  /** Optional synchronous worker-thread delay in ms for deterministic tests. */
+  longOpWorkerDelayMs?: number;
 }
 
 export interface CommittedEvent {
@@ -36,6 +67,18 @@ export interface HostHead {
   entryHash: string;
 }
 
+export type HostApplyErrorCode = ApplyErrorCode | "LOCKED" | "CANCELLED";
+
+export interface HostApplyFailure {
+  ok: false;
+  code: HostApplyErrorCode;
+  errors: string[];
+  current?: Record<RecordKey, number>;
+  lockId?: string;
+}
+
+export type HostApplyResult<P = unknown> = ApplySuccess<P> | HostApplyFailure;
+
 export interface UndoFailure {
   ok: false;
   code: "CANNOT_UNDO";
@@ -43,7 +86,11 @@ export interface UndoFailure {
   blockingSeqs: number[];
 }
 
-export type UndoResult = ApplyResult | UndoFailure;
+export type UndoResult = HostApplyResult | UndoFailure;
+
+export type CancelLongResult =
+  | { ok: true; lockId: string }
+  | { ok: false; code: "FORBIDDEN" | "NOT_FOUND"; errors: string[] };
 
 interface ChangelogRow {
   seq: number;
@@ -61,22 +108,181 @@ interface StoredOpRow {
   inverse: string | null;
 }
 
+interface SubsequentWritesRow {
+  writes: string;
+}
+
+type SubmitPhase1Result<P> =
+  | { kind: "done"; result: HostApplyResult<P> }
+  | {
+      kind: "long";
+      lock: ManagedLock;
+      task: RunningWorkerTask<P> | null;
+      snapshotState: TournamentState;
+      startSeq: number;
+      readKeys: ReadonlySet<RecordKey>;
+      readKinds: ReadonlySet<string>;
+    };
+
+function recordKindOf(key: RecordKey): string {
+  const index = key.indexOf(":");
+  return index < 0 ? key : key.slice(0, index);
+}
+
+/** Merges only the written records from `computed` onto `current` when non-overlapping ops ran concurrently. */
+function mergeDisjointWrites(
+  current: TournamentState,
+  computed: TournamentState,
+  writes: readonly RecordKey[],
+): TournamentState {
+  const next: TournamentState = {
+    ...current,
+    versions: { ...current.versions },
+  };
+  const mergeList = <T>(
+    currentItems: readonly T[],
+    computedItems: readonly T[],
+    id: string,
+    getId: (item: T) => string,
+  ): T[] => {
+    const replacement = computedItems.find((item) => getId(item) === id);
+    const filtered = currentItems.filter((item) => getId(item) !== id);
+    return replacement === undefined ? filtered : [...filtered, replacement];
+  };
+
+  for (const key of writes) {
+    const sep = key.indexOf(":");
+    const kind = key.slice(0, sep);
+    const id = key.slice(sep + 1);
+    next.versions[key] = (next.versions[key] ?? 0) + 1;
+    switch (kind) {
+      case "tournament":
+        next.tournament = computed.tournament;
+        break;
+      case "institution":
+        next.institutions = mergeList(next.institutions, computed.institutions, id, (x) => x.id);
+        break;
+      case "team":
+        next.teams = mergeList(next.teams, computed.teams, id, (x) => x.id);
+        break;
+      case "adjudicator":
+        next.adjudicators = mergeList(next.adjudicators, computed.adjudicators, id, (x) => x.id);
+        break;
+      case "venue":
+        next.venues = mergeList(next.venues, computed.venues, id, (x) => x.id);
+        break;
+      case "round":
+        next.rounds = mergeList(next.rounds, computed.rounds, id, (x) => x.id);
+        break;
+      case "debate":
+        next.debates = mergeList(next.debates, computed.debates, id, (x) => x.id);
+        break;
+      case "motion":
+        next.motions = mergeList(next.motions, computed.motions, id, (x) => x.id);
+        break;
+      case "ballot":
+        next.ballots = mergeList(next.ballots, computed.ballots, id, (x) => x.id);
+        break;
+      case "ballotIntake":
+        next.ballotIntake = mergeList(next.ballotIntake ?? [], computed.ballotIntake ?? [], id, (x) => x.id);
+        break;
+      case "lateSubmission":
+        next.lateSubmissions = mergeList(
+          next.lateSubmissions ?? [],
+          computed.lateSubmissions ?? [],
+          id,
+          (x) => x.id,
+        );
+        break;
+      case "feedback":
+        next.feedback = mergeList(next.feedback, computed.feedback, id, (x) => x.id);
+        break;
+      case "breakCategory":
+        next.breakCategories = mergeList(
+          next.breakCategories,
+          computed.breakCategories,
+          id,
+          (x) => x.id,
+        );
+        break;
+      case "link":
+        next.links = mergeList(next.links, computed.links, id, (x) => x.lookupId);
+        break;
+      case "registration":
+        next.registrations = mergeList(
+          next.registrations,
+          computed.registrations,
+          id,
+          (x) => x.id,
+        );
+        break;
+      case "device":
+        next.devices = mergeList(next.devices, computed.devices, id, (x) => x.id);
+        break;
+      case "role":
+        next.roles = mergeList(next.roles, computed.roles, id, (x) => x.id);
+        break;
+      case "proposal":
+        next.proposals = mergeList(next.proposals, computed.proposals, id, (x) => x.id);
+        break;
+      case "host":
+        next.host = computed.host;
+        break;
+      default:
+        throw new Error(`Unsupported record kind during merge: ${kind}`);
+    }
+  }
+  return next;
+}
+
 /** Serial SQLite wrapper around core's pure tournament operation engine. */
 export class HostEngine {
   readonly database: SqliteDatabase;
   private readonly registry: OpRegistryLookup;
+  private readonly usingDefaultRegistry: boolean;
   private readonly clock: () => Date;
+  private readonly snapshotEvery: number;
+  private readonly lockManager = new LockManager();
+  private readonly workerPool: LongOpWorkerPool;
   private cachedState: TournamentState | null;
+  private _integrity: IntegrityCheckResult;
   private queue: Promise<void> = Promise.resolve();
   private readonly listeners = new Set<CommitListener>();
 
   private constructor(database: SqliteDatabase, options: HostEngineOptions) {
     this.database = database;
+    this.usingDefaultRegistry = options.registry === undefined;
     this.registry = options.registry ?? defaultRegistry();
     this.clock = options.clock ?? (() => new Date());
-    this.cachedState = loadState(database);
-    if (this.cachedState === null && options.initialState !== undefined) {
+    const snapshotEvery = options.snapshotEvery ?? DEFAULT_SNAPSHOT_EVERY;
+    if (!Number.isInteger(snapshotEvery) || snapshotEvery < 1) {
+      throw new RangeError(`snapshotEvery must be a positive integer, got ${snapshotEvery}.`);
+    }
+    this.snapshotEvery = snapshotEvery;
+    this.workerPool = new LongOpWorkerPool({
+      ...(options.workerPoolSize !== undefined ? { size: options.workerPoolSize } : {}),
+      ...(options.longOpWorkerDelayMs !== undefined
+        ? { debugDelayMs: options.longOpWorkerDelayMs }
+        : {}),
+    });
+
+    const existing = loadState(database);
+    if (existing === null && options.initialState !== undefined) {
       seedState(database, options.initialState);
+    }
+
+    const startupCheck = fastCheckWithStateSync(database, { registry: this.registry });
+    if (startupCheck.ok) {
+      this._integrity = { ok: true };
+      this.cachedState = startupCheck.state;
+    } else {
+      this._integrity = {
+        ok: false,
+        stage: startupCheck.stage,
+        ...(startupCheck.seq !== undefined ? { seq: startupCheck.seq } : {}),
+        reason: startupCheck.reason,
+      };
+      // Open in blocked mode: tabbing continues against the live tables while sync/publish are blocked.
       this.cachedState = loadState(database);
     }
   }
@@ -92,13 +298,73 @@ export class HostEngine {
     }
   }
 
-  submit<P>(request: OpRequest<P>, actor: Actor): Promise<ApplyResult<P>> {
-    return this.enqueue(() => this.commit(request, actor));
+  /** Result of the startup fast check (or a subsequent failed full check). */
+  get integrity(): IntegrityCheckResult {
+    return this._integrity;
+  }
+
+  /** Online sync is allowed only when startup and background integrity checks have passed. */
+  canSync(): boolean {
+    return this._integrity.ok;
+  }
+
+  /** Publishing is allowed only when startup and background integrity checks have passed. */
+  canPublish(): boolean {
+    return this._integrity.ok;
+  }
+
+  /** Runs the async fast integrity check (using core's `verifyChain`). */
+  async runFastCheck(): Promise<IntegrityCheckResult> {
+    const result = await fastCheck(this.database, { registry: this.registry });
+    if (!result.ok) {
+      this._integrity = result;
+    }
+    return result;
+  }
+
+  /** Runs the full background integrity check from op 1, updating blocked mode on failure. */
+  async runFullCheck(): Promise<IntegrityCheckResult> {
+    const result = await fullCheck(this.database, { registry: this.registry });
+    if (!result.ok) {
+      this._integrity = result;
+    }
+    return result;
+  }
+
+  /** Lists currently held long-op locks. */
+  locks(): ActiveLock[] {
+    return this.lockManager.list();
+  }
+
+  /** Cancels a running long op. Allowed only for host-owner actors. */
+  async cancelLong(lockId: string, actor: Actor): Promise<CancelLongResult> {
+    if (!actor.isHostOwner) {
+      return {
+        ok: false,
+        code: "FORBIDDEN",
+        errors: ["Only the host owner can cancel a running long operation."],
+      };
+    }
+    const cancelled = await this.lockManager.cancel(lockId);
+    if (!cancelled) {
+      return {
+        ok: false,
+        code: "NOT_FOUND",
+        errors: [`No active long operation lock found for id "${lockId}".`],
+      };
+    }
+    return { ok: true, lockId };
+  }
+
+  submit<P>(request: OpRequest<P>, actor: Actor): Promise<HostApplyResult<P>> {
+    return this.executeRequest(request, actor);
   }
 
   /** Undoes an op if no later op wrote any of its records. */
-  undo(seq: number, actor: Actor): Promise<UndoResult> {
-    return this.enqueue(async () => {
+  async undo(seq: number, actor: Actor): Promise<UndoResult> {
+    const prepared = await this.enqueue<
+      { ok: true; inverse: OpRequest<unknown> } | { ok: false; failure: UndoFailure }
+    >(() => {
       const logRows = this.database.prepare(
         "SELECT seq, writes, inverse_of FROM ops ORDER BY seq",
       ).all() as OpLogRow[];
@@ -111,12 +377,15 @@ export class HostEngine {
       if (!undoCheck.ok) {
         return {
           ok: false,
-          code: "CANNOT_UNDO",
-          errors: undoCheck.blockingSeqs.length > 0
-            ? [`Operation ${seq} is blocked by later operations: ${undoCheck.blockingSeqs.join(", ")}.`]
-            : [`Operation ${seq} does not exist.`],
-          blockingSeqs: undoCheck.blockingSeqs,
-        } satisfies UndoFailure;
+          failure: {
+            ok: false,
+            code: "CANNOT_UNDO",
+            errors: undoCheck.blockingSeqs.length > 0
+              ? [`Operation ${seq} is blocked by later operations: ${undoCheck.blockingSeqs.join(", ")}.`]
+              : [`Operation ${seq} does not exist.`],
+            blockingSeqs: undoCheck.blockingSeqs,
+          },
+        };
       }
 
       const stored = this.database.prepare("SELECT inverse FROM ops WHERE seq = ?")
@@ -124,14 +393,21 @@ export class HostEngine {
       if (stored?.inverse === null || stored === undefined) {
         return {
           ok: false,
-          code: "CANNOT_UNDO",
-          errors: [`Operation ${seq} has no inverse.`],
-          blockingSeqs: [],
-        } satisfies UndoFailure;
+          failure: {
+            ok: false,
+            code: "CANNOT_UNDO",
+            errors: [`Operation ${seq} has no inverse.`],
+            blockingSeqs: [],
+          },
+        };
       }
-      const inverse = JSON.parse(stored.inverse) as OpRequest<unknown>;
-      return this.commit(inverse, actor, seq);
+      return { ok: true, inverse: JSON.parse(stored.inverse) as OpRequest<unknown> };
     });
+
+    if (!prepared.ok) {
+      return prepared.failure;
+    }
+    return this.executeRequest(prepared.inverse, actor, seq);
   }
 
   /** Adds a post-commit listener and returns an unsubscribe function. */
@@ -171,6 +447,7 @@ export class HostEngine {
 
   async close(): Promise<void> {
     await this.queue;
+    await this.workerPool.close();
     this.database.close();
   }
 
@@ -180,20 +457,167 @@ export class HostEngine {
     return result;
   }
 
-  private async commit<P>(
+  private async executeRequest<P>(
     request: OpRequest<P>,
     actor: Actor,
     inverseOf?: number,
-  ): Promise<ApplyResult<P>> {
+  ): Promise<HostApplyResult<P>> {
+    const phase1 = await this.enqueue<SubmitPhase1Result<P>>(async () => {
+      if (this.cachedState === null) {
+        throw new Error("Cannot submit an operation before the tournament database is initialized.");
+      }
+
+      const opDef = this.registry.get(request.type) as OpDef<P> | undefined;
+      if (opDef !== undefined) {
+        const declaredWrites = opDef.writes(this.cachedState, request.payload);
+        const conflict = this.lockManager.findConflict(declaredWrites);
+        if (conflict !== null) {
+          return {
+            kind: "done",
+            result: {
+              ok: false,
+              code: "LOCKED",
+              lockId: conflict.lockId,
+              errors: [
+                `Operation "${request.type}" overlaps active lock ${conflict.lockId} (${conflict.opType} by ${conflict.actorRef}).`,
+              ],
+            },
+          };
+        }
+
+        if (opDef.lock) {
+          const snapshotState = structuredClone(this.cachedState);
+          const startSeq = this.head().seq;
+          const readKeysList = opDef.reads(this.cachedState, request.payload);
+          const readKeys = new Set<RecordKey>(readKeysList);
+          const readKinds = new Set<string>(readKeysList.map(recordKindOf));
+          const lock = this.lockManager.acquire(
+            request.type,
+            actor.ref,
+            this.clock().toISOString(),
+            declaredWrites,
+          );
+          let task: RunningWorkerTask<P> | null = null;
+          if (this.usingDefaultRegistry) {
+            task = this.workerPool.run(snapshotState, request, actor);
+            lock.cancelHandler = task.cancel;
+          }
+          return {
+            kind: "long",
+            lock,
+            task,
+            snapshotState,
+            startSeq,
+            readKeys,
+            readKinds,
+          };
+        }
+      }
+
+      const result = await this.commitImmediate(request, actor, inverseOf);
+      return { kind: "done", result };
+    });
+
+    if (phase1.kind === "done") {
+      return phase1.result;
+    }
+
+    const { lock, task, snapshotState, startSeq, readKeys, readKinds } = phase1;
+    let computedResult: ApplyResult<P>;
+    try {
+      if (task !== null) {
+        computedResult = await task.promise;
+      } else {
+        computedResult = applyOp(snapshotState, request, actor, this.registry);
+      }
+    } catch (error) {
+      this.lockManager.release(lock.lockId);
+      if (error instanceof WorkerCancelledError || lock.cancelled) {
+        return {
+          ok: false,
+          code: "CANCELLED",
+          errors: [`Long operation "${request.type}" was cancelled by the host owner.`],
+        };
+      }
+      throw error;
+    }
+
+    return this.enqueue(async () => {
+      try {
+        if (lock.cancelled) {
+          return {
+            ok: false,
+            code: "CANCELLED",
+            errors: [`Long operation "${request.type}" was cancelled by the host owner.`],
+          };
+        }
+        if (!computedResult.ok) {
+          return computedResult;
+        }
+        if (this.cachedState === null) {
+          throw new Error("Cannot commit an operation before the tournament database is initialized.");
+        }
+
+        const currentSeq = this.head().seq;
+        let finalState = computedResult.state;
+        if (currentSeq !== startSeq) {
+          const subsequentRows = this.database.prepare(
+            "SELECT writes FROM ops WHERE seq > ? ORDER BY seq ASC",
+          ).all(startSeq) as SubsequentWritesRow[];
+          const writtenSet = new Set<RecordKey>(computedResult.writes);
+          for (const row of subsequentRows) {
+            const keys = JSON.parse(row.writes) as RecordKey[];
+            for (const key of keys) {
+              if (
+                writtenSet.has(key) ||
+                readKeys.has(key) ||
+                readKinds.has(recordKindOf(key))
+              ) {
+                return {
+                  ok: false,
+                  code: "VERSION_CONFLICT",
+                  errors: [
+                    `State record "${key}" changed while long operation "${request.type}" was running.`,
+                  ],
+                };
+              }
+            }
+          }
+          finalState = mergeDisjointWrites(this.cachedState, computedResult.state, computedResult.writes);
+        }
+
+        const mergedResult: ApplySuccess<P> = {
+          ...computedResult,
+          state: finalState,
+        };
+        return await this.persistSuccess(request, actor, mergedResult, inverseOf);
+      } finally {
+        this.lockManager.release(lock.lockId);
+      }
+    });
+  }
+
+  private async commitImmediate<P>(
+    request: OpRequest<P>,
+    actor: Actor,
+    inverseOf?: number,
+  ): Promise<HostApplyResult<P>> {
     if (this.cachedState === null) {
       throw new Error("Cannot submit an operation before the tournament database is initialized.");
     }
-    const before = this.cachedState;
-    const result = applyOp(before, request, actor, this.registry);
+    const result = applyOp(this.cachedState, request, actor, this.registry);
     if (!result.ok) {
       return result;
     }
+    return this.persistSuccess(request, actor, result, inverseOf);
+  }
 
+  private async persistSuccess<P>(
+    request: OpRequest<P>,
+    actor: Actor,
+    result: ApplySuccess<P>,
+    inverseOf?: number,
+  ): Promise<ApplySuccess<P>> {
     const operation = this.registry.get(request.type);
     if (operation === undefined) {
       throw new Error(`Operation disappeared from registry during commit: ${request.type}`);
@@ -201,6 +625,15 @@ export class HostEngine {
     const nextHead = this.head();
     const seq = nextHead.seq + 1;
     const timestamp = this.clock().toISOString();
+
+    const takingSnapshot = shouldTakeSnapshot(
+      seq,
+      request.type,
+      result.committedPayload,
+      this.snapshotEvery,
+    );
+    const snapshot = takingSnapshot ? encodeSnapshot(result.state) : null;
+
     const entry = await makeEntry(
       {
         seq,
@@ -212,24 +645,34 @@ export class HostEngine {
         summary: request.type,
         visibility: operation.visibility,
         payload: result.committedPayload,
+        ...(snapshot !== null ? { stateHash: snapshot.stateHash } : {}),
       },
       nextHead.entryHash,
     );
+
     const hostNumberRow = this.database.prepare("SELECT value FROM meta WHERE key = 'host_number'")
       .get() as { value: string } | undefined;
     const hostNumber = hostNumberRow === undefined ? 1 : Number(hostNumberRow.value);
+
     const transaction = this.database.transaction(() => {
       writeChangedRecords(this.database, result.state, result.writes, seq);
       this.database.prepare(
-        "INSERT INTO ops(seq, ts, actor_ref, actor_type, type, payload, writes, inverse, inverse_of, host_number) " +
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "INSERT INTO ops(" +
+          "seq, ts, actor_ref, actor_type, actor_role_id, actor_role, actor_is_host_owner, " +
+          "type, payload, request_payload, request_forced, writes, inverse, inverse_of, host_number" +
+        ") VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
       ).run(
         seq,
         timestamp,
         actor.ref,
         actor.type,
+        actor.role.id,
+        JSON.stringify(actor.role),
+        actor.isHostOwner ? 1 : 0,
         request.type,
         JSON.stringify(result.committedPayload),
+        JSON.stringify(request.payload),
+        request.forced === true ? 1 : 0,
         JSON.stringify(result.writes),
         result.inverse === null ? null : JSON.stringify(result.inverse),
         inverseOf ?? null,
@@ -243,6 +686,9 @@ export class HostEngine {
         Buffer.from(entry.salt, "base64url"),
         entry.entryHash,
       );
+      if (snapshot !== null) {
+        writeSnapshot(this.database, seq, snapshot);
+      }
     });
     transaction();
 

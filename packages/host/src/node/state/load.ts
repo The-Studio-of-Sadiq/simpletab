@@ -1,3 +1,5 @@
+import { gzipSync } from "node:zlib";
+import { canonicalize } from "@simpletab/core/changelog";
 import type {
   Adjudicator,
   BallotSubmission,
@@ -6,7 +8,6 @@ import type {
   FeedbackSubmission,
   Institution,
   Motion,
-  Round,
   Team,
   Venue,
 } from "@simpletab/core/types";
@@ -25,6 +26,8 @@ import type { BallotIntakeRecord } from "@simpletab/core/types";
 import type { CustomPermissionGroup } from "@simpletab/core/lib/staffPermissions";
 import type { SqliteDatabase } from "../db/database";
 import { recordKey } from "@simpletab/core/ops/types";
+
+export type ContentOnlyState = Omit<TournamentState, "versions" | "runtime">;
 
 interface EntityRow {
   id: string;
@@ -67,6 +70,52 @@ function readMeta<T>(database: SqliteDatabase, key: string): T | undefined {
 
 function hasOptionalField(fields: readonly string[], field: string): boolean {
   return fields.includes(field);
+}
+
+/** Strips ephemeral runtime and per-record version metadata for snapshotting. */
+export function toContentOnlyState(state: TournamentState): ContentOnlyState {
+  return {
+    tournament: state.tournament,
+    institutions: state.institutions,
+    teams: state.teams,
+    adjudicators: state.adjudicators,
+    venues: state.venues,
+    rounds: state.rounds,
+    debates: state.debates,
+    motions: state.motions,
+    ballots: state.ballots,
+    feedback: state.feedback,
+    breakCategories: state.breakCategories,
+    links: state.links,
+    registrations: state.registrations,
+    devices: state.devices,
+    roles: state.roles,
+    proposals: state.proposals,
+    ...(state.ballotIntake !== undefined ? { ballotIntake: state.ballotIntake } : {}),
+    ...(state.lateSubmissions !== undefined ? { lateSubmissions: state.lateSubmissions } : {}),
+    ...(state.registrationSettings !== undefined
+      ? { registrationSettings: state.registrationSettings }
+      : {}),
+    ...(state.succession !== undefined ? { succession: state.succession } : {}),
+    ...(state.host !== undefined ? { host: state.host } : {}),
+  };
+}
+
+/** Wraps content-only state into a full `TournamentState` with the supplied version map. */
+export function fromContentOnlyState(
+  content: ContentOnlyState,
+  versions: Record<RecordKey, number> = {},
+): TournamentState {
+  return {
+    ...content,
+    versions: { ...versions },
+  };
+}
+
+/** Loads only the persisted record versions from the live entity tables. */
+export function loadVersions(database: SqliteDatabase): Record<RecordKey, number> {
+  const loaded = loadState(database);
+  return loaded === null ? {} : loaded.versions;
 }
 
 /** Loads the persisted domain records and versions. `runtime` is intentionally never read. */
@@ -402,19 +451,26 @@ function persistOptionalState(database: SqliteDatabase, state: TournamentState):
   }
 }
 
-/** Seeds an empty database with the initial state. */
+/** Seeds an empty database with the initial state and records seq-0 seed state for full replay. */
 export function seedState(database: SqliteDatabase, state: TournamentState): void {
   if (database.prepare("SELECT 1 FROM tournament LIMIT 1").get() !== undefined) {
     throw new Error("The tournament database is already initialized.");
   }
   const writes = allRecordKeys(state);
+  const seedGz = gzipSync(Buffer.from(canonicalize(toContentOnlyState(state)), "utf8"));
   const seed = database.transaction(() => {
     writeChangedRecords(database, state, writes, 0);
+    const setMeta = database.prepare(
+      "INSERT INTO meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value=excluded.value",
+    );
+    setMeta.run("seed_state", seedGz.toString("base64"));
+    setMeta.run("slug", state.tournament.slug);
   });
   seed();
 }
 
-function allRecordKeys(state: TournamentState): RecordKey[] {
+/** Collects every core record key present in `state`. */
+export function allRecordKeys(state: TournamentState): RecordKey[] {
   const keys: RecordKey[] = [recordKey("tournament", state.tournament.id)];
   const add = <T extends { id: string }>(kind: Parameters<typeof recordKey>[0], items: readonly T[]): void => {
     for (const item of items) {

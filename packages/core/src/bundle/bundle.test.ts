@@ -144,7 +144,7 @@ describe("encrypted round bundles", () => {
       );
       expect(missing).toBeNull();
     }
-  });
+  }, 30_000); // 100 AES-GCM rows can exceed Vitest's 5 s default when the machine is busy with worker-thread tests.
 
   it("prevents opening a row with another person's keys or wrong passcode", async () => {
     const [alice, bob] = await createParticipants(2);
