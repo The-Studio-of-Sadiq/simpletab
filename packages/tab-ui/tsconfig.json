@@ -1,0 +1,9 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"],
+    "jsx": "react",
+    "experimentalDecorators": true
+  },
+  "include": ["src/**/*.ts", "src/**/*.tsx"]
+}

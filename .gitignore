@@ -1,6 +1,9 @@
 node_modules/
 /packages/*/dist/
 /packages/*/lib/
+/packages/*/src-gen/
+/packages/app/gen-esbuild.*.mjs
+/packages/app/.browser_modules/
 coverage/
 *.tsbuildinfo
 .env

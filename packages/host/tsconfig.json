@@ -3,6 +3,7 @@
   "compilerOptions": {
     "lib": ["ES2023", "DOM"],
     "types": ["node", "vitest/globals"],
+    "experimentalDecorators": true,
     "baseUrl": ".",
     "paths": {
       "@/*": ["../core/src/*"],

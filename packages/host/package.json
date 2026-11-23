@@ -3,12 +3,24 @@
   "version": "0.0.0",
   "private": true,
   "type": "module",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json --noEmit && tsc -p tsconfig.common.json && node scripts/build.mjs"
+  },
+  "theiaExtensions": [
+    {
+      "backend": "lib/node/host-backend-module",
+      "electronMain": "lib/electron-main/host-main-module"
+    }
+  ],
   "dependencies": {
     "@simpletab/core": "*",
+    "@theia/core": "1.77.0",
+    "@theia/electron": "1.77.0",
     "better-sqlite3": "13.2.0",
     "fflate": "0.8.3"
   },
   "devDependencies": {
-    "@types/better-sqlite3": "^7.6.13"
+    "@types/better-sqlite3": "^7.6.13",
+    "electron": "44.9.1"
   }
 }

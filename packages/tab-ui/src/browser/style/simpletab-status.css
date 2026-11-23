@@ -1,0 +1,59 @@
+.simpletab-status-widget {
+  padding: 16px 20px;
+  color: var(--theia-foreground);
+  background: var(--theia-editor-background);
+  height: 100%;
+  box-sizing: border-box;
+  overflow: auto;
+  font-family: var(--theia-ui-font-family);
+  font-size: var(--theia-ui-font-size1);
+}
+
+.simpletab-status-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--theia-panel-border);
+}
+
+.simpletab-status-title {
+  margin: 0;
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.simpletab-status-actions {
+  display: flex;
+  gap: 8px;
+}
+
+.simpletab-status-grid {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 8px 16px;
+  max-width: 680px;
+}
+
+.simpletab-status-label {
+  color: var(--theia-descriptionForeground);
+  font-weight: 500;
+}
+
+.simpletab-status-value {
+  color: var(--theia-foreground);
+}
+
+.simpletab-status-error {
+  margin-top: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--theia-errorForeground);
+  color: var(--theia-errorForeground);
+}
+
+.simpletab-status-locks {
+  margin: 0;
+  padding-left: 18px;
+}

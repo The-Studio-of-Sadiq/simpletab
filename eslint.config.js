@@ -6,7 +6,8 @@ import tseslint from "typescript-eslint";
 const BROWSER_GLOBALS = ["window", "document", "navigator", "localStorage", "sessionStorage", "indexedDB", "location"];
 
 export default tseslint.config(
-  { ignores: ["**/node_modules/**", "**/dist/**", "**/lib/**/*.js", "docs/**"] },
+  // Build output lives in packages/*/lib; core's own source folder src/lib must stay linted.
+  { ignores: ["**/node_modules/**", "**/dist/**", "packages/*/lib/**", "**/src-gen/**", "docs/**"] },
   {
     files: ["packages/core/src/**/*.ts"],
     ignores: ["**/*.test.ts", "packages/core/src/test/**"],
