@@ -1,10 +1,16 @@
 import { IntlMessageFormat } from "intl-messageformat";
 import { Emitter, type Event } from "@theia/core/lib/common";
+import bnAllocation from "../locales/bn/allocation.json";
+import bnCheckin from "../locales/bn/checkin.json";
 import bnCommon from "../locales/bn/common.json";
+import bnDraw from "../locales/bn/draw.json";
 import bnParticipants from "../locales/bn/participants.json";
 import bnSetup from "../locales/bn/setup.json";
 import bnStatus from "../locales/bn/status.json";
+import enAllocation from "../locales/en/allocation.json";
+import enCheckin from "../locales/en/checkin.json";
 import enCommon from "../locales/en/common.json";
+import enDraw from "../locales/en/draw.json";
 import enParticipants from "../locales/en/participants.json";
 import enSetup from "../locales/en/setup.json";
 import enStatus from "../locales/en/status.json";
@@ -31,12 +37,18 @@ const DEFAULT_CATALOGS: Record<SupportedLocale, MessageCatalog> = {
     ...enStatus,
     ...enSetup,
     ...enParticipants,
+    ...enCheckin,
+    ...enDraw,
+    ...enAllocation,
   },
   bn: {
     ...bnCommon,
     ...bnStatus,
     ...bnSetup,
     ...bnParticipants,
+    ...bnCheckin,
+    ...bnDraw,
+    ...bnAllocation,
   },
 };
 

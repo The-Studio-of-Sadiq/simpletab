@@ -19,9 +19,15 @@ import {
   SimpleTabStatusWidget,
 } from "./simpletab-status-widget";
 import { TournamentStore } from "./store/tournament-store";
+import { AllocationWidget } from "./views/allocation-widget";
+import { CheckinWidget } from "./views/checkin-widget";
+import { DrawWidget } from "./views/draw-widget";
 import { ParticipantsWidget } from "./views/participants-widget";
 import { SetupWidget } from "./views/setup-widget";
 import {
+  SIMPLETAB_OPEN_ALLOCATION_COMMAND,
+  SIMPLETAB_OPEN_CHECKIN_COMMAND,
+  SIMPLETAB_OPEN_DRAW_COMMAND,
   SIMPLETAB_OPEN_PARTICIPANTS_COMMAND,
   SIMPLETAB_OPEN_SETUP_COMMAND,
   SIMPLETAB_OPEN_STATUS_COMMAND,
@@ -33,6 +39,10 @@ export const SIMPLETAB_STATUS_TOGGLE_COMMAND_ID = "simpletab.status.toggle";
 export const SIMPLETAB_SETUP_TOGGLE_COMMAND_ID = "simpletab.setup.toggle";
 export const SIMPLETAB_PARTICIPANTS_TOGGLE_COMMAND_ID =
   "simpletab.participants.toggle";
+export const SIMPLETAB_CHECKIN_TOGGLE_COMMAND_ID = "simpletab.checkin.toggle";
+export const SIMPLETAB_DRAW_TOGGLE_COMMAND_ID = "simpletab.draw.toggle";
+export const SIMPLETAB_ALLOCATION_TOGGLE_COMMAND_ID =
+  "simpletab.allocation.toggle";
 
 const STATUS_BAR_ENTRY_ID = "simpletab-status-bar";
 
@@ -97,6 +107,78 @@ export class ParticipantsViewContribution extends AbstractViewContribution<Parti
     super.registerCommands(commands);
     commands.registerCommand(
       { id: SIMPLETAB_OPEN_PARTICIPANTS_COMMAND },
+      {
+        execute: () => this.openView({ activate: true, reveal: true }),
+      },
+    );
+  }
+}
+
+@injectable()
+export class CheckinViewContribution extends AbstractViewContribution<CheckinWidget> {
+  constructor() {
+    super({
+      widgetId: CheckinWidget.ID,
+      widgetName: t("checkin.widgetLabel"),
+      defaultWidgetOptions: {
+        area: "main",
+      },
+      toggleCommandId: SIMPLETAB_CHECKIN_TOGGLE_COMMAND_ID,
+    });
+  }
+
+  override registerCommands(commands: CommandRegistry): void {
+    super.registerCommands(commands);
+    commands.registerCommand(
+      { id: SIMPLETAB_OPEN_CHECKIN_COMMAND },
+      {
+        execute: () => this.openView({ activate: true, reveal: true }),
+      },
+    );
+  }
+}
+
+@injectable()
+export class DrawViewContribution extends AbstractViewContribution<DrawWidget> {
+  constructor() {
+    super({
+      widgetId: DrawWidget.ID,
+      widgetName: t("draw.widgetLabel"),
+      defaultWidgetOptions: {
+        area: "main",
+      },
+      toggleCommandId: SIMPLETAB_DRAW_TOGGLE_COMMAND_ID,
+    });
+  }
+
+  override registerCommands(commands: CommandRegistry): void {
+    super.registerCommands(commands);
+    commands.registerCommand(
+      { id: SIMPLETAB_OPEN_DRAW_COMMAND },
+      {
+        execute: () => this.openView({ activate: true, reveal: true }),
+      },
+    );
+  }
+}
+
+@injectable()
+export class AllocationViewContribution extends AbstractViewContribution<AllocationWidget> {
+  constructor() {
+    super({
+      widgetId: AllocationWidget.ID,
+      widgetName: t("allocation.widgetLabel"),
+      defaultWidgetOptions: {
+        area: "main",
+      },
+      toggleCommandId: SIMPLETAB_ALLOCATION_TOGGLE_COMMAND_ID,
+    });
+  }
+
+  override registerCommands(commands: CommandRegistry): void {
+    super.registerCommands(commands);
+    commands.registerCommand(
+      { id: SIMPLETAB_OPEN_ALLOCATION_COMMAND },
       {
         execute: () => this.openView({ activate: true, reveal: true }),
       },

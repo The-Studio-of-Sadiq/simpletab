@@ -153,8 +153,8 @@ export class SimpleTabStatusWidget extends ReactWidget {
           <div className="simpletab-status-value">
             {status.locks.length > 0 ? (
               <ul className="simpletab-status-locks">
-                {status.locks.map((lock, index: number) => (
-                  <li key={`${lock.opType}-${lock.actorRef}-${index}`}>
+                {status.locks.map((lock) => (
+                  <li key={lock.lockId}>
                     {t("status.lockItem", {
                       opType: lock.opType,
                       actorRef: lock.actorRef,

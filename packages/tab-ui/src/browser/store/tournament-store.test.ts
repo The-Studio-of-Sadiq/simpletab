@@ -1,5 +1,6 @@
 import type {
   CreateTournamentResult,
+  HostLockInfo,
   HostService,
   HostStatus,
   ProjectedState,
@@ -103,6 +104,8 @@ describe("TournamentStore", () => {
       ),
       submit: submitMock,
       undo: vi.fn(),
+      getLocks: vi.fn(async () => []),
+      cancelLong: vi.fn(async (lockId: string) => ({ ok: true as const, lockId })),
       getState: vi.fn(async () => makeProjectedState(currentSeq)),
       getChangelog: vi.fn(async () => []),
     };
@@ -170,6 +173,8 @@ describe("TournamentStore", () => {
       })),
       submit: vi.fn(),
       undo: vi.fn(),
+      getLocks: vi.fn(async () => []),
+      cancelLong: vi.fn(async (lockId: string) => ({ ok: true as const, lockId })),
       getState: vi.fn(async () => null),
       getChangelog: vi.fn(async () => []),
     };
@@ -186,6 +191,48 @@ describe("TournamentStore", () => {
 
     expect(store.getStatus().slug).toBe("new-tourney");
     expect(store.getState()?.seq).toBe(4);
+    store.dispose();
+  });
+
+  it("updates locks via onLocksChanged and calls hostService.cancelLong", async () => {
+    const activeLock: HostLockInfo = {
+      lockId: "lock-1",
+      opType: "draw.generate",
+      actorRef: "host-owner",
+      startedAt: "2026-11-24T00:00:00.000Z",
+      roundId: "r-1",
+    };
+    let currentLocks: HostLockInfo[] = [activeLock];
+    const cancelLongMock = vi.fn<HostService["cancelLong"]>(async (lockId: string) => {
+      currentLocks = [];
+      return { ok: true, lockId };
+    });
+
+    const hostService: HostService = {
+      setClient: vi.fn(),
+      dispose: vi.fn(),
+      status: vi.fn(async () => ({ open: true, slug: "demo", headSeq: 1, locks: currentLocks })),
+      openTournament: vi.fn(),
+      createDemoTournament: vi.fn(),
+      createTournament: vi.fn(),
+      submit: vi.fn(),
+      undo: vi.fn(),
+      getLocks: vi.fn(async () => currentLocks),
+      cancelLong: cancelLongMock,
+      getState: vi.fn(async () => makeProjectedState(1)),
+      getChangelog: vi.fn(async () => []),
+    };
+
+    const dispatcher = new HostServiceClientDispatcher();
+    const store = new TournamentStore(hostService, dispatcher);
+
+    dispatcher.onLocksChanged([activeLock]);
+    expect(store.getStatus().locks).toEqual([activeLock]);
+
+    const cancelled = await store.cancelLong("lock-1");
+    expect(cancelled).toEqual({ ok: true, lockId: "lock-1" });
+    expect(cancelLongMock).toHaveBeenCalledWith("lock-1");
+    expect(store.getStatus().locks).toEqual([]);
     store.dispose();
   });
 });

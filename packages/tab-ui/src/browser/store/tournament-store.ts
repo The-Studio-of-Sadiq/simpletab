@@ -1,8 +1,11 @@
+import type { PublicChainItem } from "@simpletab/core/changelog";
 import type { OpRequest } from "@simpletab/core/ops";
 import type {
   CreateDemoResult,
   CreateTournamentParams,
   CreateTournamentResult,
+  HostCancelLongResult,
+  HostLockInfo,
   HostStatus,
   ProjectedState,
   StateChangedEvent,
@@ -12,6 +15,8 @@ import { HostService } from "@simpletab/host/lib/common/host-protocol";
 import type { Disposable } from "@theia/core/lib/common";
 import { inject, injectable, optional } from "@theia/core/shared/inversify";
 import { HostServiceClientDispatcher } from "./host-service-client";
+
+export type TrackedRoundOpType = "draw.generate" | "allocation.auto";
 
 export interface TournamentStoreSnapshot {
   status: HostStatus;
@@ -33,9 +38,12 @@ export class TournamentStore {
     lastEvent: null,
   };
   private readonly listeners = new Set<TournamentStoreListener>();
-  private readonly clientSubscription: Disposable | undefined;
+  private readonly clientSubscriptions: Disposable[] = [];
   private refreshCounter = 0;
   private activeRefresh: Promise<TournamentStoreSnapshot> | null = null;
+  private selectedRoundId: string | null = null;
+  private readonly lastOpSeqByRound = new Map<string, number>();
+  private currentTournamentId: string | null = null;
 
   constructor(
     @inject(HostService) private readonly hostService: HostService,
@@ -44,14 +52,28 @@ export class TournamentStore {
     clientDispatcher?: HostServiceClientDispatcher,
   ) {
     if (clientDispatcher !== undefined) {
-      this.clientSubscription = clientDispatcher.onDidStateChange((event) => {
-        this.snapshot = {
-          ...this.snapshot,
-          lastEvent: event,
-        };
-        this.notify();
-        void this.refresh();
-      });
+      this.clientSubscriptions.push(
+        clientDispatcher.onDidStateChange((event) => {
+          this.snapshot = {
+            ...this.snapshot,
+            lastEvent: event,
+          };
+          this.notify();
+          void this.refresh();
+        }),
+      );
+      this.clientSubscriptions.push(
+        clientDispatcher.onDidLocksChange((locks) => {
+          this.snapshot = {
+            ...this.snapshot,
+            status: {
+              ...this.snapshot.status,
+              locks,
+            },
+          };
+          this.notify();
+        }),
+      );
     }
   }
 
@@ -65,6 +87,25 @@ export class TournamentStore {
 
   getStatus(): HostStatus {
     return this.snapshot.status;
+  }
+
+  getSelectedRoundId(): string | null {
+    return this.selectedRoundId;
+  }
+
+  setSelectedRoundId(roundId: string): void {
+    if (this.selectedRoundId === roundId) {
+      return;
+    }
+    this.selectedRoundId = roundId;
+    this.notify();
+  }
+
+  getLastRoundOpSeq(
+    opType: TrackedRoundOpType,
+    roundId: string,
+  ): number | undefined {
+    return this.lastOpSeqByRound.get(`${opType}:${roundId}`);
   }
 
   subscribe(listener: TournamentStoreListener): () => void {
@@ -90,6 +131,7 @@ export class TournamentStore {
         if (requestId !== this.refreshCounter) {
           return this.activeRefresh ?? this.snapshot;
         }
+        this.syncTournamentContext(state);
         this.snapshot = {
           ...this.snapshot,
           status,
@@ -119,7 +161,23 @@ export class TournamentStore {
 
   async submit(request: OpRequest): Promise<SubmitResult> {
     const result = await this.hostService.submit(request);
-    if (result.ok && this.snapshot.state?.seq !== result.seq) {
+    if (result.ok) {
+      if (
+        request.type === "draw.generate" ||
+        request.type === "allocation.auto"
+      ) {
+        const roundId = this.extractRoundId(request.payload);
+        if (roundId !== undefined) {
+          this.lastOpSeqByRound.set(`${request.type}:${roundId}`, result.seq);
+        }
+      }
+      if (this.snapshot.state?.seq !== result.seq) {
+        await this.refresh();
+      }
+    } else if (
+      result.code === "VERSION_CONFLICT" ||
+      result.code === "OVERRIDDEN_BY_HOST"
+    ) {
       await this.refresh();
     }
     return result;
@@ -127,10 +185,40 @@ export class TournamentStore {
 
   async undo(seq: number): Promise<SubmitResult> {
     const result = await this.hostService.undo(seq);
-    if (result.ok && this.snapshot.state?.seq !== result.seq) {
-      await this.refresh();
+    if (result.ok) {
+      for (const [key, trackedSeq] of this.lastOpSeqByRound.entries()) {
+        if (trackedSeq === seq) {
+          this.lastOpSeqByRound.delete(key);
+        }
+      }
+      if (this.snapshot.state?.seq !== result.seq) {
+        await this.refresh();
+      }
     }
     return result;
+  }
+
+  async getLocks(): Promise<HostLockInfo[]> {
+    const locks = await this.hostService.getLocks();
+    this.snapshot = {
+      ...this.snapshot,
+      status: {
+        ...this.snapshot.status,
+        locks,
+      },
+    };
+    this.notify();
+    return locks;
+  }
+
+  async cancelLong(lockId: string): Promise<HostCancelLongResult> {
+    const result = await this.hostService.cancelLong(lockId);
+    await this.getLocks();
+    return result;
+  }
+
+  async getChangelog(afterSeq?: number, limit?: number): Promise<PublicChainItem[]> {
+    return this.hostService.getChangelog(afterSeq, limit);
   }
 
   async createTournament(
@@ -138,6 +226,7 @@ export class TournamentStore {
   ): Promise<CreateTournamentResult> {
     const result = await this.hostService.createTournament(params);
     this.refreshCounter += 1;
+    this.syncTournamentContext(result.state);
     this.snapshot = {
       ...this.snapshot,
       status: result.status,
@@ -162,8 +251,29 @@ export class TournamentStore {
   }
 
   dispose(): void {
-    this.clientSubscription?.dispose();
+    for (const sub of this.clientSubscriptions.splice(0)) {
+      sub.dispose();
+    }
     this.listeners.clear();
+  }
+
+  private syncTournamentContext(state: ProjectedState | null): void {
+    const nextTournamentId = state?.tournament.id ?? null;
+    if (nextTournamentId !== this.currentTournamentId) {
+      this.currentTournamentId = nextTournamentId;
+      this.selectedRoundId = null;
+      this.lastOpSeqByRound.clear();
+    }
+  }
+
+  private extractRoundId(payload: unknown): string | undefined {
+    if (payload === null || typeof payload !== "object") {
+      return undefined;
+    }
+    const candidate = (payload as Record<string, unknown>).roundId;
+    return typeof candidate === "string" && candidate.length > 0
+      ? candidate
+      : undefined;
   }
 
   private notify(): void {

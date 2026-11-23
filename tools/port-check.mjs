@@ -39,6 +39,11 @@ for (const file of files.filter((f) => /\.tsx?$/.test(f))) {
     }
   }
 }
+for (const file of files) {
+  if (/\.(js|js\.map)$/.test(file) || file.endsWith(".d.ts")) {
+    problems.push(`${file}: compiled output must not be in packages/core/src (delete it; core is TypeScript source only)`);
+  }
+}
 for (const file of MUST_NOT_EXIST) {
   if (fileSet.has(file)) problems.push(`${file}: browser-only CrabbyTab file must not be in core`);
 }

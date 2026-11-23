@@ -308,3 +308,226 @@
   padding: 8px;
   border-radius: 3px;
 }
+
+.simpletab-round-picker {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.simpletab-round-picker label {
+  font-weight: 500;
+}
+
+.simpletab-round-picker select {
+  background: var(--theia-input-background);
+  color: var(--theia-input-foreground);
+  border: 1px solid var(--theia-input-border, var(--theia-panel-border));
+  border-radius: 2px;
+  padding: 5px 8px;
+  font-family: inherit;
+  font-size: inherit;
+  min-height: 28px;
+}
+
+.simpletab-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.simpletab-count-summary {
+  font-weight: 600;
+}
+
+.simpletab-stage-bar {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.simpletab-lock-banner {
+  border: 1px solid var(--theia-focusBorder, #007fd4);
+  background: var(--theia-sideBar-background, transparent);
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin-bottom: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.simpletab-lock-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.simpletab-lock-item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.simpletab-lock-text {
+  font-weight: 600;
+}
+
+.simpletab-inline-error {
+  border: 1px solid var(--theia-errorForeground);
+  background: var(--theia-inputValidation-errorBackground, transparent);
+  border-radius: 3px;
+  padding: 8px 10px;
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.simpletab-inline-error-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.simpletab-inline-error-code {
+  font-family: monospace;
+  font-size: 0.88em;
+  color: var(--theia-errorForeground);
+}
+
+.simpletab-inline-error-meta {
+  font-weight: 500;
+}
+
+.simpletab-slot-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  align-items: flex-start;
+}
+
+.simpletab-slot-btn {
+  background: var(--theia-button-secondaryBackground, var(--theia-input-background));
+  color: var(--theia-button-secondaryForeground, var(--theia-foreground));
+  border: 1px solid var(--theia-panel-border);
+  border-radius: 3px;
+  padding: 4px 8px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+  text-align: left;
+}
+
+.simpletab-slot-btn:hover:not(:disabled) {
+  background: var(--theia-list-hoverBackground);
+}
+
+.simpletab-slot-btn:disabled {
+  opacity: 0.65;
+  cursor: default;
+}
+
+.simpletab-slot-selected {
+  border-color: var(--theia-focusBorder, #007fd4);
+  outline: 2px solid var(--theia-focusBorder, #007fd4);
+}
+
+.simpletab-slot-target {
+  border-style: dashed;
+  border-color: var(--theia-focusBorder, #007fd4);
+}
+
+.simpletab-pool-box {
+  margin-top: 14px;
+  padding: 12px;
+  border: 1px dashed var(--theia-panel-border);
+  border-radius: 4px;
+}
+
+.simpletab-swing-list {
+  margin-top: 14px;
+}
+
+.simpletab-panel-list {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.simpletab-panel-roles {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.simpletab-adj-chip {
+  display: inline-flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 2px 8px 2px 0;
+  padding: 4px 8px;
+  border: 1px solid var(--theia-panel-border);
+  border-radius: 3px;
+}
+
+.simpletab-adj-main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.simpletab-compact-btn {
+  padding: 2px 6px;
+  font-size: 0.85em;
+}
+
+.simpletab-conflict-warning {
+  color: var(--theia-errorForeground, #f14c4c);
+  border-left: 3px solid var(--theia-errorForeground, #f14c4c);
+  padding-left: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.simpletab-history-warning {
+  color: var(--theia-editorWarning-foreground, #cca700);
+  border-left: 3px solid var(--theia-editorWarning-foreground, #cca700);
+  padding-left: 6px;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+}
+
+.simpletab-manual-editor {
+  margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid var(--theia-panel-border);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.simpletab-sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  white-space: nowrap;
+  border: 0;
+}

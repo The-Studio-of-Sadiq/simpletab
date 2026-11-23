@@ -8,7 +8,11 @@ export interface ActiveLock {
   startedAt: string;
 }
 
-export interface ManagedLock extends ActiveLock {
+export interface DetailedActiveLock extends ActiveLock {
+  roundId?: string;
+}
+
+export interface ManagedLock extends DetailedActiveLock {
   writes: ReadonlySet<RecordKey>;
   cancelled: boolean;
   cancelHandler: (() => Promise<void>) | null;
@@ -24,6 +28,16 @@ export class LockManager {
       opType: lock.opType,
       actorRef: lock.actorRef,
       startedAt: lock.startedAt,
+    }));
+  }
+
+  listDetailed(): DetailedActiveLock[] {
+    return Array.from(this.active.values(), (lock) => ({
+      lockId: lock.lockId,
+      opType: lock.opType,
+      actorRef: lock.actorRef,
+      startedAt: lock.startedAt,
+      ...(lock.roundId !== undefined ? { roundId: lock.roundId } : {}),
     }));
   }
 
@@ -51,12 +65,14 @@ export class LockManager {
     actorRef: string,
     startedAt: string,
     writes: readonly RecordKey[],
+    roundId?: string,
   ): ManagedLock {
     const lock: ManagedLock = {
       lockId: randomUUID(),
       opType,
       actorRef,
       startedAt,
+      ...(roundId !== undefined ? { roundId } : {}),
       writes: new Set(writes),
       cancelled: false,
       cancelHandler: null,

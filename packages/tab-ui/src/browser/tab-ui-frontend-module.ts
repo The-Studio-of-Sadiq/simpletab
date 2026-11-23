@@ -23,6 +23,9 @@ import {
 import { ContainerModule } from "@theia/core/shared/inversify";
 import { t } from "./i18n";
 import {
+  AllocationViewContribution,
+  CheckinViewContribution,
+  DrawViewContribution,
   ParticipantsViewContribution,
   SetupViewContribution,
   SIMPLETAB_VIEW_CONTAINER_ID,
@@ -34,6 +37,9 @@ import { HostServiceClientDispatcher } from "./store/host-service-client";
 import { TournamentStore } from "./store/tournament-store";
 import "./style/simpletab-status.css";
 import "./style/simpletab.css";
+import { AllocationWidget } from "./views/allocation-widget";
+import { CheckinWidget } from "./views/checkin-widget";
+import { DrawWidget } from "./views/draw-widget";
 import { ParticipantsWidget } from "./views/participants-widget";
 import { SetupWidget } from "./views/setup-widget";
 import { SimpleTabNavWidget } from "./views/simpletab-nav-widget";
@@ -115,6 +121,30 @@ export default new ContainerModule((bind) => {
     }))
     .inSingletonScope();
 
+  bind(CheckinWidget).toSelf().inSingletonScope();
+  bind(WidgetFactory)
+    .toDynamicValue((ctx) => ({
+      id: CheckinWidget.ID,
+      createWidget: () => ctx.container.get(CheckinWidget),
+    }))
+    .inSingletonScope();
+
+  bind(DrawWidget).toSelf().inSingletonScope();
+  bind(WidgetFactory)
+    .toDynamicValue((ctx) => ({
+      id: DrawWidget.ID,
+      createWidget: () => ctx.container.get(DrawWidget),
+    }))
+    .inSingletonScope();
+
+  bind(AllocationWidget).toSelf().inSingletonScope();
+  bind(WidgetFactory)
+    .toDynamicValue((ctx) => ({
+      id: AllocationWidget.ID,
+      createWidget: () => ctx.container.get(AllocationWidget),
+    }))
+    .inSingletonScope();
+
   bind(SimpleTabStatusWidget).toSelf().inSingletonScope();
   bind(WidgetFactory)
     .toDynamicValue((ctx) => ({
@@ -126,6 +156,9 @@ export default new ContainerModule((bind) => {
   bindViewContribution(bind, SimpleTabContainerContribution);
   bindViewContribution(bind, SetupViewContribution);
   bindViewContribution(bind, ParticipantsViewContribution);
+  bindViewContribution(bind, CheckinViewContribution);
+  bindViewContribution(bind, DrawViewContribution);
+  bindViewContribution(bind, AllocationViewContribution);
   bindViewContribution(bind, SimpleTabContribution);
   bind(FrontendApplicationContribution).toService(SimpleTabContribution);
 });

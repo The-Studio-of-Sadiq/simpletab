@@ -2,7 +2,7 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { BUILT_IN_ROLES } from "@simpletab/core/permissions";
-import type { StateChangedEvent } from "../common/host-protocol";
+import type { HostLockInfo, StateChangedEvent } from "../common/host-protocol";
 import { HostServiceImpl } from "./host-service";
 
 describe("HostServiceImpl", () => {
@@ -33,6 +33,12 @@ describe("HostServiceImpl", () => {
     });
     expect(await service.getState()).toBeNull();
     expect(await service.getChangelog()).toEqual([]);
+    expect(await service.getLocks()).toEqual([]);
+    expect(await service.cancelLong("missing-lock")).toEqual({
+      ok: false,
+      code: "NO_TOURNAMENT",
+      errors: ["No tournament is currently open."],
+    });
 
     const submitResult = await service.submit({
       type: "institution.create",
@@ -294,5 +300,64 @@ describe("HostServiceImpl", () => {
     expect(displayState?.adjudicators[0]?.email).toBeUndefined();
     expect(displayState?.adjudicators[0]?.baseScore).toBe(0);
     expect(displayState?.adjudicators[0]?.conflicts).toEqual([]);
+  });
+
+  it("exposes getLocks, pushes onLocksChanged, and enforces host-owner permission on cancelLong", { timeout: 20_000 }, async () => {
+    const service = createService();
+    service.setLongOpWorkerDelayMs(250);
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "simpletab-host-locks-"));
+    tempDirs.push(tempDir);
+
+    const lockEvents: HostLockInfo[][] = [];
+    service.setClient({
+      onStateChanged() {},
+      onLocksChanged(locks) {
+        lockEvents.push(locks);
+      },
+    });
+
+    const created = await service.createDemoTournament(tempDir);
+    expect(created.status.open).toBe(true);
+    const initialState = await service.getState();
+    const roundId = initialState?.rounds[0]?.id;
+    expect(roundId).toBeTruthy();
+
+    const drawPromise = service.submit({
+      type: "draw.generate",
+      payload: { roundId, seed: 42 },
+    });
+
+    let activeLocks: HostLockInfo[] = [];
+    await vi.waitFor(async () => {
+      activeLocks = await service.getLocks();
+      expect(activeLocks).toHaveLength(1);
+    });
+
+    const activeLock = activeLocks[0]!;
+    expect(activeLock.opType).toBe("draw.generate");
+    expect(activeLock.actorRef).toBe("host-owner");
+    expect(activeLock.roundId).toBe(roundId);
+    expect(activeLock.lockId).toBeTruthy();
+    expect(activeLock.startedAt).toBeTruthy();
+
+    // Non-host-owner cannot cancel
+    service.setLocalRole(BUILT_IN_ROLES.tab_director);
+    const forbiddenCancel = await service.cancelLong(activeLock.lockId);
+    expect(forbiddenCancel).toMatchObject({ ok: false, code: "FORBIDDEN" });
+
+    // Host owner can cancel
+    service.setLocalRole(BUILT_IN_ROLES.host_owner);
+    const notFound = await service.cancelLong("non-existent-lock");
+    expect(notFound).toMatchObject({ ok: false, code: "NOT_FOUND" });
+
+    const cancelled = await service.cancelLong(activeLock.lockId);
+    expect(cancelled).toEqual({ ok: true, lockId: activeLock.lockId });
+
+    const drawResult = await drawPromise;
+    expect(drawResult).toMatchObject({ ok: false, code: "CANCELLED" });
+    expect(await service.getLocks()).toEqual([]);
+    expect((await service.getState())?.debates).toEqual([]);
+    expect(lockEvents.some((list) => list.length === 1 && list[0]?.lockId === activeLock.lockId)).toBe(true);
+    expect(lockEvents.at(-1)).toEqual([]);
   });
 });

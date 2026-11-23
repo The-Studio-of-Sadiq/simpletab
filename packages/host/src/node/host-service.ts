@@ -25,6 +25,8 @@ import type {
   CreateDemoResult,
   CreateTournamentParams,
   CreateTournamentResult,
+  HostCancelLongResult,
+  HostLockInfo,
   HostServiceClient,
   HostService as HostServiceContract,
   HostStatus,
@@ -34,6 +36,7 @@ import type {
 } from "../common/host-protocol";
 import { seedDemoTournament } from "./demo-fixture";
 import { HostEngine, type HostApplyResult, type UndoResult } from "./engine/engine";
+import type { DetailedActiveLock } from "./engine/locks";
 
 const DEMO_DB_FILENAME = "bp-demo.simpletab.db";
 const DEFAULT_PRELIM_ROUNDS = 4;
@@ -57,8 +60,10 @@ export class HostServiceImpl
 {
   private engine: HostEngine | null = null;
   private unsubscribeCommit: (() => void) | null = null;
+  private unsubscribeLocks: (() => void) | null = null;
   private client: HostServiceClient | undefined;
   private localRole: Role = BUILT_IN_ROLES.host_owner;
+  private longOpWorkerDelayMs: number | undefined;
   private smokeHandled = false;
   private smokeTempDir: string | null = null;
 
@@ -72,6 +77,10 @@ export class HostServiceImpl
 
   setLocalRole(role: Role): void {
     this.localRole = role;
+  }
+
+  setLongOpWorkerDelayMs(delayMs: number | undefined): void {
+    this.longOpWorkerDelayMs = delayMs;
   }
 
   dispose(): void {
@@ -89,7 +98,12 @@ export class HostServiceImpl
   async openTournament(dbPath: string): Promise<HostStatus> {
     const resolvedPath = path.resolve(dbPath);
     await this.closeCurrentEngine();
-    const nextEngine = HostEngine.open(resolvedPath);
+    const nextEngine = HostEngine.open(
+      resolvedPath,
+      this.longOpWorkerDelayMs !== undefined
+        ? { longOpWorkerDelayMs: this.longOpWorkerDelayMs }
+        : {},
+    );
     try {
       await nextEngine.runFastCheck();
       this.attachEngine(nextEngine);
@@ -199,7 +213,12 @@ export class HostServiceImpl
     };
     const initialState = createTournamentState(tournament);
 
-    const nextEngine = HostEngine.open(dbPath, { initialState });
+    const nextEngine = HostEngine.open(dbPath, {
+      initialState,
+      ...(this.longOpWorkerDelayMs !== undefined
+        ? { longOpWorkerDelayMs: this.longOpWorkerDelayMs }
+        : {}),
+    });
     try {
       const defaultBreakSize = preferences.teamsInDebate === 4 ? 8 : 4;
       const drawRule: PrelimDrawRule =
@@ -301,6 +320,33 @@ export class HostServiceImpl
     return this.mapUndoResult(result);
   }
 
+  async getLocks(): Promise<HostLockInfo[]> {
+    if (this.engine === null) {
+      return [];
+    }
+    return this.mapLocks(this.engine.detailedLocks());
+  }
+
+  async cancelLong(lockId: string): Promise<HostCancelLongResult> {
+    if (this.engine === null) {
+      return {
+        ok: false,
+        code: "NO_TOURNAMENT",
+        errors: ["No tournament is currently open."],
+      };
+    }
+    const actor: Actor =
+      this.localRole.id === BUILT_IN_ROLES.host_owner.id
+        ? HOST_OWNER_ACTOR
+        : {
+            ref: this.localRole.id,
+            type: "human",
+            role: this.localRole,
+            isHostOwner: false,
+          };
+    return this.engine.cancelLong(lockId, actor);
+  }
+
   async getState(): Promise<ProjectedState | null> {
     return this.buildProjectedState();
   }
@@ -346,6 +392,9 @@ export class HostServiceImpl
         writes: [...event.writes],
       });
     });
+    this.unsubscribeLocks = nextEngine.onLocksChanged((locks) => {
+      this.emitLocksChanged(this.mapLocks(locks));
+    });
   }
 
   private emitStateChanged(event: StateChangedEvent): void {
@@ -359,15 +408,31 @@ export class HostServiceImpl
     }
   }
 
+  private emitLocksChanged(locks: HostLockInfo[]): void {
+    if (this.client?.onLocksChanged === undefined) {
+      return;
+    }
+    try {
+      this.client.onLocksChanged(locks);
+    } catch {
+      // Disconnected or failing client proxy must not break host operations.
+    }
+  }
+
   private async closeCurrentEngine(): Promise<void> {
     if (this.unsubscribeCommit !== null) {
       this.unsubscribeCommit();
       this.unsubscribeCommit = null;
     }
+    if (this.unsubscribeLocks !== null) {
+      this.unsubscribeLocks();
+      this.unsubscribeLocks = null;
+    }
     const current = this.engine;
     this.engine = null;
     if (current !== null) {
       await current.close();
+      this.emitLocksChanged([]);
     }
   }
 
@@ -418,6 +483,16 @@ export class HostServiceImpl
     };
   }
 
+  private mapLocks(locks: readonly DetailedActiveLock[]): HostLockInfo[] {
+    return locks.map((lock) => ({
+      lockId: lock.lockId,
+      opType: lock.opType,
+      actorRef: lock.actorRef,
+      startedAt: lock.startedAt,
+      ...(lock.roundId !== undefined ? { roundId: lock.roundId } : {}),
+    }));
+  }
+
   private buildStatus(): HostStatus {
     if (this.engine === null) {
       return {
@@ -428,10 +503,7 @@ export class HostServiceImpl
 
     const state = this.engine.getState();
     const head = this.engine.head();
-    const locks = this.engine.locks().map((lock) => ({
-      opType: lock.opType,
-      actorRef: lock.actorRef,
-    }));
+    const locks = this.mapLocks(this.engine.detailedLocks());
 
     return {
       open: true,

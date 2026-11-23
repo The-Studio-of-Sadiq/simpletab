@@ -9,9 +9,18 @@ export const HostService = Symbol("HostService");
 export const HostServiceClient = Symbol("HostServiceClient");
 
 export interface HostLockInfo {
+  lockId: string;
   opType: string;
   actorRef: string;
+  startedAt: string;
+  roundId?: string;
 }
+
+export type CancelLongErrorCode = "NO_TOURNAMENT" | "FORBIDDEN" | "NOT_FOUND";
+
+export type HostCancelLongResult =
+  | { ok: true; lockId: string }
+  | { ok: false; code: CancelLongErrorCode; errors: string[] };
 
 export interface HostStatus {
   open: boolean;
@@ -87,6 +96,7 @@ export interface StateChangedEvent {
 
 export interface HostServiceClient {
   onStateChanged(event: StateChangedEvent): void;
+  onLocksChanged?(locks: HostLockInfo[]): void;
 }
 
 export interface HostService extends RpcServer<HostServiceClient> {
@@ -96,6 +106,8 @@ export interface HostService extends RpcServer<HostServiceClient> {
   createTournament(params: CreateTournamentParams): Promise<CreateTournamentResult>;
   submit(request: OpRequest): Promise<SubmitResult>;
   undo(seq: number): Promise<SubmitResult>;
+  getLocks(): Promise<HostLockInfo[]>;
+  cancelLong(lockId: string): Promise<HostCancelLongResult>;
   getState(): Promise<ProjectedState | null>;
   getChangelog(afterSeq?: number, limit?: number): Promise<PublicChainItem[]>;
 }

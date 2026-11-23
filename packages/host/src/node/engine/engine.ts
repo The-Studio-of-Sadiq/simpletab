@@ -28,7 +28,12 @@ import {
   fullCheck,
   type IntegrityCheckResult,
 } from "./integrity";
-import { LockManager, type ActiveLock, type ManagedLock } from "./locks";
+import {
+  LockManager,
+  type ActiveLock,
+  type DetailedActiveLock,
+  type ManagedLock,
+} from "./locks";
 import {
   DEFAULT_SNAPSHOT_EVERY,
   encodeSnapshot,
@@ -61,6 +66,7 @@ export interface CommittedEvent {
 }
 
 export type CommitListener = (event: CommittedEvent) => void;
+export type LocksListener = (locks: DetailedActiveLock[]) => void;
 
 export interface HostHead {
   seq: number;
@@ -248,6 +254,7 @@ export class HostEngine {
   private _integrity: IntegrityCheckResult;
   private queue: Promise<void> = Promise.resolve();
   private readonly listeners = new Set<CommitListener>();
+  private readonly lockListeners = new Set<LocksListener>();
 
   private constructor(database: SqliteDatabase, options: HostEngineOptions) {
     this.database = database;
@@ -336,6 +343,17 @@ export class HostEngine {
     return this.lockManager.list();
   }
 
+  /** Lists currently held long-op locks with optional round context. */
+  detailedLocks(): DetailedActiveLock[] {
+    return this.lockManager.listDetailed();
+  }
+
+  /** Subscribes to active lock acquisitions, releases, and cancellations. */
+  onLocksChanged(listener: LocksListener): () => void {
+    this.lockListeners.add(listener);
+    return () => this.lockListeners.delete(listener);
+  }
+
   /** Cancels a running long op. Allowed only for host-owner actors. */
   async cancelLong(lockId: string, actor: Actor): Promise<CancelLongResult> {
     if (!actor.isHostOwner) {
@@ -353,6 +371,7 @@ export class HostEngine {
         errors: [`No active long operation lock found for id "${lockId}".`],
       };
     }
+    this.emitLocksChanged();
     return { ok: true, lockId };
   }
 
@@ -491,17 +510,27 @@ export class HostEngine {
           const readKeysList = opDef.reads(this.cachedState, request.payload);
           const readKeys = new Set<RecordKey>(readKeysList);
           const readKinds = new Set<string>(readKeysList.map(recordKindOf));
+          const payloadObj =
+            request.payload !== null && typeof request.payload === "object"
+              ? (request.payload as Record<string, unknown>)
+              : null;
+          const roundId =
+            payloadObj !== null && typeof payloadObj.roundId === "string"
+              ? payloadObj.roundId
+              : undefined;
           const lock = this.lockManager.acquire(
             request.type,
             actor.ref,
             this.clock().toISOString(),
             declaredWrites,
+            roundId,
           );
           let task: RunningWorkerTask<P> | null = null;
           if (this.usingDefaultRegistry) {
             task = this.workerPool.run(snapshotState, request, actor);
             lock.cancelHandler = task.cancel;
           }
+          this.emitLocksChanged();
           return {
             kind: "long",
             lock,
@@ -531,7 +560,9 @@ export class HostEngine {
         computedResult = applyOp(snapshotState, request, actor, this.registry);
       }
     } catch (error) {
-      this.lockManager.release(lock.lockId);
+      if (this.lockManager.release(lock.lockId)) {
+        this.emitLocksChanged();
+      }
       if (error instanceof WorkerCancelledError || lock.cancelled) {
         return {
           ok: false,
@@ -592,9 +623,22 @@ export class HostEngine {
         };
         return await this.persistSuccess(request, actor, mergedResult, inverseOf);
       } finally {
-        this.lockManager.release(lock.lockId);
+        if (this.lockManager.release(lock.lockId)) {
+          this.emitLocksChanged();
+        }
       }
     });
+  }
+
+  private emitLocksChanged(): void {
+    const snapshot = this.detailedLocks();
+    for (const listener of this.lockListeners) {
+      try {
+        listener(snapshot);
+      } catch {
+        // Lock listeners cannot reject or interrupt host execution.
+      }
+    }
   }
 
   private async commitImmediate<P>(
