@@ -1,10 +1,11 @@
-import type {
-  CreateTournamentResult,
-  HostLockInfo,
-  HostService,
-  HostStatus,
-  ProjectedState,
-  SubmitResult,
+import {
+  DEFAULT_ONLINE_SETTINGS,
+  type CreateTournamentResult,
+  type HostLockInfo,
+  type HostService,
+  type HostStatus,
+  type ProjectedState,
+  type SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import { HostServiceClientDispatcher } from "./host-service-client";
 import { TournamentStore } from "./tournament-store";
@@ -107,6 +108,10 @@ describe("TournamentStore", () => {
       getLocks: vi.fn(async () => []),
       cancelLong: vi.fn(async (lockId: string) => ({ ok: true as const, lockId })),
       getState: vi.fn(async () => makeProjectedState(currentSeq)),
+      getDisplayState: vi.fn(async () => makeProjectedState(currentSeq)),
+      runFullCheck: vi.fn(async () => ({ ok: true })),
+      getOnlineSettings: vi.fn(async () => ({ ...DEFAULT_ONLINE_SETTINGS })),
+      updateOnlineSettings: vi.fn(async (patch) => ({ ...DEFAULT_ONLINE_SETTINGS, ...patch })),
       getChangelog: vi.fn(async () => []),
       getOpUndoInfo: vi.fn(async () => []),
     };
@@ -177,6 +182,10 @@ describe("TournamentStore", () => {
       getLocks: vi.fn(async () => []),
       cancelLong: vi.fn(async (lockId: string) => ({ ok: true as const, lockId })),
       getState: vi.fn(async () => null),
+      getDisplayState: vi.fn(async () => null),
+      runFullCheck: vi.fn(async () => ({ ok: true })),
+      getOnlineSettings: vi.fn(async () => ({ ...DEFAULT_ONLINE_SETTINGS })),
+      updateOnlineSettings: vi.fn(async (patch) => ({ ...DEFAULT_ONLINE_SETTINGS, ...patch })),
       getChangelog: vi.fn(async () => []),
       getOpUndoInfo: vi.fn(async () => []),
     };
@@ -222,6 +231,10 @@ describe("TournamentStore", () => {
       getLocks: vi.fn(async () => currentLocks),
       cancelLong: cancelLongMock,
       getState: vi.fn(async () => makeProjectedState(1)),
+      getDisplayState: vi.fn(async () => makeProjectedState(1)),
+      runFullCheck: vi.fn(async () => ({ ok: true })),
+      getOnlineSettings: vi.fn(async () => ({ ...DEFAULT_ONLINE_SETTINGS })),
+      updateOnlineSettings: vi.fn(async (patch) => ({ ...DEFAULT_ONLINE_SETTINGS, ...patch })),
       getChangelog: vi.fn(async () => []),
       getOpUndoInfo: vi.fn(async () => []),
     };

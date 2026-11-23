@@ -5,10 +5,12 @@ import bnBreak from "../locales/bn/break.json";
 import bnChangelog from "../locales/bn/changelog.json";
 import bnCheckin from "../locales/bn/checkin.json";
 import bnCommon from "../locales/bn/common.json";
+import bnCredentials from "../locales/bn/credentials.json";
 import bnDraw from "../locales/bn/draw.json";
 import bnFeedback from "../locales/bn/feedback.json";
 import bnMotions from "../locales/bn/motions.json";
 import bnParticipants from "../locales/bn/participants.json";
+import bnProjector from "../locales/bn/projector.json";
 import bnReleases from "../locales/bn/releases.json";
 import bnResults from "../locales/bn/results.json";
 import bnSetup from "../locales/bn/setup.json";
@@ -19,10 +21,12 @@ import enBreak from "../locales/en/break.json";
 import enChangelog from "../locales/en/changelog.json";
 import enCheckin from "../locales/en/checkin.json";
 import enCommon from "../locales/en/common.json";
+import enCredentials from "../locales/en/credentials.json";
 import enDraw from "../locales/en/draw.json";
 import enFeedback from "../locales/en/feedback.json";
 import enMotions from "../locales/en/motions.json";
 import enParticipants from "../locales/en/participants.json";
+import enProjector from "../locales/en/projector.json";
 import enReleases from "../locales/en/releases.json";
 import enResults from "../locales/en/results.json";
 import enSetup from "../locales/en/setup.json";
@@ -61,6 +65,8 @@ const DEFAULT_CATALOGS: Record<SupportedLocale, MessageCatalog> = {
     ...enBreak,
     ...enReleases,
     ...enChangelog,
+    ...enCredentials,
+    ...enProjector,
   },
   bn: {
     ...bnCommon,
@@ -77,6 +83,8 @@ const DEFAULT_CATALOGS: Record<SupportedLocale, MessageCatalog> = {
     ...bnBreak,
     ...bnReleases,
     ...bnChangelog,
+    ...bnCredentials,
+    ...bnProjector,
   },
 };
 

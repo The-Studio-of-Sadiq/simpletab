@@ -5,8 +5,10 @@ import type {
   CreateTournamentParams,
   CreateTournamentResult,
   HostCancelLongResult,
+  HostIntegrityCheckResult,
   HostLockInfo,
   HostStatus,
+  OnlineSettings,
   OpUndoInfo,
   ProjectedState,
   StateChangedEvent,
@@ -224,6 +226,24 @@ export class TournamentStore {
 
   async getOpUndoInfo(): Promise<OpUndoInfo[]> {
     return this.hostService.getOpUndoInfo();
+  }
+
+  async runFullCheck(): Promise<HostIntegrityCheckResult> {
+    const result = await this.hostService.runFullCheck();
+    await this.refresh();
+    return result;
+  }
+
+  async updateOnlineSettings(
+    patch: Partial<OnlineSettings>,
+  ): Promise<OnlineSettings> {
+    const updated = await this.hostService.updateOnlineSettings(patch);
+    await this.refresh();
+    return updated;
+  }
+
+  async getDisplayState(): Promise<ProjectedState | null> {
+    return this.hostService.getDisplayState();
   }
 
   async createTournament(

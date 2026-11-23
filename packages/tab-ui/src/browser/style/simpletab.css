@@ -130,6 +130,7 @@
 }
 
 .simpletab-field input[type="text"],
+.simpletab-field input[type="password"],
 .simpletab-field input[type="number"],
 .simpletab-field input[type="email"],
 .simpletab-field input[type="date"],

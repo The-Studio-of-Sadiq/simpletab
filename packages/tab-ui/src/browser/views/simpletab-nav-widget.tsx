@@ -25,6 +25,9 @@ export const SIMPLETAB_OPEN_STANDINGS_COMMAND = "simpletab.standings.open";
 export const SIMPLETAB_OPEN_BREAK_COMMAND = "simpletab.break.open";
 export const SIMPLETAB_OPEN_RELEASES_COMMAND = "simpletab.releases.open";
 export const SIMPLETAB_OPEN_CHANGELOG_COMMAND = "simpletab.changelog.open";
+export const SIMPLETAB_OPEN_CREDENTIALS_COMMAND = "simpletab.credentials.open";
+export const SIMPLETAB_OPEN_PROJECTOR_CONTROL_COMMAND =
+  "simpletab.projectorControl.open";
 export const SIMPLETAB_OPEN_STATUS_COMMAND = "simpletab.status.open";
 
 @injectable()
@@ -72,6 +75,8 @@ export class SimpleTabNavWidget extends ReactWidget {
     const { status, state } = this.store.getSnapshot();
     const canViewFeedback =
       state === null || stateHasPermission(state, "feedback.view");
+    const canManageCredentials =
+      state === null || stateHasPermission(state, "credentials.manage");
     const locale = getLocale();
     const summaryText =
       status.open && status.slug
@@ -213,6 +218,30 @@ export class SimpleTabNavWidget extends ReactWidget {
             }}
           >
             {t("nav.openChangelog")}
+          </button>
+          {canManageCredentials ? (
+            <button
+              type="button"
+              className="theia-button secondary simpletab-nav-btn"
+              onClick={() => {
+                void this.commandService.executeCommand(
+                  SIMPLETAB_OPEN_CREDENTIALS_COMMAND,
+                );
+              }}
+            >
+              {t("nav.openCredentials")}
+            </button>
+          ) : null}
+          <button
+            type="button"
+            className="theia-button secondary simpletab-nav-btn"
+            onClick={() => {
+              void this.commandService.executeCommand(
+                SIMPLETAB_OPEN_PROJECTOR_CONTROL_COMMAND,
+              );
+            }}
+          >
+            {t("nav.openProjector")}
           </button>
           <button
             type="button"

@@ -1,5 +1,6 @@
 import { CredentialsService } from "@simpletab/host/lib/common/credentials-protocol";
 import type { HostStatus } from "@simpletab/host/lib/common/host-protocol";
+import { ProjectorService } from "@simpletab/host/lib/common/projector-protocol";
 import {
   AbstractViewContribution,
   FrontendApplicationContribution,
@@ -13,6 +14,7 @@ import {
   MessageService,
 } from "@theia/core/lib/common";
 import { inject, injectable, optional } from "@theia/core/shared/inversify";
+import { formatStatusBarText } from "./components/status-view";
 import { onLocaleChange, t } from "./i18n";
 import {
   SIMPLETAB_CREATE_DEMO_COMMAND_ID,
@@ -23,10 +25,12 @@ import { AllocationWidget } from "./views/allocation-widget";
 import { BreakWidget } from "./views/break-widget";
 import { ChangelogWidget } from "./views/changelog-widget";
 import { CheckinWidget } from "./views/checkin-widget";
+import { CredentialsWidget } from "./views/credentials-widget";
 import { DrawWidget } from "./views/draw-widget";
 import { FeedbackWidget } from "./views/feedback-widget";
 import { MotionsWidget } from "./views/motions-widget";
 import { ParticipantsWidget } from "./views/participants-widget";
+import { ProjectorControlWidget } from "./views/projector-widget";
 import { ReleasesWidget } from "./views/releases-widget";
 import { ResultsWidget } from "./views/results-widget";
 import { SetupWidget } from "./views/setup-widget";
@@ -35,10 +39,12 @@ import {
   SIMPLETAB_OPEN_BREAK_COMMAND,
   SIMPLETAB_OPEN_CHANGELOG_COMMAND,
   SIMPLETAB_OPEN_CHECKIN_COMMAND,
+  SIMPLETAB_OPEN_CREDENTIALS_COMMAND,
   SIMPLETAB_OPEN_DRAW_COMMAND,
   SIMPLETAB_OPEN_FEEDBACK_COMMAND,
   SIMPLETAB_OPEN_MOTIONS_COMMAND,
   SIMPLETAB_OPEN_PARTICIPANTS_COMMAND,
+  SIMPLETAB_OPEN_PROJECTOR_CONTROL_COMMAND,
   SIMPLETAB_OPEN_RELEASES_COMMAND,
   SIMPLETAB_OPEN_RESULTS_COMMAND,
   SIMPLETAB_OPEN_SETUP_COMMAND,
@@ -66,12 +72,22 @@ export const SIMPLETAB_BREAK_TOGGLE_COMMAND_ID = "simpletab.break.toggle";
 export const SIMPLETAB_RELEASES_TOGGLE_COMMAND_ID = "simpletab.releases.toggle";
 export const SIMPLETAB_CHANGELOG_TOGGLE_COMMAND_ID =
   "simpletab.changelog.toggle";
+export const SIMPLETAB_CREDENTIALS_TOGGLE_COMMAND_ID =
+  "simpletab.credentials.toggle";
+export const SIMPLETAB_PROJECTOR_CONTROL_TOGGLE_COMMAND_ID =
+  "simpletab.projectorControl.toggle";
+export const SIMPLETAB_OPEN_PROJECTOR_COMMAND_ID = "simpletab.projector.open";
 
 const STATUS_BAR_ENTRY_ID = "simpletab-status-bar";
 
 export const SIMPLETAB_CREATE_DEMO_COMMAND: Command = {
   id: SIMPLETAB_CREATE_DEMO_COMMAND_ID,
   label: t("command.createDemo"),
+};
+
+export const SIMPLETAB_OPEN_PROJECTOR_COMMAND: Command = {
+  id: SIMPLETAB_OPEN_PROJECTOR_COMMAND_ID,
+  label: t("command.openProjector"),
 };
 
 @injectable()
@@ -378,6 +394,54 @@ export class ChangelogViewContribution extends AbstractViewContribution<Changelo
 }
 
 @injectable()
+export class CredentialsViewContribution extends AbstractViewContribution<CredentialsWidget> {
+  constructor() {
+    super({
+      widgetId: CredentialsWidget.ID,
+      widgetName: t("credentials.widgetLabel"),
+      defaultWidgetOptions: {
+        area: "main",
+      },
+      toggleCommandId: SIMPLETAB_CREDENTIALS_TOGGLE_COMMAND_ID,
+    });
+  }
+
+  override registerCommands(commands: CommandRegistry): void {
+    super.registerCommands(commands);
+    commands.registerCommand(
+      { id: SIMPLETAB_OPEN_CREDENTIALS_COMMAND },
+      {
+        execute: () => this.openView({ activate: true, reveal: true }),
+      },
+    );
+  }
+}
+
+@injectable()
+export class ProjectorControlViewContribution extends AbstractViewContribution<ProjectorControlWidget> {
+  constructor() {
+    super({
+      widgetId: ProjectorControlWidget.ID,
+      widgetName: t("projector.widgetLabel"),
+      defaultWidgetOptions: {
+        area: "main",
+      },
+      toggleCommandId: SIMPLETAB_PROJECTOR_CONTROL_TOGGLE_COMMAND_ID,
+    });
+  }
+
+  override registerCommands(commands: CommandRegistry): void {
+    super.registerCommands(commands);
+    commands.registerCommand(
+      { id: SIMPLETAB_OPEN_PROJECTOR_CONTROL_COMMAND },
+      {
+        execute: () => this.openView({ activate: true, reveal: true }),
+      },
+    );
+  }
+}
+
+@injectable()
 export class SimpleTabContribution
   extends AbstractViewContribution<SimpleTabStatusWidget>
   implements FrontendApplicationContribution
@@ -400,6 +464,13 @@ export class SimpleTabContribution
   @inject(CredentialsService)
   @optional()
   protected readonly credentialsService?: CredentialsService;
+
+  @inject(ProjectorService)
+  @optional()
+  protected readonly projectorService?: ProjectorService;
+
+  private lastPushedProjectorSeq: number | null = null;
+  private lastPushedProjectorOpen: boolean | null = null;
 
   constructor() {
     super({
@@ -439,12 +510,29 @@ export class SimpleTabContribution
         }
       },
     });
+    commands.registerCommand(SIMPLETAB_OPEN_PROJECTOR_COMMAND, {
+      execute: async () => {
+        if (this.projectorService === undefined) {
+          await this.messageService.warn(t("projector.unavailable"));
+          return;
+        }
+        try {
+          const displayState = await this.store.getDisplayState();
+          await this.projectorService.pushDisplayState(displayState);
+          await this.projectorService.openProjector();
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          await this.messageService.error(message);
+        }
+      },
+    });
   }
 
   async onDidInitializeLayout(): Promise<void> {
     this.updateStatusBar({ open: false, locks: [] });
     this.store.subscribe((snapshot) => {
       this.updateStatusBar(snapshot.status);
+      void this.syncProjectorDisplayState(snapshot.status);
     });
     onLocaleChange(() => {
       this.updateStatusBar(this.store.getStatus());
@@ -453,6 +541,7 @@ export class SimpleTabContribution
     await this.containerContribution.openView({ reveal: true });
     const snapshot = await this.store.refresh();
     this.updateStatusBar(snapshot.status);
+    await this.syncProjectorDisplayState(snapshot.status);
 
     if (!snapshot.status.open) {
       await this.setupContribution.openView({ activate: true, reveal: true });
@@ -465,14 +554,31 @@ export class SimpleTabContribution
     }
   }
 
+  private async syncProjectorDisplayState(status: HostStatus): Promise<void> {
+    if (this.projectorService === undefined) {
+      return;
+    }
+    const seq = status.headSeq ?? 0;
+    if (
+      this.lastPushedProjectorOpen === status.open &&
+      this.lastPushedProjectorSeq === seq
+    ) {
+      return;
+    }
+    this.lastPushedProjectorOpen = status.open;
+    this.lastPushedProjectorSeq = seq;
+    try {
+      const displayState = status.open
+        ? await this.store.getDisplayState()
+        : null;
+      await this.projectorService.pushDisplayState(displayState);
+    } catch {
+      // Ignore projector sync failures when the secondary window is closed.
+    }
+  }
+
   private updateStatusBar(status: HostStatus): void {
-    const text =
-      status.open && status.slug
-        ? t("statusBar.tournament", {
-            slug: status.slug,
-            seq: status.headSeq ?? 0,
-          })
-        : t("statusBar.noTournament");
+    const text = formatStatusBarText(status);
 
     void this.statusBar.setElement(STATUS_BAR_ENTRY_ID, {
       text,

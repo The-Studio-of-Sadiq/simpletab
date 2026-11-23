@@ -24,23 +24,28 @@ import { project } from "@simpletab/core/projection";
 import type { Tournament, TournamentPreferences } from "@simpletab/core/types";
 import type { BackendApplicationContribution } from "@theia/core/lib/node";
 import { injectable } from "@theia/core/shared/inversify";
-import type {
-  CreateDemoResult,
-  CreateTournamentParams,
-  CreateTournamentResult,
-  HostCancelLongResult,
-  HostLockInfo,
-  HostServiceClient,
-  HostService as HostServiceContract,
-  HostStatus,
-  OpUndoInfo,
-  ProjectedState,
-  StateChangedEvent,
-  SubmitResult,
+import {
+  DEFAULT_ONLINE_SETTINGS,
+  type BallotCollectionMode,
+  type CreateDemoResult,
+  type CreateTournamentParams,
+  type CreateTournamentResult,
+  type HostCancelLongResult,
+  type HostIntegrityCheckResult,
+  type HostLockInfo,
+  type HostServiceClient,
+  type HostService as HostServiceContract,
+  type HostStatus,
+  type OnlineSettings,
+  type OpUndoInfo,
+  type ProjectedState,
+  type StateChangedEvent,
+  type SubmitResult,
 } from "../common/host-protocol";
 import { seedDemoTournament } from "./demo-fixture";
 import { HostEngine, type HostApplyResult, type UndoResult } from "./engine/engine";
 import type { DetailedActiveLock } from "./engine/locks";
+import { readHostNumber } from "./handover/format";
 
 const DEMO_DB_FILENAME = "bp-demo.simpletab.db";
 const DEFAULT_PRELIM_ROUNDS = 4;
@@ -68,6 +73,7 @@ export class HostServiceImpl
   private client: HostServiceClient | undefined;
   private localRole: Role = BUILT_IN_ROLES.host_owner;
   private longOpWorkerDelayMs: number | undefined;
+  private lastFullCheck: HostIntegrityCheckResult | undefined;
   private smokeHandled = false;
   private smokeTempDir: string | null = null;
 
@@ -355,6 +361,96 @@ export class HostServiceImpl
     return this.buildProjectedState();
   }
 
+  async getDisplayState(): Promise<ProjectedState | null> {
+    if (this.engine === null) {
+      return null;
+    }
+    const raw = this.engine.getState();
+    if (raw === null) {
+      return null;
+    }
+    const projected = project(raw, BUILT_IN_ROLES.display);
+    return {
+      ...projected,
+      tournament: projected.tournament as OpTournament,
+      rounds: projected.rounds as OpRound[],
+      ballots: projected.ballots as OpBallotSubmission[],
+      seq: this.engine.head().seq,
+      roleId: BUILT_IN_ROLES.display.id,
+      permissions: [],
+      versions: {},
+    };
+  }
+
+  async runFullCheck(): Promise<HostIntegrityCheckResult> {
+    if (this.engine === null) {
+      return {
+        ok: false,
+        reason: "No tournament is currently open.",
+      };
+    }
+    const result = await this.engine.runFullCheck();
+    const fullCheck: HostIntegrityCheckResult = {
+      ...result,
+      checkedAt: new Date().toISOString(),
+    };
+    this.lastFullCheck = fullCheck;
+    return fullCheck;
+  }
+
+  async getOnlineSettings(): Promise<OnlineSettings> {
+    if (this.engine === null) {
+      return { ...DEFAULT_ONLINE_SETTINGS };
+    }
+    return this.readOnlineSettings(this.engine);
+  }
+
+  async updateOnlineSettings(
+    patch: Partial<OnlineSettings>,
+  ): Promise<OnlineSettings> {
+    if (this.engine === null) {
+      throw new Error("No tournament is currently open.");
+    }
+    if (
+      patch.ballotCollection !== undefined &&
+      patch.ballotCollection !== "online" &&
+      patch.ballotCollection !== "online_qr" &&
+      patch.ballotCollection !== "qr_only"
+    ) {
+      throw new Error(
+        `Invalid ballotCollection mode: "${String(patch.ballotCollection)}".`,
+      );
+    }
+    const current = this.readOnlineSettings(this.engine);
+    const next: OnlineSettings = {
+      ballotPortal: patch.ballotPortal ?? current.ballotPortal,
+      livePublicSite: patch.livePublicSite ?? current.livePublicSite,
+      githubArchive: patch.githubArchive ?? current.githubArchive,
+      onlineRegistration: patch.onlineRegistration ?? current.onlineRegistration,
+      ballotCollection: patch.ballotCollection ?? current.ballotCollection,
+      trustSignedBallots: patch.trustSignedBallots ?? current.trustSignedBallots,
+      ...(patch.keyRequestedAt !== undefined
+        ? patch.keyRequestedAt.length > 0
+          ? { keyRequestedAt: patch.keyRequestedAt }
+          : {}
+        : current.keyRequestedAt !== undefined
+          ? { keyRequestedAt: current.keyRequestedAt }
+          : {}),
+    };
+    this.engine.database
+      .prepare(
+        "INSERT INTO meta(key, value) VALUES ('online_settings', ?) " +
+          "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+      )
+      .run(JSON.stringify(next));
+    this.emitStateChanged({
+      seq: this.engine.head().seq,
+      type: "settings.online_updated",
+      writes: [],
+    });
+    return next;
+  }
+
   async getChangelog(afterSeq?: number, limit?: number): Promise<PublicChainItem[]> {
     if (this.engine === null) {
       return [];
@@ -439,6 +535,7 @@ export class HostServiceImpl
       this.unsubscribeLocks();
       this.unsubscribeLocks = null;
     }
+    this.lastFullCheck = undefined;
     const current = this.engine;
     this.engine = null;
     if (current !== null) {
@@ -519,6 +616,56 @@ export class HostServiceImpl
     }));
   }
 
+  private readOnlineSettings(engine: HostEngine): OnlineSettings {
+    const row = engine.database
+      .prepare("SELECT value FROM meta WHERE key = 'online_settings'")
+      .get() as { value: string } | undefined;
+    if (row === undefined) {
+      return { ...DEFAULT_ONLINE_SETTINGS };
+    }
+    try {
+      const parsed = JSON.parse(row.value) as Partial<OnlineSettings> | null;
+      if (parsed === null || typeof parsed !== "object") {
+        return { ...DEFAULT_ONLINE_SETTINGS };
+      }
+      const ballotCollection: BallotCollectionMode =
+        parsed.ballotCollection === "online" ||
+        parsed.ballotCollection === "online_qr" ||
+        parsed.ballotCollection === "qr_only"
+          ? parsed.ballotCollection
+          : DEFAULT_ONLINE_SETTINGS.ballotCollection;
+      return {
+        ballotPortal:
+          typeof parsed.ballotPortal === "boolean"
+            ? parsed.ballotPortal
+            : DEFAULT_ONLINE_SETTINGS.ballotPortal,
+        livePublicSite:
+          typeof parsed.livePublicSite === "boolean"
+            ? parsed.livePublicSite
+            : DEFAULT_ONLINE_SETTINGS.livePublicSite,
+        githubArchive:
+          typeof parsed.githubArchive === "boolean"
+            ? parsed.githubArchive
+            : DEFAULT_ONLINE_SETTINGS.githubArchive,
+        onlineRegistration:
+          typeof parsed.onlineRegistration === "boolean"
+            ? parsed.onlineRegistration
+            : DEFAULT_ONLINE_SETTINGS.onlineRegistration,
+        ballotCollection,
+        trustSignedBallots:
+          typeof parsed.trustSignedBallots === "boolean"
+            ? parsed.trustSignedBallots
+            : DEFAULT_ONLINE_SETTINGS.trustSignedBallots,
+        ...(typeof parsed.keyRequestedAt === "string" &&
+        parsed.keyRequestedAt.length > 0
+          ? { keyRequestedAt: parsed.keyRequestedAt }
+          : {}),
+      };
+    } catch {
+      return { ...DEFAULT_ONLINE_SETTINGS };
+    }
+  }
+
   private buildStatus(): HostStatus {
     if (this.engine === null) {
       return {
@@ -538,6 +685,13 @@ export class HostServiceImpl
       integrityOk: this.engine.integrity.ok,
       canSync: this.engine.canSync(),
       locks,
+      fastCheck: { ...this.engine.integrity },
+      ...(this.lastFullCheck !== undefined
+        ? { fullCheck: { ...this.lastFullCheck } }
+        : {}),
+      hostNumber: readHostNumber(this.engine.database),
+      queuedOps: 0,
+      onlineSettings: this.readOnlineSettings(this.engine),
     };
   }
 }

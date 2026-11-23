@@ -50,9 +50,25 @@ const simpletabCoreAliasPlugin = {
 
 const customBrowserOptions = {
     ...browserOptions,
+    entryPoints: {
+        ...browserOptions.entryPoints,
+        'projector': path.resolve(__dirname, '..', 'tab-ui', 'src', 'browser', 'projector-entry.tsx'),
+    },
     plugins: [
         simpletabCoreAliasPlugin,
         ...(browserOptions.plugins ?? []),
+        copy({
+            assets: [
+                {
+                    from: join(__dirname, '..', 'tab-ui', 'src', 'browser', 'projector.html'),
+                    to: join(__dirname, 'lib', 'frontend'),
+                },
+                {
+                    from: join(__dirname, '..', 'tab-ui', 'src', 'browser', 'style', 'simpletab-projector.css'),
+                    to: join(__dirname, 'lib', 'frontend'),
+                },
+            ],
+        }),
     ],
 };
 

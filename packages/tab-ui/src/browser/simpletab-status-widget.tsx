@@ -9,6 +9,7 @@ import { Message } from "@theia/core/lib/browser";
 import { ReactWidget } from "@theia/core/lib/browser/widgets/react-widget";
 import { inject, injectable, postConstruct } from "@theia/core/shared/inversify";
 import * as React from "@theia/core/shared/react";
+import { StatusView } from "./components/status-view";
 import { onLocaleChange, t } from "./i18n";
 import {
   TournamentStore,
@@ -76,104 +77,20 @@ export class SimpleTabStatusWidget extends ReactWidget {
 
   protected override render(): React.ReactNode {
     const snapshot = this.store.getSnapshot();
-    const status = snapshot.status;
-    const tournamentLabel = snapshot.loading
-      ? t("status.loading")
-      : status.open
-        ? t("status.open")
-        : t("status.closed");
-
-    const integrityLabel = !status.open
-      ? t("status.integrityNa")
-      : status.integrityOk
-        ? t("status.integrityOk")
-        : t("status.integrityFailed");
-
-    const syncLabel = !status.open
-      ? t("status.syncNa")
-      : status.canSync
-        ? t("status.syncOk")
-        : t("status.syncBlocked");
-
     return (
-      <div>
-        <div className="simpletab-status-header">
-          <h2 className="simpletab-status-title">{t("status.title")}</h2>
-          <div className="simpletab-status-actions">
-            <button
-              type="button"
-              className="theia-button secondary"
-              onClick={() => {
-                void this.refresh();
-              }}
-            >
-              {t("status.refresh")}
-            </button>
-            <button
-              type="button"
-              className="theia-button"
-              onClick={() => {
-                void this.commandService.executeCommand(
-                  SIMPLETAB_CREATE_DEMO_COMMAND_ID,
-                );
-              }}
-            >
-              {t("status.createDemo")}
-            </button>
-          </div>
-        </div>
-
-        <div className="simpletab-status-grid">
-          <div className="simpletab-status-label">
-            {t("status.tournamentState")}
-          </div>
-          <div className="simpletab-status-value">{tournamentLabel}</div>
-
-          <div className="simpletab-status-label">{t("status.slug")}</div>
-          <div className="simpletab-status-value">
-            {status.open && status.slug ? status.slug : t("common.none")}
-          </div>
-
-          <div className="simpletab-status-label">{t("status.headSeq")}</div>
-          <div className="simpletab-status-value">
-            {status.open && status.headSeq !== undefined
-              ? String(status.headSeq)
-              : t("common.none")}
-          </div>
-
-          <div className="simpletab-status-label">{t("status.integrity")}</div>
-          <div className="simpletab-status-value">{integrityLabel}</div>
-
-          <div className="simpletab-status-label">{t("status.onlineSync")}</div>
-          <div className="simpletab-status-value">{syncLabel}</div>
-
-          <div className="simpletab-status-label">
-            {t("status.activeLocks")}
-          </div>
-          <div className="simpletab-status-value">
-            {status.locks.length > 0 ? (
-              <ul className="simpletab-status-locks">
-                {status.locks.map((lock) => (
-                  <li key={lock.lockId}>
-                    {t("status.lockItem", {
-                      opType: lock.opType,
-                      actorRef: lock.actorRef,
-                    })}
-                  </li>
-                ))}
-              </ul>
-            ) : (
-              t("status.noLocks")
-            )}
-          </div>
-        </div>
-
-        {snapshot.error !== null ? (
-          <div className="simpletab-status-error" role="alert">
-            {t("status.hostError", { message: snapshot.error })}
-          </div>
-        ) : null}
-      </div>
+      <StatusView
+        status={snapshot.status}
+        state={snapshot.state}
+        loading={snapshot.loading}
+        error={snapshot.error}
+        onRefresh={() => this.refresh()}
+        onRunFullCheck={() => this.store.runFullCheck()}
+        onCreateDemo={() => {
+          void this.commandService.executeCommand(
+            SIMPLETAB_CREATE_DEMO_COMMAND_ID,
+          );
+        }}
+      />
     );
   }
 }

@@ -2,7 +2,8 @@ import { mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { BUILT_IN_ROLES } from "@simpletab/core/permissions";
-import type { HostLockInfo, StateChangedEvent } from "../common/host-protocol";
+import { DEFAULT_ONLINE_SETTINGS, type HostLockInfo, type StateChangedEvent } from "../common/host-protocol";
+import { assertNoCredentialMeta } from "./handover/format";
 import { HostServiceImpl } from "./host-service";
 
 describe("HostServiceImpl", () => {
@@ -388,5 +389,86 @@ describe("HostServiceImpl", () => {
     expect((await service.getState())?.debates).toEqual([]);
     expect(lockEvents.some((list) => list.length === 1 && list[0]?.lockId === activeLock.lockId)).toBe(true);
     expect(lockEvents.at(-1)).toEqual([]);
+  });
+
+  it("supports runFullCheck, persisted online settings, hostNumber, and Display projection", async () => {
+    const service = createService();
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "simpletab-host-m1-4e-"));
+    tempDirs.push(tempDir);
+
+    const created = await service.createDemoTournament(tempDir);
+    expect(created.status.hostNumber).toBe(1);
+    expect(created.status.queuedOps).toBe(0);
+    expect(created.status.fastCheck).toEqual({ ok: true });
+    expect(created.status.onlineSettings).toEqual(DEFAULT_ONLINE_SETTINGS);
+
+    const fullResult = await service.runFullCheck();
+    expect(fullResult.ok).toBe(true);
+    expect(fullResult.checkedAt).toBeTruthy();
+    const afterFullStatus = await service.status();
+    expect(afterFullStatus.fullCheck?.ok).toBe(true);
+
+    const updatedOnline = await service.updateOnlineSettings({
+      ballotPortal: true,
+      ballotCollection: "qr_only",
+      trustSignedBallots: true,
+    });
+    expect(updatedOnline).toEqual({
+      ballotPortal: true,
+      livePublicSite: false,
+      githubArchive: false,
+      onlineRegistration: false,
+      ballotCollection: "qr_only",
+      trustSignedBallots: true,
+    });
+
+    // Reopen tournament to verify meta persistence and intact integrity checks
+    const reopened = await service.openTournament(created.dbPath);
+    expect(reopened.integrityOk).toBe(true);
+    expect(reopened.onlineSettings).toEqual(updatedOnline);
+    expect(await service.getOnlineSettings()).toEqual(updatedOnline);
+
+    // Ensure online_settings in meta never triggers credential meta check
+    const internalEngine = (service as unknown as { engine: { database: Parameters<typeof assertNoCredentialMeta>[0] } }).engine;
+    expect(() => assertNoCredentialMeta(internalEngine.database)).not.toThrow();
+
+    // Add unreleased motion & adjudicator email, then verify getDisplayState() uses Display projection
+    const ownerState = await service.getState();
+    const tournamentId = ownerState!.tournament.id;
+    const roundId = ownerState!.rounds[0]!.id;
+    await service.submit({
+      type: "adjudicator.create",
+      payload: {
+        adjudicator: {
+          id: "adj-secret",
+          tournamentId,
+          name: "Panelist Secret",
+          email: "secret-adj@example.com",
+          baseScore: 9.2,
+          trainee: false,
+          independent: true,
+          conflicts: [],
+        },
+      },
+    });
+    await service.submit({
+      type: "motion.save",
+      payload: {
+        motion: {
+          id: "m-unreleased",
+          tournamentId,
+          text: "THW keep this motion secret",
+          rounds: [roundId],
+          released: false,
+        },
+      },
+    });
+
+    const displayState = await service.getDisplayState();
+    expect(displayState?.roleId).toBe("display");
+    expect(displayState?.permissions).toEqual([]);
+    expect(displayState?.motions).toEqual([]);
+    expect(displayState?.adjudicators.find((a) => a.id === "adj-secret")?.email).toBeUndefined();
+    expect(displayState?.adjudicators.find((a) => a.id === "adj-secret")?.baseScore).toBe(0);
   });
 });

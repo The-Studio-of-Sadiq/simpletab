@@ -31,6 +31,41 @@ export type HostCancelLongResult =
   | { ok: true; lockId: string }
   | { ok: false; code: CancelLongErrorCode; errors: string[] };
 
+export type HostIntegrityStage =
+  | "changelog"
+  | "snapshot"
+  | "replay"
+  | "live_state";
+
+export interface HostIntegrityCheckResult {
+  ok: boolean;
+  stage?: HostIntegrityStage;
+  seq?: number;
+  reason?: string;
+  checkedAt?: string;
+}
+
+export type BallotCollectionMode = "online" | "online_qr" | "qr_only";
+
+export interface OnlineSettings {
+  ballotPortal: boolean;
+  livePublicSite: boolean;
+  githubArchive: boolean;
+  onlineRegistration: boolean;
+  ballotCollection: BallotCollectionMode;
+  trustSignedBallots: boolean;
+  keyRequestedAt?: string;
+}
+
+export const DEFAULT_ONLINE_SETTINGS: Readonly<OnlineSettings> = {
+  ballotPortal: false,
+  livePublicSite: false,
+  githubArchive: false,
+  onlineRegistration: false,
+  ballotCollection: "online",
+  trustSignedBallots: false,
+};
+
 export interface HostStatus {
   open: boolean;
   slug?: string;
@@ -38,6 +73,11 @@ export interface HostStatus {
   integrityOk?: boolean;
   canSync?: boolean;
   locks: HostLockInfo[];
+  fastCheck?: HostIntegrityCheckResult;
+  fullCheck?: HostIntegrityCheckResult;
+  hostNumber?: number;
+  queuedOps?: number;
+  onlineSettings?: OnlineSettings;
 }
 
 export interface CreateDemoResult {
@@ -133,6 +173,10 @@ export interface HostService extends RpcServer<HostServiceClient> {
   getLocks(): Promise<HostLockInfo[]>;
   cancelLong(lockId: string): Promise<HostCancelLongResult>;
   getState(): Promise<ProjectedState | null>;
+  getDisplayState(): Promise<ProjectedState | null>;
+  runFullCheck(): Promise<HostIntegrityCheckResult>;
+  getOnlineSettings(): Promise<OnlineSettings>;
+  updateOnlineSettings(patch: Partial<OnlineSettings>): Promise<OnlineSettings>;
   getChangelog(afterSeq?: number, limit?: number): Promise<PublicChainItem[]>;
   getOpUndoInfo(): Promise<OpUndoInfo[]>;
 }

@@ -8,6 +8,11 @@ import {
   HostServiceClient,
 } from "@simpletab/host/lib/common/host-protocol";
 import {
+  PROJECTOR_SERVICE_PATH,
+  ProjectorService,
+  ProjectorServiceClient,
+} from "@simpletab/host/lib/common/projector-protocol";
+import {
   bindViewContribution,
   codicon,
   FrontendApplicationContribution,
@@ -27,10 +32,12 @@ import {
   BreakViewContribution,
   ChangelogViewContribution,
   CheckinViewContribution,
+  CredentialsViewContribution,
   DrawViewContribution,
   FeedbackViewContribution,
   MotionsViewContribution,
   ParticipantsViewContribution,
+  ProjectorControlViewContribution,
   ReleasesViewContribution,
   ResultsViewContribution,
   SetupViewContribution,
@@ -41,6 +48,7 @@ import {
 } from "./simpletab-contribution";
 import { SimpleTabStatusWidget } from "./simpletab-status-widget";
 import { HostServiceClientDispatcher } from "./store/host-service-client";
+import { ProjectorServiceClientDispatcher } from "./store/projector-service-client";
 import { TournamentStore } from "./store/tournament-store";
 import "./style/simpletab-status.css";
 import "./style/simpletab.css";
@@ -48,10 +56,12 @@ import { AllocationWidget } from "./views/allocation-widget";
 import { BreakWidget } from "./views/break-widget";
 import { ChangelogWidget } from "./views/changelog-widget";
 import { CheckinWidget } from "./views/checkin-widget";
+import { CredentialsWidget } from "./views/credentials-widget";
 import { DrawWidget } from "./views/draw-widget";
 import { FeedbackWidget } from "./views/feedback-widget";
 import { MotionsWidget } from "./views/motions-widget";
 import { ParticipantsWidget } from "./views/participants-widget";
+import { ProjectorControlWidget } from "./views/projector-widget";
 import { ReleasesWidget } from "./views/releases-widget";
 import { ResultsWidget } from "./views/results-widget";
 import { SetupWidget } from "./views/setup-widget";
@@ -85,6 +95,27 @@ export default new ContainerModule((bind) => {
       }
       throw new Error(
         "CredentialsService is available only when running in Electron.",
+      );
+    })
+    .inSingletonScope();
+
+  bind(ProjectorServiceClientDispatcher).toSelf().inSingletonScope();
+  bind(ProjectorServiceClient).toService(ProjectorServiceClientDispatcher);
+
+  bind(ProjectorService)
+    .toDynamicValue((ctx) => {
+      if (ctx.container.isBound(ElectronMainConnectionProvider)) {
+        const client = ctx.container.get<ProjectorServiceClient>(
+          ProjectorServiceClient,
+        );
+        return ElectronIpcConnectionProvider.createProxy<ProjectorService>(
+          ctx.container,
+          PROJECTOR_SERVICE_PATH,
+          client,
+        );
+      }
+      throw new Error(
+        "ProjectorService is available only when running in Electron.",
       );
     })
     .inSingletonScope();
@@ -215,6 +246,22 @@ export default new ContainerModule((bind) => {
     }))
     .inSingletonScope();
 
+  bind(CredentialsWidget).toSelf().inSingletonScope();
+  bind(WidgetFactory)
+    .toDynamicValue((ctx) => ({
+      id: CredentialsWidget.ID,
+      createWidget: () => ctx.container.get(CredentialsWidget),
+    }))
+    .inSingletonScope();
+
+  bind(ProjectorControlWidget).toSelf().inSingletonScope();
+  bind(WidgetFactory)
+    .toDynamicValue((ctx) => ({
+      id: ProjectorControlWidget.ID,
+      createWidget: () => ctx.container.get(ProjectorControlWidget),
+    }))
+    .inSingletonScope();
+
   bind(SimpleTabStatusWidget).toSelf().inSingletonScope();
   bind(WidgetFactory)
     .toDynamicValue((ctx) => ({
@@ -236,6 +283,8 @@ export default new ContainerModule((bind) => {
   bindViewContribution(bind, BreakViewContribution);
   bindViewContribution(bind, ReleasesViewContribution);
   bindViewContribution(bind, ChangelogViewContribution);
+  bindViewContribution(bind, CredentialsViewContribution);
+  bindViewContribution(bind, ProjectorControlViewContribution);
   bindViewContribution(bind, SimpleTabContribution);
   bind(FrontendApplicationContribution).toService(SimpleTabContribution);
 });

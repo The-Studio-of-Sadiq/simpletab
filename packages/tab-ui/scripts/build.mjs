@@ -67,6 +67,8 @@ await esbuild.build({
 const assets = [
   ["src/browser/style/simpletab-status.css", "lib/browser/style/simpletab-status.css"],
   ["src/browser/style/simpletab.css", "lib/browser/style/simpletab.css"],
+  ["src/browser/style/simpletab-projector.css", "lib/browser/style/simpletab-projector.css"],
+  ["src/browser/projector.html", "lib/browser/projector.html"],
 ];
 
 for (const [srcRel, destRel] of assets) {

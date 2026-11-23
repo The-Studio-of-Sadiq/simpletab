@@ -12,7 +12,12 @@ import {
   CREDENTIALS_SERVICE_PATH,
   CredentialsService,
 } from "../common/credentials-protocol";
+import {
+  PROJECTOR_SERVICE_PATH,
+  type ProjectorServiceClient,
+} from "../common/projector-protocol";
 import { ElectronCredentialsService } from "./credentials";
+import { ElectronProjectorService } from "./projector-window";
 
 const BACKEND_MAX_OLD_SPACE_ARG = "--max-old-space-size=2048";
 const SMOKE_TIMEOUT_MS = 45_000;
@@ -38,6 +43,8 @@ export class HostElectronMainContribution implements ElectronMainApplicationCont
   constructor(
     @inject(CredentialsService)
     private readonly credentialsService: CredentialsService,
+    @inject(ElectronProjectorService)
+    private readonly projectorService: ElectronProjectorService,
   ) {}
 
   async onStart(): Promise<void> {
@@ -59,6 +66,7 @@ export class HostElectronMainContribution implements ElectronMainApplicationCont
   }
 
   onStop(): void {
+    this.projectorService.disposeWindow();
     if (this.smokeTimeoutHandle !== null) {
       clearTimeout(this.smokeTimeoutHandle);
       this.smokeTimeoutHandle = null;
@@ -72,6 +80,7 @@ export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
     .inSingletonScope();
   bind(ElectronCredentialsService).toSelf().inSingletonScope();
   bind(CredentialsService).toService(ElectronCredentialsService);
+  bind(ElectronProjectorService).toSelf().inSingletonScope();
   bind(HostElectronMainContribution).toSelf().inSingletonScope();
   bind(ElectronMainApplicationContribution).toService(HostElectronMainContribution);
   bind<ConnectionHandler>(ElectronConnectionHandler)
@@ -79,6 +88,18 @@ export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
       (ctx) =>
         new RpcConnectionHandler(CREDENTIALS_SERVICE_PATH, () =>
           ctx.container.get<CredentialsService>(CredentialsService),
+        ),
+    )
+    .inSingletonScope();
+  bind<ConnectionHandler>(ElectronConnectionHandler)
+    .toDynamicValue(
+      (ctx) =>
+        new RpcConnectionHandler<ProjectorServiceClient>(
+          PROJECTOR_SERVICE_PATH,
+          (client) =>
+            ctx.container
+              .get(ElectronProjectorService)
+              .createClientAdapter(client),
         ),
     )
     .inSingletonScope();

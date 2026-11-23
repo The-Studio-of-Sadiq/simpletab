@@ -1,0 +1,228 @@
+html,
+body,
+#projector-root {
+  margin: 0;
+  padding: 0;
+  width: 100%;
+  height: 100%;
+  background: #0e1116;
+  color: #f3f5f8;
+  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+}
+
+.simpletab-projector-root {
+  min-height: 100%;
+  box-sizing: border-box;
+  padding: 28px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.simpletab-projector-topbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  border-bottom: 1px solid #2b3240;
+  padding-bottom: 16px;
+}
+
+.simpletab-projector-title {
+  font-size: 1.8rem;
+  font-weight: 700;
+}
+
+.simpletab-projector-round {
+  font-size: 1.2rem;
+  color: #a9b4c6;
+  margin-top: 4px;
+}
+
+.simpletab-projector-timer-compact {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.simpletab-projector-timer-digits {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 2.2rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+}
+
+.simpletab-projector-timer-hero {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 48px 24px;
+}
+
+.simpletab-projector-timer-digits-hero {
+  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-size: 6rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+}
+
+.simpletab-projector-timer-state {
+  font-size: 1rem;
+  font-weight: 600;
+  padding: 4px 10px;
+  border-radius: 4px;
+  border: 1px solid #3f4b61;
+  background: #1a212e;
+}
+
+.simpletab-projector-btn {
+  background: #232c3d;
+  color: #f3f5f8;
+  border: 1px solid #495772;
+  border-radius: 4px;
+  padding: 8px 14px;
+  font-size: 0.95rem;
+  cursor: pointer;
+}
+
+.simpletab-projector-btn:hover {
+  background: #2f3b52;
+}
+
+.simpletab-projector-panel {
+  background: #161b24;
+  border: 1px solid #2b3240;
+  border-radius: 8px;
+  padding: 20px 24px;
+}
+
+.simpletab-projector-heading {
+  margin: 0 0 12px 0;
+  font-size: 1.35rem;
+  color: #9dc2ff;
+}
+
+.simpletab-projector-section-label {
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: #a9b4c6;
+  margin-bottom: 6px;
+}
+
+.simpletab-projector-motions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.simpletab-projector-motion-card {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.simpletab-projector-infoslide {
+  background: #1c2432;
+  border-left: 4px solid #5b9bff;
+  padding: 12px 16px;
+  border-radius: 4px;
+}
+
+.simpletab-projector-infoslide-text {
+  margin: 0;
+  font-size: 1.25rem;
+  line-height: 1.5;
+  white-space: pre-wrap;
+}
+
+.simpletab-projector-motion-text {
+  margin: 0;
+  font-size: 1.75rem;
+  font-weight: 600;
+  line-height: 1.4;
+  white-space: pre-wrap;
+}
+
+.simpletab-projector-media-img,
+.simpletab-projector-media-video,
+.simpletab-projector-media-frame {
+  max-width: 100%;
+  max-height: 360px;
+  border-radius: 4px;
+  margin-top: 8px;
+}
+
+.simpletab-projector-draw-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.simpletab-projector-page-badge {
+  font-size: 1rem;
+  font-weight: 600;
+  color: #c3cfdf;
+}
+
+.simpletab-projector-draw-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 16px;
+}
+
+.simpletab-projector-room-card {
+  background: #1c222e;
+  border: 1px solid #313b4e;
+  border-radius: 6px;
+  padding: 14px 16px;
+}
+
+.simpletab-projector-room-title {
+  margin: 0 0 10px 0;
+  font-size: 1.2rem;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.simpletab-projector-teams {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.simpletab-projector-team-row {
+  display: grid;
+  grid-template-columns: 72px 1fr;
+  gap: 8px;
+  font-size: 1.05rem;
+}
+
+.simpletab-projector-team-row dt {
+  font-weight: 700;
+  color: #9dc2ff;
+}
+
+.simpletab-projector-team-row dd {
+  margin: 0;
+}
+
+.simpletab-projector-panel-row {
+  margin-top: 10px;
+  padding-top: 8px;
+  border-top: 1px solid #2c3547;
+  font-size: 0.98rem;
+  color: #c3cfdf;
+}
+
+.simpletab-projector-muted,
+.simpletab-projector-empty {
+  font-size: 1.2rem;
+  color: #a9b4c6;
+}

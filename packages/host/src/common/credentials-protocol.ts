@@ -22,6 +22,15 @@ export interface CredentialStatusEntry {
   set: boolean;
   testedAt?: string;
   ok?: boolean;
+  error?: string;
+}
+
+export interface SmtpCredentialPayload {
+  host: string;
+  port: number;
+  user: string;
+  password: string;
+  from: string;
 }
 
 export interface CredentialTestResult {
