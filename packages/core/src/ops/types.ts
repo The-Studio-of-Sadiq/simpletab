@@ -1,10 +1,11 @@
 import type { ActorType, Visibility } from "@/changelog";
-import type { RegistrationSubmission } from "@/lib/registration/types";
+import type { RegistrationSettings, RegistrationSubmission } from "@/lib/registration/types";
 import type { CustomPermissionGroup } from "@/lib/staffPermissions";
 import type { Permission, Role } from "@/permissions";
 import type { LinkRecord } from "@/projection";
 import type {
   Adjudicator,
+  BallotIntakeRecord,
   BallotSubmission,
   BreakCategory,
   Debate,
@@ -27,6 +28,41 @@ export type OpRound = Round & {
   simpletab?: SimpleTabRoundExtension;
 };
 
+export interface SimpleTabTournamentExtension {
+  trustSignedBallots?: boolean;
+  timeZone?: string;
+}
+
+export type OpTournament = Tournament & {
+  simpletab?: SimpleTabTournamentExtension;
+};
+
+export type OpBallotSubmission = BallotSubmission & {
+  late?: boolean;
+  enteredBy?: string;
+};
+
+export interface OpRuntime {
+  portalEnforcing: boolean;
+  now: string;
+}
+
+export interface LateSubmissionRecord {
+  id: string;
+  roundId: string;
+  debateId: string;
+  receivedAt: string;
+  deadline: string;
+  ballot: OpBallotSubmission;
+  source: "inbox";
+}
+
+export interface HostRecord {
+  number: number;
+  id: string;
+  rank: number;
+}
+
 export type RecordKind =
   | "tournament"
   | "institution"
@@ -37,12 +73,15 @@ export type RecordKind =
   | "debate"
   | "motion"
   | "ballot"
+  | "ballotIntake"
+  | "lateSubmission"
   | "feedback"
   | "breakCategory"
   | "link"
   | "registration"
   | "device"
   | "role"
+  | "host"
   | "proposal";
 
 export type RecordKey = `${RecordKind}:${string}`;
@@ -86,7 +125,7 @@ export interface ProposalRecord {
 }
 
 export interface TournamentState {
-  tournament: Tournament;
+  tournament: OpTournament;
   institutions: Institution[];
   teams: Team[];
   adjudicators: Adjudicator[];
@@ -94,14 +133,20 @@ export interface TournamentState {
   rounds: OpRound[];
   debates: Debate[];
   motions: Motion[];
-  ballots: BallotSubmission[];
+  ballots: OpBallotSubmission[];
+  ballotIntake?: BallotIntakeRecord[];
+  lateSubmissions?: LateSubmissionRecord[];
   feedback: FeedbackSubmission[];
   breakCategories: BreakCategory[];
   links: LinkRecord[];
   registrations: RegistrationSubmission[];
+  registrationSettings?: RegistrationSettings;
   devices: DeviceRecord[];
+  succession?: string[];
+  host?: HostRecord;
   roles: CustomPermissionGroup[];
   proposals: ProposalRecord[];
+  runtime?: OpRuntime;
   versions: Record<RecordKey, number>;
 }
 
@@ -115,15 +160,25 @@ export type ReleaseGate =
   | "round_adjudicators_revealed"
   | "break_category_published";
 
+export type OpPermissionResolution = Permission | "service" | "proposal" | null;
+
 export type OpPermissionSpec<P = unknown> =
   | Permission
   | "service"
-  | ((state: TournamentState, payload: P) => Permission | "service");
+  | "proposal"
+  | ((state: TournamentState, payload: P, registry?: OpRegistryLookup) => OpPermissionResolution);
 
 export interface OpApplyOutput<P = unknown> {
   state: TournamentState;
   committedPayload: P;
 }
+
+export type OpRunner = <R = unknown>(
+  state: TournamentState,
+  request: OpRequest<R>,
+  actor: Actor,
+  registry: OpRegistryLookup,
+) => ApplyResult<R>;
 
 export interface OpDef<P = unknown> {
   type: string;
@@ -136,8 +191,15 @@ export interface OpDef<P = unknown> {
   checkActor?: (actor: Actor, state: TournamentState, payload: P) => string | null;
   reads(state: TournamentState, payload: P): RecordKey[];
   writes(state: TournamentState, payload: P): RecordKey[];
-  validate(state: TournamentState, payload: P): string[];
-  apply(state: TournamentState, payload: P, actor?: Actor): OpApplyOutput<P>;
+  validate(state: TournamentState, payload: P, registry?: OpRegistryLookup): string[];
+  apply(state: TournamentState, payload: P, actor?: Actor, registry?: OpRegistryLookup): OpApplyOutput<P>;
+  applyWithEngine?: (
+    state: TournamentState,
+    payload: P,
+    actor: Actor,
+    registry: OpRegistryLookup,
+    runOp: OpRunner,
+  ) => ApplyResult<P>;
   inverse(committedPayload: P, stateBefore: TournamentState): OpRequest | null;
 }
 

@@ -15,6 +15,7 @@ import {
   createTournamentState,
   defaultRegistry,
   type Actor,
+  type ApplySuccess,
   type OpRequest,
   type RecordKey,
   type TournamentState,
@@ -192,12 +193,16 @@ export function expectOpRoundTrip<P>(
   actor: Actor = TAB_DIRECTOR_ACTOR,
 ): TournamentState {
   const registry = defaultRegistry();
+  const originalState = structuredClone(initialState);
   const frozenBefore = deepFreeze(initialState);
   const applied = applyOp(frozenBefore, request, actor, registry);
   expect(applied.ok).toBe(true);
   if (!applied.ok) {
     throw new Error(`Expected op ${request.type} to succeed: ${applied.errors.join("; ")}`);
   }
+  expect(stripVersions(frozenBefore)).toEqual(stripVersions(originalState));
+  expect(frozenBefore.versions).toEqual(originalState.versions);
+  expectWrittenVersionBumps(frozenBefore, applied);
   expect(applied.inverse).not.toBeNull();
   const frozenAfter = deepFreeze(applied.state);
   const undone = applyOp(frozenAfter, applied.inverse!, actor, registry);
@@ -207,6 +212,17 @@ export function expectOpRoundTrip<P>(
   }
   expect(stripVersions(undone.state)).toEqual(stripVersions(frozenBefore));
   return applied.state;
+}
+
+export function expectWrittenVersionBumps<P>(
+  initialState: TournamentState,
+  applied: ApplySuccess<P>,
+): void {
+  for (const key of applied.writes) {
+    expect(applied.state.versions[key]).toBe(
+      (initialState.versions[key] ?? 0) + 1,
+    );
+  }
 }
 
 export function expectStaleConflictAndForcedSuccess<P>(

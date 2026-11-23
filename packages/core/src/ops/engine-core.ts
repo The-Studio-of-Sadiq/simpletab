@@ -57,7 +57,7 @@ export function applyOp<P = unknown>(
 
   const requiredPermission =
     typeof op.permission === "function"
-      ? op.permission(state, request.payload)
+      ? op.permission(state, request.payload, registry)
       : op.permission;
 
   if (requiredPermission === "service") {
@@ -68,6 +68,25 @@ export function applyOp<P = unknown>(
         errors: [`Operation ${op.type} requires a service actor.`],
       };
     }
+  } else if (requiredPermission === "proposal") {
+    // Proposals are how the AI acts (design section 6). People apply ops directly.
+    if (actor.type !== "ai" && actor.role.proposalsOnly !== true) {
+      return {
+        ok: false,
+        code: "FORBIDDEN",
+        errors: [
+          `Only AI or proposals-only roles create proposals; "${actor.role.name}" can apply ops directly.`,
+        ],
+      };
+    }
+  } else if (requiredPermission === null) {
+    // Deny by default: an op whose permission cannot be resolved (for example, a proposal
+    // that does not exist) is never allowed, whatever the actor's role.
+    return {
+      ok: false,
+      code: "FORBIDDEN",
+      errors: [`${op.type} is not permitted: its required permission could not be determined.`],
+    };
   } else if (!hasPermission(actor.role, requiredPermission)) {
     return {
       ok: false,
@@ -114,7 +133,7 @@ export function applyOp<P = unknown>(
     }
   }
 
-  const validationErrors = op.validate(state, request.payload);
+  const validationErrors = op.validate(state, request.payload, registry);
   if (validationErrors.length > 0) {
     return {
       ok: false,
@@ -123,7 +142,11 @@ export function applyOp<P = unknown>(
     };
   }
 
-  const applied = op.apply(state, request.payload, actor);
+  if (op.applyWithEngine) {
+    return op.applyWithEngine(state, request.payload, actor, registry, applyOp);
+  }
+
+  const applied = op.apply(state, request.payload, actor, registry);
   const writes = dedupeRecordKeys(op.writes(state, applied.committedPayload));
   const nextVersions: Record<RecordKey, number> = { ...applied.state.versions };
   for (const key of writes) {
