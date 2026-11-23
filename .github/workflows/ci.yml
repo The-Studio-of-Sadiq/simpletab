@@ -20,6 +20,9 @@ jobs:
           # Node 24: better-sqlite3 ships prebuilt Windows binaries for it, so CI needs no C++ build tools.
           node-version: 24
           cache: npm
+      - name: Linux build headers for Theia's native modules
+        if: runner.os == 'Linux'
+        run: sudo apt-get update && sudo apt-get install -y libx11-dev libxkbfile-dev libsecret-1-dev
       - run: npm ci
       - name: Lint and type check
         run: npm run lint
