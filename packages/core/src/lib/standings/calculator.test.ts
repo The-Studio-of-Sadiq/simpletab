@@ -1,0 +1,483 @@
+import { describe, it, expect } from "vitest";
+import { calculateStandings } from "./calculator";
+import { Tournament, Round, Team, Debate, BallotSubmission } from "@/types";
+
+function createMockTournament(format: "bp" | "uadc", replyEnabled: boolean): Tournament {
+  return {
+    id: "tourn-test",
+    name: "Test Tournament",
+    shortName: "Test",
+    slug: "test",
+    format,
+    active: true,
+    ownerId: "director",
+    admins: {},
+    preferences: {
+      teamsInDebate: format === "bp" ? 4 : 2,
+      substantiveSpeakers: format === "bp" ? 2 : 3,
+      replyScoresEnabled: replyEnabled,
+      minSpeakerScore: 68,
+      maxSpeakerScore: 84,
+      stepSpeakerScore: 1,
+      minReplyScore: 34,
+      maxReplyScore: 42,
+      drawRule: "power_paired",
+      sideAllocationRule: "balanced",
+      ballotDoubleEntry: false,
+      publicDraw: true,
+      publicResults: true,
+      publicStandings: true,
+      publicMotions: true,
+      feedbackEnabled: true,
+      feedbackMinScore: 1,
+      feedbackMaxScore: 10,
+    },
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+}
+
+describe("Standings Calculator (calculateStandings)", () => {
+  it("calculates BP standings with 3/2/1/0 points and firsts/seconds/thirds tiebreaks", () => {
+    const tournament = createMockTournament("bp", false);
+    const round1: Round = {
+      id: "r1",
+      tournamentId: "tourn-test",
+      seq: 1,
+      name: "Round 1",
+      abbreviation: "R1",
+      stage: "preliminary",
+      drawType: "random",
+      drawStatus: "confirmed",
+      feedbackWeight: 1,
+      silent: false,
+      motionsReleased: true,
+      resultsReleased: true,
+      completed: true,
+      createdAt: "",
+    };
+
+    const teams: Team[] = [
+      { id: "t1", tournamentId: "tourn-test", name: "Team 1", speakers: [{ id: "s1a", name: "Alice" }, { id: "s1b", name: "Bob" }], breakCategories: [], speakerCategories: [] },
+      { id: "t2", tournamentId: "tourn-test", name: "Team 2", speakers: [{ id: "s2a", name: "Charlie" }, { id: "s2b", name: "David" }], breakCategories: [], speakerCategories: [] },
+      { id: "t3", tournamentId: "tourn-test", name: "Team 3", speakers: [{ id: "s3a", name: "Eve" }, { id: "s3b", name: "Frank" }], breakCategories: [], speakerCategories: [] },
+      { id: "t4", tournamentId: "tourn-test", name: "Team 4", speakers: [{ id: "s4a", name: "Grace" }, { id: "s4b", name: "Heidi" }], breakCategories: [], speakerCategories: [] },
+    ];
+
+    const debate: Debate = {
+      id: "d1",
+      tournamentId: "tourn-test",
+      roundId: "r1",
+      roundSeq: 1,
+      bracket: 0,
+      roomRank: 1,
+      importance: 0,
+      resultStatus: "confirmed",
+      sidesConfirmed: true,
+      flags: [],
+      teams: {
+        OG: { teamId: "t1", teamName: "Team 1", side: "OG" },
+        OO: { teamId: "t2", teamName: "Team 2", side: "OO" },
+        CG: { teamId: "t3", teamName: "Team 3", side: "CG" },
+        CO: { teamId: "t4", teamName: "Team 4", side: "CO" },
+      } as Debate["teams"],
+      adjudicators: { panellistIds: [], panellistNames: [], traineeIds: [], traineeNames: [] },
+    };
+
+    const ballot: BallotSubmission = {
+      id: "b1",
+      tournamentId: "tourn-test",
+      roundId: "r1",
+      debateId: "d1",
+      version: 1,
+      confirmed: true,
+      discarded: false,
+      submitterType: "tabroom",
+      timestamp: "",
+      speakerScores: {
+        OG: [{ speakerId: "s1a", speakerName: "Alice", position: 1, score: 79 }, { speakerId: "s1b", speakerName: "Bob", position: 2, score: 78 }], // 157
+        OO: [{ speakerId: "s2a", speakerName: "Charlie", position: 1, score: 77 }, { speakerId: "s2b", speakerName: "David", position: 2, score: 76 }], // 153
+        CG: [{ speakerId: "s3a", speakerName: "Eve", position: 1, score: 75 }, { speakerId: "s3b", speakerName: "Frank", position: 2, score: 75 }], // 150
+        CO: [{ speakerId: "s4a", speakerName: "Grace", position: 1, score: 74 }, { speakerId: "s4b", speakerName: "Heidi", position: 2, score: 73 }], // 147
+      } as BallotSubmission["speakerScores"],
+      teamScores: {
+        OG: { side: "OG", teamId: "t1", points: 3, totalSpeakerScore: 157, rank: 1 },
+        OO: { side: "OO", teamId: "t2", points: 2, totalSpeakerScore: 153, rank: 2 },
+        CG: { side: "CG", teamId: "t3", points: 1, totalSpeakerScore: 150, rank: 3 },
+        CO: { side: "CO", teamId: "t4", points: 0, totalSpeakerScore: 147, rank: 4 },
+      } as BallotSubmission["teamScores"],
+    };
+
+    const result = calculateStandings(tournament, [round1], teams, [debate], [ballot]);
+
+    expect(result.teams).toHaveLength(4);
+    expect(result.teams[0].teamId).toBe("t1");
+    expect(result.teams[0].points).toBe(3);
+    expect(result.teams[0].firstPlaces).toBe(1);
+    expect(result.teams[0].rank).toBe(1);
+
+    expect(result.teams[1].teamId).toBe("t2");
+    expect(result.teams[1].points).toBe(2);
+    expect(result.teams[1].secondPlaces).toBe(1);
+    expect(result.teams[1].rank).toBe(2);
+
+    expect(result.teams[2].teamId).toBe("t3");
+    expect(result.teams[2].points).toBe(1);
+    expect(result.teams[2].thirdPlaces).toBe(1);
+    expect(result.teams[2].rank).toBe(3);
+
+    expect(result.teams[3].teamId).toBe("t4");
+    expect(result.teams[3].points).toBe(0);
+    expect(result.teams[3].fourthPlaces).toBe(1);
+    expect(result.teams[3].rank).toBe(4);
+
+    // Speaker standings
+    expect(result.speakers[0].speakerId).toBe("s1a");
+    expect(result.speakers[0].totalScore).toBe(79);
+    expect(result.speakers[0].averageScore).toBe(79);
+  });
+
+  it("calculates two-team standings with wins, margins, and reply standings", () => {
+    const tournament = createMockTournament("uadc", true);
+    const round1: Round = {
+      id: "r1",
+      tournamentId: "tourn-test",
+      seq: 1,
+      name: "Round 1",
+      abbreviation: "R1",
+      stage: "preliminary",
+      drawType: "random",
+      drawStatus: "confirmed",
+      feedbackWeight: 1,
+      silent: false,
+      motionsReleased: true,
+      resultsReleased: true,
+      completed: true,
+      createdAt: "",
+    };
+
+    const teams: Team[] = [
+      {
+        id: "t1",
+        tournamentId: "tourn-test",
+        name: "Gov Team",
+        speakers: [
+          { id: "g1", name: "Gov 1" },
+          { id: "g2", name: "Gov 2" },
+          { id: "g3", name: "Gov 3" },
+          { id: "gr", name: "Gov Reply" },
+        ],
+        breakCategories: [],
+        speakerCategories: [],
+      },
+      {
+        id: "t2",
+        tournamentId: "tourn-test",
+        name: "Opp Team",
+        speakers: [
+          { id: "o1", name: "Opp 1" },
+          { id: "o2", name: "Opp 2" },
+          { id: "o3", name: "Opp 3" },
+          { id: "or", name: "Opp Reply" },
+        ],
+        breakCategories: [],
+        speakerCategories: [],
+      },
+    ];
+
+    const debate: Debate = {
+      id: "d1",
+      tournamentId: "tourn-test",
+      roundId: "r1",
+      roundSeq: 1,
+      bracket: 0,
+      roomRank: 1,
+      importance: 0,
+      resultStatus: "confirmed",
+      sidesConfirmed: true,
+      flags: [],
+      teams: {
+        AFF: { teamId: "t1", teamName: "Gov Team", side: "AFF" },
+        NEG: { teamId: "t2", teamName: "Opp Team", side: "NEG" },
+      } as any,
+      adjudicators: { panellistIds: [], panellistNames: [], traineeIds: [], traineeNames: [] },
+    };
+
+    const ballot: BallotSubmission = {
+      id: "b1",
+      tournamentId: "tourn-test",
+      roundId: "r1",
+      debateId: "d1",
+      version: 1,
+      confirmed: true,
+      discarded: false,
+      submitterType: "tabroom",
+      timestamp: "",
+      speakerScores: {
+        AFF: [
+          { speakerId: "g1", speakerName: "Gov 1", position: 1, score: 75 },
+          { speakerId: "g2", speakerName: "Gov 2", position: 2, score: 76 },
+          { speakerId: "g3", speakerName: "Gov 3", position: 3, score: 77 },
+          { speakerId: "gr", speakerName: "Gov Reply", position: 4, score: 38 }, // Reply speech
+        ],
+        NEG: [
+          { speakerId: "o1", speakerName: "Opp 1", position: 1, score: 74 },
+          { speakerId: "o2", speakerName: "Opp 2", position: 2, score: 74 },
+          { speakerId: "o3", speakerName: "Opp 3", position: 3, score: 75 },
+          { speakerId: "or", speakerName: "Opp Reply", position: 4, score: 37 }, // Reply speech
+        ],
+      } as any,
+      teamScores: {
+        AFF: { side: "AFF", teamId: "t1", points: 1, totalSpeakerScore: 266, win: true, margin: 6 },
+        NEG: { side: "NEG", teamId: "t2", points: 0, totalSpeakerScore: 260, win: false, margin: -6 },
+      } as any,
+    };
+
+    const result = calculateStandings(tournament, [round1], teams, [debate], [ballot]);
+
+    expect(result.teams[0].teamId).toBe("t1");
+    expect(result.teams[0].wins).toBe(1);
+    expect(result.teams[0].margins).toBe(6);
+
+    expect(result.teams[1].teamId).toBe("t2");
+    expect(result.teams[1].losses).toBe(1);
+    expect(result.teams[1].margins).toBe(-6);
+
+    // Reply standings separated from substantive
+    expect(result.replies).toHaveLength(2);
+    expect(result.replies[0].speakerId).toBe("gr");
+    expect(result.replies[0].totalScore).toBe(38);
+    expect(result.replies[1].speakerId).toBe("or");
+    expect(result.replies[1].totalScore).toBe(37);
+
+    // Substantive speakers (positions 1-3 with positive score)
+    const substantiveSpeakersWithScore = result.speakers.filter((s) => s.speechesCount > 0);
+    expect(substantiveSpeakersWithScore.find((s) => s.speakerId === "gr")).toBeUndefined();
+    expect(substantiveSpeakersWithScore[0].speakerId).toBe("g3"); // 77
+  });
+
+  it("keeps a reply speaker's substantive speech in their speaker metrics", () => {
+    // Found by the Tabbycat differential test: the first reply reset the speaker's score list.
+    const tournament = createMockTournament("uadc", true);
+    const round1 = { id: "r1", tournamentId: "tourn-test", seq: 1, name: "Round 1", abbreviation: "R1", stage: "preliminary", drawType: "random", drawStatus: "confirmed", feedbackWeight: 1, silent: false, motionsReleased: true, resultsReleased: true, completed: true, createdAt: "" } as Round;
+    const teams: Team[] = [
+      { id: "t1", tournamentId: "tourn-test", name: "Gov", speakers: [{ id: "g1", name: "Gov 1" }, { id: "g2", name: "Gov 2" }, { id: "g3", name: "Gov 3" }], breakCategories: [], speakerCategories: [] },
+      { id: "t2", tournamentId: "tourn-test", name: "Opp", speakers: [{ id: "o1", name: "Opp 1" }, { id: "o2", name: "Opp 2" }, { id: "o3", name: "Opp 3" }], breakCategories: [], speakerCategories: [] },
+    ];
+    const debate = {
+      id: "d1", tournamentId: "tourn-test", roundId: "r1", roundSeq: 1, bracket: 0, roomRank: 1, importance: 0,
+      resultStatus: "confirmed", sidesConfirmed: true, flags: [],
+      teams: { AFF: { teamId: "t1", teamName: "Gov", side: "AFF" }, NEG: { teamId: "t2", teamName: "Opp", side: "NEG" } },
+      adjudicators: { panellistIds: [], panellistNames: [], traineeIds: [], traineeNames: [] },
+    } as unknown as Debate;
+    const speech = (speakerId: string, position: number, score: number) => ({ speakerId, speakerName: speakerId, position, score });
+    const ballot = {
+      id: "b1", tournamentId: "tourn-test", roundId: "r1", debateId: "d1", version: 1, confirmed: true, discarded: false,
+      submitterType: "tabroom", timestamp: "",
+      speakerScores: {
+        AFF: [speech("g1", 1, 78), speech("g2", 2, 76), speech("g3", 3, 77), speech("g1", 4, 39)],
+        NEG: [speech("o1", 1, 74), speech("o2", 2, 74), speech("o3", 3, 75), speech("o2", 4, 37)],
+      },
+      teamScores: {
+        AFF: { side: "AFF", teamId: "t1", points: 1, totalSpeakerScore: 270, win: true, margin: 10 },
+        NEG: { side: "NEG", teamId: "t2", points: 0, totalSpeakerScore: 260, win: false, margin: -10 },
+      },
+    } as unknown as BallotSubmission;
+
+    const result = calculateStandings(tournament, [round1], teams, [debate], [ballot]);
+
+    const g1 = result.speakers.find((row) => row.speakerId === "g1")!;
+    expect(g1.metrics).toMatchObject({ speaks_sum: 78, speaks_avg: 78, speeches_count: 1 });
+    expect(g1.rank).toBe(1);
+    expect(result.speakers.find((row) => row.speakerId === "o2")!.metrics.speaks_sum).toBe(74);
+    expect(result.replies.find((row) => row.speakerId === "g1")!.metrics.speaks_sum).toBe(39);
+  });
+
+  it("awards a BP bye win 1 point and a win without inventing speaker scores", () => {
+    const tournament = createMockTournament("bp", false);
+    const teams: Team[] = [
+      { id: "t1", tournamentId: "tourn-test", name: "Team 1", speakers: [{ id: "s1", name: "Speaker 1" }, { id: "s2", name: "Speaker 2" }], breakCategories: [], speakerCategories: [] },
+      { id: "t2", tournamentId: "tourn-test", name: "Team 2", speakers: [], breakCategories: [], speakerCategories: [] },
+      { id: "t3", tournamentId: "tourn-test", name: "Team 3", speakers: [], breakCategories: [], speakerCategories: [] },
+      { id: "t4", tournamentId: "tourn-test", name: "Team 4", speakers: [], breakCategories: [], speakerCategories: [] },
+    ];
+    const rounds: Round[] = [1, 2].map((seq) => ({
+      id: `r${seq}`,
+      tournamentId: "tourn-test",
+      seq,
+      name: `Round ${seq}`,
+      abbreviation: `R${seq}`,
+      stage: "preliminary",
+      drawType: "random",
+      drawStatus: "confirmed",
+      feedbackWeight: 1,
+      silent: false,
+      motionsReleased: true,
+      resultsReleased: true,
+      completed: true,
+      createdAt: "",
+    }));
+    const priorDebate: Debate = {
+      id: "d1",
+      tournamentId: "tourn-test",
+      roundId: "r1",
+      roundSeq: 1,
+      bracket: 0,
+      roomRank: 1,
+      importance: 0,
+      resultStatus: "confirmed",
+      sidesConfirmed: true,
+      flags: [],
+      teams: {
+        OG: { teamId: "t1", teamName: "Team 1", side: "OG" },
+        OO: { teamId: "t2", teamName: "Team 2", side: "OO" },
+        CG: { teamId: "t3", teamName: "Team 3", side: "CG" },
+        CO: { teamId: "t4", teamName: "Team 4", side: "CO" },
+      } as Debate["teams"],
+      adjudicators: { panellistIds: [], panellistNames: [], traineeIds: [], traineeNames: [] },
+    };
+    const byeDebate: Debate = {
+      id: "d2",
+      tournamentId: "tourn-test",
+      roundId: "r2",
+      roundSeq: 2,
+      bracket: 0,
+      roomRank: 2,
+      importance: 0,
+      resultStatus: "confirmed",
+      sidesConfirmed: true,
+      flags: ["bye"],
+      byeTeamId: "t1",
+      byeResult: "win",
+      teams: { OG: { teamId: "t1", teamName: "Team 1", side: "OG" } } as Debate["teams"],
+      adjudicators: { panellistIds: [], panellistNames: [], traineeIds: [], traineeNames: [] },
+    };
+    const priorBallot: BallotSubmission = {
+      id: "b1",
+      tournamentId: "tourn-test",
+      roundId: "r1",
+      debateId: "d1",
+      version: 1,
+      confirmed: true,
+      discarded: false,
+      submitterType: "tabroom",
+      timestamp: "",
+      speakerScores: {
+        OG: [
+          { speakerId: "s1", speakerName: "Speaker 1", position: 1, score: 80 },
+          { speakerId: "s2", speakerName: "Speaker 2", position: 2, score: 70 },
+        ],
+      } as BallotSubmission["speakerScores"],
+      teamScores: {
+        OG: { side: "OG", teamId: "t1", points: 3, totalSpeakerScore: 150, rank: 1 },
+      } as BallotSubmission["teamScores"],
+    };
+
+    const result = calculateStandings(tournament, rounds, teams, [priorDebate, byeDebate], [priorBallot]);
+    const teamStanding = result.teams.find((row) => row.teamId === "t1")!;
+
+    // Tabbycat records a bye as 1 point and a win in every format: in BP a third place.
+    expect(teamStanding.points).toBe(4);
+    expect(teamStanding.firstPlaces).toBe(1);
+    expect(teamStanding.thirdPlaces).toBe(1);
+    expect(teamStanding.metrics.thirds).toBe(1);
+    expect(teamStanding.wins).toBe(1);
+    // Speaks come only from the debate actually spoken; the bye is not a 0 either.
+    expect(teamStanding.totalSpeakerScore).toBe(150);
+    expect(teamStanding.metrics.speaks_avg).toBe(150);
+    expect(teamStanding.averageSpeakerScore).toBe(75);
+    expect(teamStanding.roundResults.find((r) => r.roundSeq === 2)).toMatchObject({ bye: true, points: 1 });
+    expect(result.speakers.find((row) => row.speakerId === "s1")).toMatchObject({
+      totalScore: 80,
+      speechesCount: 1,
+    });
+    expect(result.speakers.find((row) => row.speakerId === "s2")).toMatchObject({
+      totalScore: 70,
+      speechesCount: 1,
+    });
+  });
+
+  it("does not add an absent bye to team or speaker standings", () => {
+    const tournament = createMockTournament("bp", false);
+    const team: Team = {
+      id: "t1",
+      tournamentId: "tourn-test",
+      name: "Team 1",
+      speakers: [{ id: "s1", name: "Speaker 1" }],
+      breakCategories: [],
+      speakerCategories: [],
+    };
+    const byeDebate: Debate = {
+      id: "bye",
+      tournamentId: "tourn-test",
+      roundId: "r1",
+      roundSeq: 1,
+      bracket: 0,
+      roomRank: 1,
+      importance: 0,
+      resultStatus: "confirmed",
+      sidesConfirmed: true,
+      flags: ["bye"],
+      byeTeamId: "t1",
+      byeResult: "absent",
+      teams: { OG: { teamId: "t1", teamName: "Team 1", side: "OG" } } as Debate["teams"],
+      adjudicators: { panellistIds: [], panellistNames: [], traineeIds: [], traineeNames: [] },
+    };
+
+    const result = calculateStandings(tournament, [], [team], [byeDebate], []);
+    expect(result.teams[0]).toMatchObject({ points: 0, totalSpeakerScore: 0, firstPlaces: 0, roundResults: [] });
+    expect(result.speakers[0]).toMatchObject({ totalScore: 0, speechesCount: 0 });
+  });
+
+  it("awards a two-team bye win with no speeches, speaks or margin", () => {
+    const tournament = createMockTournament("uadc", true);
+    const team: Team = {
+      id: "t1",
+      tournamentId: "tourn-test",
+      name: "Team 1",
+      speakers: [
+        { id: "s1", name: "Speaker 1" },
+        { id: "s2", name: "Speaker 2" },
+        { id: "s3", name: "Speaker 3" },
+        { id: "reply", name: "Reply Speaker" },
+      ],
+      breakCategories: [],
+      speakerCategories: [],
+    };
+    const byeDebate: Debate = {
+      id: "bye",
+      tournamentId: "tourn-test",
+      roundId: "r1",
+      roundSeq: 1,
+      bracket: 0,
+      roomRank: 1,
+      importance: 0,
+      resultStatus: "confirmed",
+      sidesConfirmed: true,
+      flags: ["bye"],
+      byeTeamId: "t1",
+      byeResult: "win",
+      teams: { AFF: { teamId: "t1", teamName: "Team 1", side: "AFF" } } as Debate["teams"],
+      adjudicators: { panellistIds: [], panellistNames: [], traineeIds: [], traineeNames: [] },
+    };
+
+    const result = calculateStandings(tournament, [], [team], [byeDebate], []);
+    expect(result.teams[0]).toMatchObject({ points: 1, wins: 1, totalSpeakerScore: 0 });
+    // Tabbycat's bye TeamScore has points and a win but no score or margin: those aggregates are null.
+    expect(result.teams[0].metrics).toMatchObject({ wins: 1, points: 1, speaks_sum: null, speaks_avg: null, speaks_stddev: null, margin_sum: null, margin_avg: null });
+    expect(result.speakers.filter((row) => row.speechesCount > 0)).toHaveLength(0);
+    expect(result.replies).toHaveLength(0);
+  });
+
+  it("shares rank when teams are tied across all metrics", () => {
+    const tournament = createMockTournament("bp", false);
+    const teams: Team[] = [
+      { id: "t1", tournamentId: "tourn-test", name: "Alpha", speakers: [], breakCategories: [], speakerCategories: [] },
+      { id: "t2", tournamentId: "tourn-test", name: "Beta", speakers: [], breakCategories: [], speakerCategories: [] },
+    ];
+    // No debates played yet, both have 0 points, 0 speaks
+    const result = calculateStandings(tournament, [], teams, [], []);
+    expect(result.teams[0].rank).toBe(1);
+    expect(result.teams[1].rank).toBe(1); // Tied teams share rank 1!
+  });
+});

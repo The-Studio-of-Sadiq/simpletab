@@ -1,0 +1,11 @@
+{
+  "name": "@simpletab/core",
+  "version": "0.0.0",
+  "description": "SimpleTab's tournament logic, rules and file formats, shared by the desktop app, the ballots service and the public site.",
+  "license": "AGPL-3.0-or-later",
+  "type": "module",
+  "sideEffects": false,
+  "dependencies": {
+    "papaparse": "5.7.1"
+  }
+}

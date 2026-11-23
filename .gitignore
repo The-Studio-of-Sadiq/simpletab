@@ -1,0 +1,10 @@
+node_modules/
+/packages/*/dist/
+/packages/*/lib/
+coverage/
+*.tsbuildinfo
+.env
+.env.*
+*.simpletab
+*.simpletab.db
+*.simpletab.db-*
