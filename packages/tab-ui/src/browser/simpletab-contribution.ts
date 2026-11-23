@@ -22,13 +22,19 @@ import { TournamentStore } from "./store/tournament-store";
 import { AllocationWidget } from "./views/allocation-widget";
 import { CheckinWidget } from "./views/checkin-widget";
 import { DrawWidget } from "./views/draw-widget";
+import { FeedbackWidget } from "./views/feedback-widget";
+import { MotionsWidget } from "./views/motions-widget";
 import { ParticipantsWidget } from "./views/participants-widget";
+import { ResultsWidget } from "./views/results-widget";
 import { SetupWidget } from "./views/setup-widget";
 import {
   SIMPLETAB_OPEN_ALLOCATION_COMMAND,
   SIMPLETAB_OPEN_CHECKIN_COMMAND,
   SIMPLETAB_OPEN_DRAW_COMMAND,
+  SIMPLETAB_OPEN_FEEDBACK_COMMAND,
+  SIMPLETAB_OPEN_MOTIONS_COMMAND,
   SIMPLETAB_OPEN_PARTICIPANTS_COMMAND,
+  SIMPLETAB_OPEN_RESULTS_COMMAND,
   SIMPLETAB_OPEN_SETUP_COMMAND,
   SIMPLETAB_OPEN_STATUS_COMMAND,
 } from "./views/simpletab-nav-widget";
@@ -43,6 +49,9 @@ export const SIMPLETAB_CHECKIN_TOGGLE_COMMAND_ID = "simpletab.checkin.toggle";
 export const SIMPLETAB_DRAW_TOGGLE_COMMAND_ID = "simpletab.draw.toggle";
 export const SIMPLETAB_ALLOCATION_TOGGLE_COMMAND_ID =
   "simpletab.allocation.toggle";
+export const SIMPLETAB_MOTIONS_TOGGLE_COMMAND_ID = "simpletab.motions.toggle";
+export const SIMPLETAB_RESULTS_TOGGLE_COMMAND_ID = "simpletab.results.toggle";
+export const SIMPLETAB_FEEDBACK_TOGGLE_COMMAND_ID = "simpletab.feedback.toggle";
 
 const STATUS_BAR_ENTRY_ID = "simpletab-status-bar";
 
@@ -179,6 +188,78 @@ export class AllocationViewContribution extends AbstractViewContribution<Allocat
     super.registerCommands(commands);
     commands.registerCommand(
       { id: SIMPLETAB_OPEN_ALLOCATION_COMMAND },
+      {
+        execute: () => this.openView({ activate: true, reveal: true }),
+      },
+    );
+  }
+}
+
+@injectable()
+export class MotionsViewContribution extends AbstractViewContribution<MotionsWidget> {
+  constructor() {
+    super({
+      widgetId: MotionsWidget.ID,
+      widgetName: t("motions.widgetLabel"),
+      defaultWidgetOptions: {
+        area: "main",
+      },
+      toggleCommandId: SIMPLETAB_MOTIONS_TOGGLE_COMMAND_ID,
+    });
+  }
+
+  override registerCommands(commands: CommandRegistry): void {
+    super.registerCommands(commands);
+    commands.registerCommand(
+      { id: SIMPLETAB_OPEN_MOTIONS_COMMAND },
+      {
+        execute: () => this.openView({ activate: true, reveal: true }),
+      },
+    );
+  }
+}
+
+@injectable()
+export class ResultsViewContribution extends AbstractViewContribution<ResultsWidget> {
+  constructor() {
+    super({
+      widgetId: ResultsWidget.ID,
+      widgetName: t("results.widgetLabel"),
+      defaultWidgetOptions: {
+        area: "main",
+      },
+      toggleCommandId: SIMPLETAB_RESULTS_TOGGLE_COMMAND_ID,
+    });
+  }
+
+  override registerCommands(commands: CommandRegistry): void {
+    super.registerCommands(commands);
+    commands.registerCommand(
+      { id: SIMPLETAB_OPEN_RESULTS_COMMAND },
+      {
+        execute: () => this.openView({ activate: true, reveal: true }),
+      },
+    );
+  }
+}
+
+@injectable()
+export class FeedbackViewContribution extends AbstractViewContribution<FeedbackWidget> {
+  constructor() {
+    super({
+      widgetId: FeedbackWidget.ID,
+      widgetName: t("feedback.widgetLabel"),
+      defaultWidgetOptions: {
+        area: "main",
+      },
+      toggleCommandId: SIMPLETAB_FEEDBACK_TOGGLE_COMMAND_ID,
+    });
+  }
+
+  override registerCommands(commands: CommandRegistry): void {
+    super.registerCommands(commands);
+    commands.registerCommand(
+      { id: SIMPLETAB_OPEN_FEEDBACK_COMMAND },
       {
         execute: () => this.openView({ activate: true, reveal: true }),
       },

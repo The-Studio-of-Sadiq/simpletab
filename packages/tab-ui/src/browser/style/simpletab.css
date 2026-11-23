@@ -132,6 +132,8 @@
 .simpletab-field input[type="text"],
 .simpletab-field input[type="number"],
 .simpletab-field input[type="email"],
+.simpletab-field input[type="date"],
+.simpletab-field input[type="time"],
 .simpletab-field select,
 .simpletab-field textarea,
 .simpletab-table select {
@@ -530,4 +532,65 @@
   clip: rect(0, 0, 0, 0);
   white-space: nowrap;
   border: 0;
+}
+
+.simpletab-status-counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.simpletab-row-selected {
+  background: var(--theia-list-activeSelectionBackground, var(--theia-list-hoverBackground));
+}
+
+.simpletab-ballot-form {
+  max-width: none;
+}
+
+.simpletab-ballot-sides-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+  gap: 12px;
+}
+
+.simpletab-ballot-team-card {
+  border: 1px solid var(--theia-panel-border);
+  border-radius: 4px;
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  background: var(--theia-editor-background);
+}
+
+.simpletab-ballot-speeches {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.simpletab-ballot-speech-row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding-top: 8px;
+  border-top: 1px solid var(--theia-panel-border);
+}
+
+.simpletab-ballot-criteria {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 8px;
+}
+
+.simpletab-ballot-sheets {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.simpletab-ballot-versions {
+  margin-bottom: 14px;
 }

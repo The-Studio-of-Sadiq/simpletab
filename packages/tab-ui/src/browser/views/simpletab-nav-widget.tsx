@@ -10,6 +10,7 @@ import {
   t,
   type SupportedLocale,
 } from "../i18n";
+import { stateHasPermission } from "../lib/permissions";
 import { TournamentStore } from "../store/tournament-store";
 
 export const SIMPLETAB_OPEN_SETUP_COMMAND = "simpletab.setup.open";
@@ -17,6 +18,9 @@ export const SIMPLETAB_OPEN_PARTICIPANTS_COMMAND = "simpletab.participants.open"
 export const SIMPLETAB_OPEN_CHECKIN_COMMAND = "simpletab.checkin.open";
 export const SIMPLETAB_OPEN_DRAW_COMMAND = "simpletab.draw.open";
 export const SIMPLETAB_OPEN_ALLOCATION_COMMAND = "simpletab.allocation.open";
+export const SIMPLETAB_OPEN_MOTIONS_COMMAND = "simpletab.motions.open";
+export const SIMPLETAB_OPEN_RESULTS_COMMAND = "simpletab.results.open";
+export const SIMPLETAB_OPEN_FEEDBACK_COMMAND = "simpletab.feedback.open";
 export const SIMPLETAB_OPEN_STATUS_COMMAND = "simpletab.status.open";
 
 @injectable()
@@ -61,7 +65,9 @@ export class SimpleTabNavWidget extends ReactWidget {
   }
 
   protected override render(): React.ReactNode {
-    const { status } = this.store.getSnapshot();
+    const { status, state } = this.store.getSnapshot();
+    const canViewFeedback =
+      state === null || stateHasPermission(state, "feedback.view");
     const locale = getLocale();
     const summaryText =
       status.open && status.slug
@@ -127,6 +133,41 @@ export class SimpleTabNavWidget extends ReactWidget {
           >
             {t("nav.openAllocation")}
           </button>
+          <button
+            type="button"
+            className="theia-button secondary simpletab-nav-btn"
+            onClick={() => {
+              void this.commandService.executeCommand(
+                SIMPLETAB_OPEN_MOTIONS_COMMAND,
+              );
+            }}
+          >
+            {t("nav.openMotions")}
+          </button>
+          <button
+            type="button"
+            className="theia-button secondary simpletab-nav-btn"
+            onClick={() => {
+              void this.commandService.executeCommand(
+                SIMPLETAB_OPEN_RESULTS_COMMAND,
+              );
+            }}
+          >
+            {t("nav.openResults")}
+          </button>
+          {canViewFeedback ? (
+            <button
+              type="button"
+              className="theia-button secondary simpletab-nav-btn"
+              onClick={() => {
+                void this.commandService.executeCommand(
+                  SIMPLETAB_OPEN_FEEDBACK_COMMAND,
+                );
+              }}
+            >
+              {t("nav.openFeedback")}
+            </button>
+          ) : null}
           <button
             type="button"
             className="theia-button secondary simpletab-nav-btn"

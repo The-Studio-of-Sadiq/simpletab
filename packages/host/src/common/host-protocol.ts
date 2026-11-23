@@ -1,6 +1,15 @@
 import type { PublicChainItem } from "@simpletab/core/changelog";
-import type { OpRequest, RecordKey } from "@simpletab/core/ops";
+import type {
+  LateSubmissionRecord,
+  OpBallotSubmission,
+  OpRequest,
+  OpRound,
+  OpTournament,
+  RecordKey,
+} from "@simpletab/core/ops";
+import type { Permission } from "@simpletab/core/permissions";
 import type { ProjectableState } from "@simpletab/core/projection";
+import type { BallotIntakeRecord } from "@simpletab/core/types";
 import type { RpcServer } from "@theia/core/lib/common/messaging";
 
 export const HOST_SERVICE_PATH = "/services/simpletab-host";
@@ -48,8 +57,14 @@ export interface CreateTournamentParams {
 }
 
 export interface ProjectedState extends ProjectableState {
+  tournament: OpTournament;
+  rounds: OpRound[];
+  ballots: OpBallotSubmission[];
   seq: number;
   roleId: string;
+  permissions?: readonly Permission[];
+  lateSubmissions?: LateSubmissionRecord[];
+  ballotIntake?: BallotIntakeRecord[];
   versions: Record<RecordKey, number>;
 }
 

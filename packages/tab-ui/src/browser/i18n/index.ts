@@ -4,14 +4,20 @@ import bnAllocation from "../locales/bn/allocation.json";
 import bnCheckin from "../locales/bn/checkin.json";
 import bnCommon from "../locales/bn/common.json";
 import bnDraw from "../locales/bn/draw.json";
+import bnFeedback from "../locales/bn/feedback.json";
+import bnMotions from "../locales/bn/motions.json";
 import bnParticipants from "../locales/bn/participants.json";
+import bnResults from "../locales/bn/results.json";
 import bnSetup from "../locales/bn/setup.json";
 import bnStatus from "../locales/bn/status.json";
 import enAllocation from "../locales/en/allocation.json";
 import enCheckin from "../locales/en/checkin.json";
 import enCommon from "../locales/en/common.json";
 import enDraw from "../locales/en/draw.json";
+import enFeedback from "../locales/en/feedback.json";
+import enMotions from "../locales/en/motions.json";
 import enParticipants from "../locales/en/participants.json";
+import enResults from "../locales/en/results.json";
 import enSetup from "../locales/en/setup.json";
 import enStatus from "../locales/en/status.json";
 
@@ -40,6 +46,9 @@ const DEFAULT_CATALOGS: Record<SupportedLocale, MessageCatalog> = {
     ...enCheckin,
     ...enDraw,
     ...enAllocation,
+    ...enMotions,
+    ...enResults,
+    ...enFeedback,
   },
   bn: {
     ...bnCommon,
@@ -49,6 +58,9 @@ const DEFAULT_CATALOGS: Record<SupportedLocale, MessageCatalog> = {
     ...bnCheckin,
     ...bnDraw,
     ...bnAllocation,
+    ...bnMotions,
+    ...bnResults,
+    ...bnFeedback,
   },
 };
 

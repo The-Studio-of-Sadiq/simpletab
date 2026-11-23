@@ -26,7 +26,10 @@ import {
   AllocationViewContribution,
   CheckinViewContribution,
   DrawViewContribution,
+  FeedbackViewContribution,
+  MotionsViewContribution,
   ParticipantsViewContribution,
+  ResultsViewContribution,
   SetupViewContribution,
   SIMPLETAB_VIEW_CONTAINER_ID,
   SimpleTabContainerContribution,
@@ -40,7 +43,10 @@ import "./style/simpletab.css";
 import { AllocationWidget } from "./views/allocation-widget";
 import { CheckinWidget } from "./views/checkin-widget";
 import { DrawWidget } from "./views/draw-widget";
+import { FeedbackWidget } from "./views/feedback-widget";
+import { MotionsWidget } from "./views/motions-widget";
 import { ParticipantsWidget } from "./views/participants-widget";
+import { ResultsWidget } from "./views/results-widget";
 import { SetupWidget } from "./views/setup-widget";
 import { SimpleTabNavWidget } from "./views/simpletab-nav-widget";
 
@@ -145,6 +151,30 @@ export default new ContainerModule((bind) => {
     }))
     .inSingletonScope();
 
+  bind(MotionsWidget).toSelf().inSingletonScope();
+  bind(WidgetFactory)
+    .toDynamicValue((ctx) => ({
+      id: MotionsWidget.ID,
+      createWidget: () => ctx.container.get(MotionsWidget),
+    }))
+    .inSingletonScope();
+
+  bind(ResultsWidget).toSelf().inSingletonScope();
+  bind(WidgetFactory)
+    .toDynamicValue((ctx) => ({
+      id: ResultsWidget.ID,
+      createWidget: () => ctx.container.get(ResultsWidget),
+    }))
+    .inSingletonScope();
+
+  bind(FeedbackWidget).toSelf().inSingletonScope();
+  bind(WidgetFactory)
+    .toDynamicValue((ctx) => ({
+      id: FeedbackWidget.ID,
+      createWidget: () => ctx.container.get(FeedbackWidget),
+    }))
+    .inSingletonScope();
+
   bind(SimpleTabStatusWidget).toSelf().inSingletonScope();
   bind(WidgetFactory)
     .toDynamicValue((ctx) => ({
@@ -159,6 +189,9 @@ export default new ContainerModule((bind) => {
   bindViewContribution(bind, CheckinViewContribution);
   bindViewContribution(bind, DrawViewContribution);
   bindViewContribution(bind, AllocationViewContribution);
+  bindViewContribution(bind, MotionsViewContribution);
+  bindViewContribution(bind, ResultsViewContribution);
+  bindViewContribution(bind, FeedbackViewContribution);
   bindViewContribution(bind, SimpleTabContribution);
   bind(FrontendApplicationContribution).toService(SimpleTabContribution);
 });

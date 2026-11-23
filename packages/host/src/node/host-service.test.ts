@@ -297,9 +297,25 @@ describe("HostServiceImpl", () => {
     service.setLocalRole(BUILT_IN_ROLES.display);
     const displayState = await service.getState();
     expect(displayState?.roleId).toBe("display");
+    expect(displayState?.permissions).toEqual([]);
+    expect(displayState?.lateSubmissions).toBeUndefined();
+    expect(displayState?.ballotIntake).toBeUndefined();
     expect(displayState?.adjudicators[0]?.email).toBeUndefined();
     expect(displayState?.adjudicators[0]?.baseScore).toBe(0);
     expect(displayState?.adjudicators[0]?.conflicts).toEqual([]);
+
+    service.setLocalRole(BUILT_IN_ROLES.tab_assistant);
+    const assistantState = await service.getState();
+    expect(assistantState?.permissions).toContain("results.enter");
+    expect(assistantState?.permissions).not.toContain("results.enter_late");
+    expect(assistantState?.lateSubmissions).toBeUndefined();
+    expect(assistantState?.ballotIntake).toEqual([]);
+
+    service.setLocalRole(BUILT_IN_ROLES.tab_director);
+    const directorState = await service.getState();
+    expect(directorState?.permissions).toContain("results.enter_late");
+    expect(directorState?.lateSubmissions).toEqual([]);
+    expect(directorState?.ballotIntake).toEqual([]);
   });
 
   it("exposes getLocks, pushes onLocksChanged, and enforces host-owner permission on cancelLong", { timeout: 20_000 }, async () => {

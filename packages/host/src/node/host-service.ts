@@ -14,9 +14,12 @@ import {
 import {
   createTournamentState,
   type Actor,
+  type OpBallotSubmission,
   type OpRequest,
+  type OpRound,
+  type OpTournament,
 } from "@simpletab/core/ops";
-import { BUILT_IN_ROLES, type Role } from "@simpletab/core/permissions";
+import { BUILT_IN_ROLES, hasPermission, type Role } from "@simpletab/core/permissions";
 import { project } from "@simpletab/core/projection";
 import type { Tournament, TournamentPreferences } from "@simpletab/core/types";
 import type { BackendApplicationContribution } from "@theia/core/lib/node";
@@ -475,10 +478,25 @@ export class HostServiceImpl
       return null;
     }
     const projected = project(raw, this.localRole);
+    const canEnterLate = hasPermission(this.localRole, "results.enter_late");
+    const canViewIntake =
+      hasPermission(this.localRole, "results.enter") ||
+      hasPermission(this.localRole, "ballots.intake") ||
+      hasPermission(this.localRole, "standings.view");
     return {
       ...projected,
+      tournament: projected.tournament as OpTournament,
+      rounds: projected.rounds as OpRound[],
+      ballots: projected.ballots as OpBallotSubmission[],
       seq: this.engine.head().seq,
       roleId: this.localRole.id,
+      permissions: [...this.localRole.permissions],
+      ...(canEnterLate
+        ? { lateSubmissions: structuredClone(raw.lateSubmissions ?? []) }
+        : {}),
+      ...(canViewIntake
+        ? { ballotIntake: structuredClone(raw.ballotIntake ?? []) }
+        : {}),
       versions: { ...raw.versions },
     };
   }
