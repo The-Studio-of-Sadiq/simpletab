@@ -16,6 +16,7 @@
     "typecheck": "tsc -p packages/core/tsconfig.json --noEmit && tsc -p packages/host/tsconfig.json --noEmit && tsc -p packages/tab-ui/tsconfig.json --noEmit",
     "lint": "eslint . && npm run typecheck",
     "port-check": "node tools/port-check.mjs",
+    "i18n:check": "node packages/tab-ui/scripts/i18n-check.mjs",
     "port-from-crabbytab": "node tools/port-from-crabbytab.mjs",
     "tabbycat-diff": "vitest run --project tabbycat-diff",
     "determinism": "vitest run --project core packages/core/test/determinism",
@@ -26,6 +27,7 @@
     "@types/papaparse": "^5.3.15",
     "@xmldom/xmldom": "^0.9.8",
     "eslint": "9.39.5",
+    "jsdom": "^26.1.0",
     "typescript": "5.9.3",
     "typescript-eslint": "8.73.0",
     "vitest": "5.1.1"

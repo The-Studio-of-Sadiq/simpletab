@@ -5,7 +5,7 @@
   "type": "module",
   "license": "AGPL-3.0-or-later",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json && node scripts/copy-assets.mjs"
+    "build": "tsc -p tsconfig.build.json --noEmit && node scripts/build.mjs"
   },
   "theiaExtensions": [
     {
@@ -13,12 +13,16 @@
     }
   ],
   "dependencies": {
+    "@simpletab/core": "*",
     "@simpletab/host": "*",
     "@theia/core": "1.77.0",
+    "@theia/filesystem": "1.77.0",
+    "intl-messageformat": "12.2.0",
     "react": "19.3.1",
     "react-dom": "19.3.1"
   },
   "devDependencies": {
+    "@testing-library/react": "16.3.3",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0"
   }

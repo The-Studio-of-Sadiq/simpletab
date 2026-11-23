@@ -4,7 +4,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "build": "tsc -p tsconfig.build.json --noEmit && tsc -p tsconfig.common.json && node scripts/build.mjs"
+    "build": "tsc -p tsconfig.build.json --noEmit && node scripts/build.mjs"
   },
   "theiaExtensions": [
     {

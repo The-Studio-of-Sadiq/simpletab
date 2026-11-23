@@ -60,6 +60,8 @@ const commonOptions = {
 await esbuild.build({
   ...commonOptions,
   entryPoints: {
+    "common/host-protocol": path.join(hostDir, "src/common/host-protocol.ts"),
+    "common/credentials-protocol": path.join(hostDir, "src/common/credentials-protocol.ts"),
     "node/host-backend-module": path.join(hostDir, "src/node/host-backend-module.ts"),
     "node/engine/long-op-worker": path.join(hostDir, "src/node/engine/long-op-worker.ts"),
     "electron-main/host-main-module": path.join(hostDir, "src/electron-main/host-main-module.ts"),

@@ -1,15 +1,11 @@
-import {
-  CredentialsService,
-} from "@simpletab/host/lib/common/credentials-protocol";
-import {
-  HostService,
-  type HostStatus,
-} from "@simpletab/host/lib/common/host-protocol";
+import { CredentialsService } from "@simpletab/host/lib/common/credentials-protocol";
+import type { HostStatus } from "@simpletab/host/lib/common/host-protocol";
 import {
   AbstractViewContribution,
   FrontendApplicationContribution,
   StatusBar,
   StatusBarAlignment,
+  ViewContainer,
 } from "@theia/core/lib/browser";
 import {
   Command,
@@ -17,26 +13,110 @@ import {
   MessageService,
 } from "@theia/core/lib/common";
 import { inject, injectable, optional } from "@theia/core/shared/inversify";
+import { onLocaleChange, t } from "./i18n";
 import {
   SIMPLETAB_CREATE_DEMO_COMMAND_ID,
   SimpleTabStatusWidget,
 } from "./simpletab-status-widget";
+import { TournamentStore } from "./store/tournament-store";
+import { ParticipantsWidget } from "./views/participants-widget";
+import { SetupWidget } from "./views/setup-widget";
+import {
+  SIMPLETAB_OPEN_PARTICIPANTS_COMMAND,
+  SIMPLETAB_OPEN_SETUP_COMMAND,
+  SIMPLETAB_OPEN_STATUS_COMMAND,
+} from "./views/simpletab-nav-widget";
 
+export const SIMPLETAB_VIEW_CONTAINER_ID = "simpletab-view-container";
+export const SIMPLETAB_CONTAINER_TOGGLE_COMMAND_ID = "simpletab.container.toggle";
 export const SIMPLETAB_STATUS_TOGGLE_COMMAND_ID = "simpletab.status.toggle";
+export const SIMPLETAB_SETUP_TOGGLE_COMMAND_ID = "simpletab.setup.toggle";
+export const SIMPLETAB_PARTICIPANTS_TOGGLE_COMMAND_ID =
+  "simpletab.participants.toggle";
+
 const STATUS_BAR_ENTRY_ID = "simpletab-status-bar";
 
 export const SIMPLETAB_CREATE_DEMO_COMMAND: Command = {
   id: SIMPLETAB_CREATE_DEMO_COMMAND_ID,
-  label: "SimpleTab: Create demo tournament",
+  label: t("command.createDemo"),
 };
+
+@injectable()
+export class SimpleTabContainerContribution extends AbstractViewContribution<ViewContainer> {
+  constructor() {
+    super({
+      widgetId: SIMPLETAB_VIEW_CONTAINER_ID,
+      viewContainerId: SIMPLETAB_VIEW_CONTAINER_ID,
+      widgetName: t("nav.containerTitle"),
+      defaultWidgetOptions: {
+        area: "left",
+      },
+      toggleCommandId: SIMPLETAB_CONTAINER_TOGGLE_COMMAND_ID,
+    });
+  }
+}
+
+@injectable()
+export class SetupViewContribution extends AbstractViewContribution<SetupWidget> {
+  constructor() {
+    super({
+      widgetId: SetupWidget.ID,
+      widgetName: t("setup.widgetLabel"),
+      defaultWidgetOptions: {
+        area: "main",
+      },
+      toggleCommandId: SIMPLETAB_SETUP_TOGGLE_COMMAND_ID,
+    });
+  }
+
+  override registerCommands(commands: CommandRegistry): void {
+    super.registerCommands(commands);
+    commands.registerCommand(
+      { id: SIMPLETAB_OPEN_SETUP_COMMAND },
+      {
+        execute: () => this.openView({ activate: true, reveal: true }),
+      },
+    );
+  }
+}
+
+@injectable()
+export class ParticipantsViewContribution extends AbstractViewContribution<ParticipantsWidget> {
+  constructor() {
+    super({
+      widgetId: ParticipantsWidget.ID,
+      widgetName: t("participants.widgetLabel"),
+      defaultWidgetOptions: {
+        area: "main",
+      },
+      toggleCommandId: SIMPLETAB_PARTICIPANTS_TOGGLE_COMMAND_ID,
+    });
+  }
+
+  override registerCommands(commands: CommandRegistry): void {
+    super.registerCommands(commands);
+    commands.registerCommand(
+      { id: SIMPLETAB_OPEN_PARTICIPANTS_COMMAND },
+      {
+        execute: () => this.openView({ activate: true, reveal: true }),
+      },
+    );
+  }
+}
 
 @injectable()
 export class SimpleTabContribution
   extends AbstractViewContribution<SimpleTabStatusWidget>
   implements FrontendApplicationContribution
 {
-  @inject(HostService)
-  protected readonly hostService!: HostService;
+  @inject(TournamentStore)
+  protected readonly store!: TournamentStore;
+
+  @inject(SimpleTabContainerContribution)
+  protected readonly containerContribution!: SimpleTabContainerContribution;
+
+  @inject(SetupViewContribution)
+  protected readonly setupContribution!: SetupViewContribution;
 
   @inject(StatusBar)
   protected readonly statusBar!: StatusBar;
@@ -51,7 +131,7 @@ export class SimpleTabContribution
   constructor() {
     super({
       widgetId: SimpleTabStatusWidget.ID,
-      widgetName: SimpleTabStatusWidget.LABEL,
+      widgetName: t("status.widgetLabel"),
       defaultWidgetOptions: {
         area: "main",
       },
@@ -61,22 +141,27 @@ export class SimpleTabContribution
 
   override registerCommands(commands: CommandRegistry): void {
     super.registerCommands(commands);
+    commands.registerCommand(
+      { id: SIMPLETAB_OPEN_STATUS_COMMAND },
+      {
+        execute: () => this.openView({ activate: true, reveal: true }),
+      },
+    );
     commands.registerCommand(SIMPLETAB_CREATE_DEMO_COMMAND, {
       execute: async () => {
         try {
-          const created = await this.hostService.createDemoTournament("");
+          const created = await this.store.createDemoTournament("");
           this.updateStatusBar(created.status);
-          const widget = this.tryGetWidget();
-          if (widget !== undefined) {
-            widget.applyStatus(created.status);
-          }
           await this.messageService.info(
-            `Created SimpleTab demo tournament (${created.status.slug ?? "bp-demo"}) at ${created.dbPath}.`,
+            t("command.demoCreated", {
+              slug: created.status.slug ?? "bp-demo",
+              dbPath: created.dbPath,
+            }),
           );
         } catch (error) {
           const message = error instanceof Error ? error.message : String(error);
           await this.messageService.error(
-            `Failed to create demo tournament: ${message}`,
+            t("command.demoFailed", { message }),
           );
         }
       },
@@ -85,14 +170,23 @@ export class SimpleTabContribution
 
   async onDidInitializeLayout(): Promise<void> {
     this.updateStatusBar({ open: false, locks: [] });
-    const widget = await this.openView({ activate: true, reveal: true });
-    widget.onDidUpdateStatus((status) => {
-      this.updateStatusBar(status);
+    this.store.subscribe((snapshot) => {
+      this.updateStatusBar(snapshot.status);
     });
-    const status = await widget.refresh();
-    if (status !== null) {
-      this.updateStatusBar(status);
+    onLocaleChange(() => {
+      this.updateStatusBar(this.store.getStatus());
+    });
+
+    await this.containerContribution.openView({ reveal: true });
+    const snapshot = await this.store.refresh();
+    this.updateStatusBar(snapshot.status);
+
+    if (!snapshot.status.open) {
+      await this.setupContribution.openView({ activate: true, reveal: true });
+    } else {
+      await this.openView({ activate: true, reveal: true });
     }
+
     if (this.credentialsService !== undefined) {
       await this.credentialsService.status();
     }
@@ -101,14 +195,17 @@ export class SimpleTabContribution
   private updateStatusBar(status: HostStatus): void {
     const text =
       status.open && status.slug
-        ? `SimpleTab: ${status.slug} · seq ${status.headSeq ?? 0}`
-        : "SimpleTab: no tournament";
+        ? t("statusBar.tournament", {
+            slug: status.slug,
+            seq: status.headSeq ?? 0,
+          })
+        : t("statusBar.noTournament");
 
     void this.statusBar.setElement(STATUS_BAR_ENTRY_ID, {
       text,
       alignment: StatusBarAlignment.LEFT,
       priority: 100,
-      tooltip: "Toggle SimpleTab Status view",
+      tooltip: t("statusBar.tooltip"),
       command: SIMPLETAB_STATUS_TOGGLE_COMMAND_ID,
     });
   }

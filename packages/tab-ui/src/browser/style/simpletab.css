@@ -1,0 +1,310 @@
+.simpletab-page {
+  padding: 16px 20px;
+  color: var(--theia-foreground);
+  background: var(--theia-editor-background);
+  height: 100%;
+  box-sizing: border-box;
+  overflow: auto;
+  font-family: var(--theia-ui-font-family);
+  font-size: var(--theia-ui-font-size1);
+}
+
+.simpletab-page :focus-visible {
+  outline: 2px solid var(--theia-focusBorder, #007fd4);
+  outline-offset: 2px;
+}
+
+.simpletab-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-bottom: 12px;
+  margin-bottom: 16px;
+  border-bottom: 1px solid var(--theia-panel-border);
+}
+
+.simpletab-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 600;
+}
+
+.simpletab-subtitle {
+  margin: 0 0 12px 0;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.simpletab-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.simpletab-tabs {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  border-bottom: 1px solid var(--theia-panel-border);
+  margin-bottom: 16px;
+  padding-bottom: 4px;
+}
+
+.simpletab-tab {
+  background: transparent;
+  color: var(--theia-foreground);
+  border: 1px solid transparent;
+  border-radius: 3px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.simpletab-tab:hover {
+  background: var(--theia-list-hoverBackground);
+}
+
+.simpletab-tab[aria-selected="true"] {
+  background: var(--theia-tab-activeBackground, var(--theia-editor-background));
+  border-color: var(--theia-panel-border);
+  border-bottom-color: var(--theia-focusBorder, #007fd4);
+  font-weight: 600;
+}
+
+.simpletab-section {
+  border: 1px solid var(--theia-panel-border);
+  border-radius: 4px;
+  padding: 16px;
+  margin-bottom: 16px;
+  background: var(--theia-sideBar-background, transparent);
+}
+
+.simpletab-form {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  max-width: 720px;
+}
+
+.simpletab-form-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 12px;
+}
+
+.simpletab-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.simpletab-field label,
+.simpletab-fieldset legend {
+  font-weight: 500;
+  color: var(--theia-foreground);
+}
+
+.simpletab-fieldset {
+  border: 1px solid var(--theia-panel-border);
+  border-radius: 4px;
+  padding: 10px 12px;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.simpletab-input-row {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.simpletab-input-row > input,
+.simpletab-input-row > select {
+  flex: 1;
+}
+
+.simpletab-field input[type="text"],
+.simpletab-field input[type="number"],
+.simpletab-field input[type="email"],
+.simpletab-field select,
+.simpletab-field textarea,
+.simpletab-table select {
+  background: var(--theia-input-background);
+  color: var(--theia-input-foreground);
+  border: 1px solid var(--theia-input-border, var(--theia-panel-border));
+  border-radius: 2px;
+  padding: 5px 8px;
+  font-family: inherit;
+  font-size: inherit;
+  min-height: 28px;
+  box-sizing: border-box;
+}
+
+.simpletab-field input[aria-invalid="true"],
+.simpletab-field select[aria-invalid="true"] {
+  border-color: var(--theia-inputValidation-errorBorder, var(--theia-errorForeground));
+}
+
+.simpletab-checkbox-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 14px;
+  align-items: center;
+}
+
+.simpletab-checkbox-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.simpletab-hint {
+  color: var(--theia-descriptionForeground);
+  font-size: 0.9em;
+}
+
+.simpletab-field-error {
+  color: var(--theia-errorForeground);
+  font-size: 0.92em;
+  font-weight: 500;
+}
+
+.simpletab-alert {
+  padding: 10px 12px;
+  border-radius: 3px;
+  margin-bottom: 12px;
+  border: 1px solid var(--theia-panel-border);
+}
+
+.simpletab-alert-error {
+  border-color: var(--theia-errorForeground);
+  color: var(--theia-errorForeground);
+  background: var(--theia-inputValidation-errorBackground, transparent);
+}
+
+.simpletab-alert-success {
+  border-color: var(--theia-testing-iconPassed, #388a34);
+  color: var(--theia-foreground);
+}
+
+.simpletab-alert-warning {
+  border-color: var(--theia-editorWarning-foreground, #cca700);
+  color: var(--theia-foreground);
+}
+
+.simpletab-table-wrap {
+  overflow-x: auto;
+}
+
+.simpletab-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: 8px;
+}
+
+.simpletab-table caption {
+  text-align: left;
+  font-weight: 600;
+  margin-bottom: 6px;
+  color: var(--theia-descriptionForeground);
+}
+
+.simpletab-table th,
+.simpletab-table td {
+  text-align: left;
+  padding: 6px 10px;
+  border-bottom: 1px solid var(--theia-panel-border);
+  vertical-align: top;
+}
+
+.simpletab-table th {
+  color: var(--theia-descriptionForeground);
+  font-weight: 600;
+}
+
+.simpletab-badge {
+  display: inline-block;
+  padding: 2px 7px;
+  border-radius: 3px;
+  border: 1px solid var(--theia-panel-border);
+  font-size: 0.85em;
+  font-weight: 600;
+  margin-right: 4px;
+}
+
+.simpletab-badge-add {
+  border-color: var(--theia-testing-iconPassed, #388a34);
+}
+
+.simpletab-badge-match {
+  border-color: var(--theia-focusBorder, #007fd4);
+}
+
+.simpletab-badge-conflict {
+  border-color: var(--theia-editorWarning-foreground, #cca700);
+}
+
+.simpletab-badge-error {
+  border-color: var(--theia-errorForeground);
+  color: var(--theia-errorForeground);
+}
+
+.simpletab-sidebar {
+  padding: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  color: var(--theia-foreground);
+  font-family: var(--theia-ui-font-family);
+  font-size: var(--theia-ui-font-size1);
+}
+
+.simpletab-sidebar :focus-visible {
+  outline: 2px solid var(--theia-focusBorder, #007fd4);
+  outline-offset: 2px;
+}
+
+.simpletab-nav-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.simpletab-nav-btn {
+  text-align: left;
+  width: 100%;
+}
+
+.simpletab-issue-list {
+  margin: 0;
+  padding-left: 16px;
+}
+
+.simpletab-empty {
+  color: var(--theia-descriptionForeground);
+  padding: 12px 0;
+}
+
+.simpletab-speaker-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr auto;
+  gap: 8px;
+  align-items: end;
+}
+
+.simpletab-checklist {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  max-height: 180px;
+  overflow-y: auto;
+  border: 1px solid var(--theia-panel-border);
+  padding: 8px;
+  border-radius: 3px;
+}

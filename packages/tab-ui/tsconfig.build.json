@@ -1,13 +1,8 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "noEmit": false,
-    "outDir": "./lib",
-    "rootDir": "./src",
-    "declaration": true,
-    "sourceMap": true,
-    "jsx": "react",
-    "experimentalDecorators": true
+    "noEmit": true,
+    "types": []
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"],
   "exclude": ["src/**/*.test.ts", "src/**/*.test.tsx"]
