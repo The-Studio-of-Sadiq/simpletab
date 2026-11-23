@@ -7,6 +7,7 @@ import {
   defaultRegistry,
   recordKey,
   Registry,
+  SETUP_OPS,
   type OpDef,
   type RecordKey,
 } from "./index";
@@ -203,16 +204,16 @@ describe("ops engine-core", () => {
     const settingsDef = registry.get("settings.update")!;
     expect(() => registry.register(settingsDef)).toThrow(/Duplicate operation registration/);
 
-    const roundOps = registry.list().filter((op) => op.type.startsWith("round."));
+    const roundOps = SETUP_OPS.filter((op) => op.type.startsWith("round."));
     expect(roundOps.length).toBe(7);
     for (const op of roundOps) {
       expect(op.visibility).toBe("public");
       expect(op.releaseGate).toBeUndefined();
     }
 
-    const nonRoundOps = registry.list().filter((op) => !op.type.startsWith("round."));
-    expect(nonRoundOps.length).toBe(21);
-    for (const op of nonRoundOps) {
+    const nonRoundSetupOps = SETUP_OPS.filter((op) => !op.type.startsWith("round."));
+    expect(nonRoundSetupOps.length).toBe(21);
+    for (const op of nonRoundSetupOps) {
       expect(op.visibility).toBe("private");
     }
 

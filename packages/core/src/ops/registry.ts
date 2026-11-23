@@ -1,3 +1,6 @@
+import { ALLOCATION_OPS } from "./allocation";
+import { DRAW_OPS } from "./draw";
+import { MOTION_OPS } from "./motions";
 import { SETUP_OPS } from "./setup";
 import type { OpDef, OpRegistryLookup } from "./types";
 
@@ -31,7 +34,12 @@ export class Registry implements OpRegistryLookup {
 
 export function defaultRegistry(): Registry {
   const registry = new Registry();
-  for (const op of SETUP_OPS) {
+  for (const op of [
+    ...SETUP_OPS,
+    ...DRAW_OPS,
+    ...ALLOCATION_OPS,
+    ...MOTION_OPS,
+  ]) {
     registry.register(op);
   }
   return registry;
