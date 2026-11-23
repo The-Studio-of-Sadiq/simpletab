@@ -17,7 +17,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
-          node-version: 22
+          # Node 24: better-sqlite3 ships prebuilt Windows binaries for it, so CI needs no C++ build tools.
+          node-version: 24
           cache: npm
       - run: npm ci
       - name: Lint and type check
