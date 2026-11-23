@@ -18,6 +18,21 @@ export default defineConfig({
       },
       {
         test: {
+          name: "host",
+          root: "packages/host",
+          include: ["src/**/*.test.ts"],
+          globals: true,
+          environment: "node",
+        },
+        resolve: {
+          alias: {
+            "@": path.resolve(__dirname, "packages/core/src"),
+            "@simpletab/core": path.resolve(__dirname, "packages/core/src"),
+          },
+        },
+      },
+      {
+        test: {
           name: "tabbycat-diff",
           root: "tools/tabbycat-diff",
           include: ["**/*.test.ts"],

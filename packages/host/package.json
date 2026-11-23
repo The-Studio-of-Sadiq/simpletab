@@ -1,0 +1,13 @@
+{
+  "name": "@simpletab/host",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@simpletab/core": "*",
+    "better-sqlite3": "13.2.0"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.13"
+  }
+}
