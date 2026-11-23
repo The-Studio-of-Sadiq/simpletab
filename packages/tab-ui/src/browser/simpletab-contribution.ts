@@ -20,24 +20,32 @@ import {
 } from "./simpletab-status-widget";
 import { TournamentStore } from "./store/tournament-store";
 import { AllocationWidget } from "./views/allocation-widget";
+import { BreakWidget } from "./views/break-widget";
+import { ChangelogWidget } from "./views/changelog-widget";
 import { CheckinWidget } from "./views/checkin-widget";
 import { DrawWidget } from "./views/draw-widget";
 import { FeedbackWidget } from "./views/feedback-widget";
 import { MotionsWidget } from "./views/motions-widget";
 import { ParticipantsWidget } from "./views/participants-widget";
+import { ReleasesWidget } from "./views/releases-widget";
 import { ResultsWidget } from "./views/results-widget";
 import { SetupWidget } from "./views/setup-widget";
 import {
   SIMPLETAB_OPEN_ALLOCATION_COMMAND,
+  SIMPLETAB_OPEN_BREAK_COMMAND,
+  SIMPLETAB_OPEN_CHANGELOG_COMMAND,
   SIMPLETAB_OPEN_CHECKIN_COMMAND,
   SIMPLETAB_OPEN_DRAW_COMMAND,
   SIMPLETAB_OPEN_FEEDBACK_COMMAND,
   SIMPLETAB_OPEN_MOTIONS_COMMAND,
   SIMPLETAB_OPEN_PARTICIPANTS_COMMAND,
+  SIMPLETAB_OPEN_RELEASES_COMMAND,
   SIMPLETAB_OPEN_RESULTS_COMMAND,
   SIMPLETAB_OPEN_SETUP_COMMAND,
+  SIMPLETAB_OPEN_STANDINGS_COMMAND,
   SIMPLETAB_OPEN_STATUS_COMMAND,
 } from "./views/simpletab-nav-widget";
+import { StandingsWidget } from "./views/standings-widget";
 
 export const SIMPLETAB_VIEW_CONTAINER_ID = "simpletab-view-container";
 export const SIMPLETAB_CONTAINER_TOGGLE_COMMAND_ID = "simpletab.container.toggle";
@@ -52,6 +60,12 @@ export const SIMPLETAB_ALLOCATION_TOGGLE_COMMAND_ID =
 export const SIMPLETAB_MOTIONS_TOGGLE_COMMAND_ID = "simpletab.motions.toggle";
 export const SIMPLETAB_RESULTS_TOGGLE_COMMAND_ID = "simpletab.results.toggle";
 export const SIMPLETAB_FEEDBACK_TOGGLE_COMMAND_ID = "simpletab.feedback.toggle";
+export const SIMPLETAB_STANDINGS_TOGGLE_COMMAND_ID =
+  "simpletab.standings.toggle";
+export const SIMPLETAB_BREAK_TOGGLE_COMMAND_ID = "simpletab.break.toggle";
+export const SIMPLETAB_RELEASES_TOGGLE_COMMAND_ID = "simpletab.releases.toggle";
+export const SIMPLETAB_CHANGELOG_TOGGLE_COMMAND_ID =
+  "simpletab.changelog.toggle";
 
 const STATUS_BAR_ENTRY_ID = "simpletab-status-bar";
 
@@ -260,6 +274,102 @@ export class FeedbackViewContribution extends AbstractViewContribution<FeedbackW
     super.registerCommands(commands);
     commands.registerCommand(
       { id: SIMPLETAB_OPEN_FEEDBACK_COMMAND },
+      {
+        execute: () => this.openView({ activate: true, reveal: true }),
+      },
+    );
+  }
+}
+
+@injectable()
+export class StandingsViewContribution extends AbstractViewContribution<StandingsWidget> {
+  constructor() {
+    super({
+      widgetId: StandingsWidget.ID,
+      widgetName: t("standings.widgetLabel"),
+      defaultWidgetOptions: {
+        area: "main",
+      },
+      toggleCommandId: SIMPLETAB_STANDINGS_TOGGLE_COMMAND_ID,
+    });
+  }
+
+  override registerCommands(commands: CommandRegistry): void {
+    super.registerCommands(commands);
+    commands.registerCommand(
+      { id: SIMPLETAB_OPEN_STANDINGS_COMMAND },
+      {
+        execute: () => this.openView({ activate: true, reveal: true }),
+      },
+    );
+  }
+}
+
+@injectable()
+export class BreakViewContribution extends AbstractViewContribution<BreakWidget> {
+  constructor() {
+    super({
+      widgetId: BreakWidget.ID,
+      widgetName: t("break.widgetLabel"),
+      defaultWidgetOptions: {
+        area: "main",
+      },
+      toggleCommandId: SIMPLETAB_BREAK_TOGGLE_COMMAND_ID,
+    });
+  }
+
+  override registerCommands(commands: CommandRegistry): void {
+    super.registerCommands(commands);
+    commands.registerCommand(
+      { id: SIMPLETAB_OPEN_BREAK_COMMAND },
+      {
+        execute: () => this.openView({ activate: true, reveal: true }),
+      },
+    );
+  }
+}
+
+@injectable()
+export class ReleasesViewContribution extends AbstractViewContribution<ReleasesWidget> {
+  constructor() {
+    super({
+      widgetId: ReleasesWidget.ID,
+      widgetName: t("releases.widgetLabel"),
+      defaultWidgetOptions: {
+        area: "main",
+      },
+      toggleCommandId: SIMPLETAB_RELEASES_TOGGLE_COMMAND_ID,
+    });
+  }
+
+  override registerCommands(commands: CommandRegistry): void {
+    super.registerCommands(commands);
+    commands.registerCommand(
+      { id: SIMPLETAB_OPEN_RELEASES_COMMAND },
+      {
+        execute: () => this.openView({ activate: true, reveal: true }),
+      },
+    );
+  }
+}
+
+@injectable()
+export class ChangelogViewContribution extends AbstractViewContribution<ChangelogWidget> {
+  constructor() {
+    super({
+      widgetId: ChangelogWidget.ID,
+      widgetName: t("changelog.widgetLabel"),
+      defaultWidgetOptions: {
+        area: "main",
+      },
+      toggleCommandId: SIMPLETAB_CHANGELOG_TOGGLE_COMMAND_ID,
+    });
+  }
+
+  override registerCommands(commands: CommandRegistry): void {
+    super.registerCommands(commands);
+    commands.registerCommand(
+      { id: SIMPLETAB_OPEN_CHANGELOG_COMMAND },
       {
         execute: () => this.openView({ activate: true, reveal: true }),
       },

@@ -33,6 +33,7 @@ import type {
   HostServiceClient,
   HostService as HostServiceContract,
   HostStatus,
+  OpUndoInfo,
   ProjectedState,
   StateChangedEvent,
   SubmitResult,
@@ -366,6 +367,13 @@ export class HostServiceImpl
       items = items.slice(0, limit);
     }
     return items;
+  }
+
+  async getOpUndoInfo(): Promise<OpUndoInfo[]> {
+    if (this.engine === null) {
+      return [];
+    }
+    return this.engine.opUndoInfo();
   }
 
   async onStop(): Promise<void> {

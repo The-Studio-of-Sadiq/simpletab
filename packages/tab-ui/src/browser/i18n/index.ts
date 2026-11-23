@@ -1,24 +1,32 @@
 import { IntlMessageFormat } from "intl-messageformat";
 import { Emitter, type Event } from "@theia/core/lib/common";
 import bnAllocation from "../locales/bn/allocation.json";
+import bnBreak from "../locales/bn/break.json";
+import bnChangelog from "../locales/bn/changelog.json";
 import bnCheckin from "../locales/bn/checkin.json";
 import bnCommon from "../locales/bn/common.json";
 import bnDraw from "../locales/bn/draw.json";
 import bnFeedback from "../locales/bn/feedback.json";
 import bnMotions from "../locales/bn/motions.json";
 import bnParticipants from "../locales/bn/participants.json";
+import bnReleases from "../locales/bn/releases.json";
 import bnResults from "../locales/bn/results.json";
 import bnSetup from "../locales/bn/setup.json";
+import bnStandings from "../locales/bn/standings.json";
 import bnStatus from "../locales/bn/status.json";
 import enAllocation from "../locales/en/allocation.json";
+import enBreak from "../locales/en/break.json";
+import enChangelog from "../locales/en/changelog.json";
 import enCheckin from "../locales/en/checkin.json";
 import enCommon from "../locales/en/common.json";
 import enDraw from "../locales/en/draw.json";
 import enFeedback from "../locales/en/feedback.json";
 import enMotions from "../locales/en/motions.json";
 import enParticipants from "../locales/en/participants.json";
+import enReleases from "../locales/en/releases.json";
 import enResults from "../locales/en/results.json";
 import enSetup from "../locales/en/setup.json";
+import enStandings from "../locales/en/standings.json";
 import enStatus from "../locales/en/status.json";
 
 export type SupportedLocale = "en" | "bn";
@@ -49,6 +57,10 @@ const DEFAULT_CATALOGS: Record<SupportedLocale, MessageCatalog> = {
     ...enMotions,
     ...enResults,
     ...enFeedback,
+    ...enStandings,
+    ...enBreak,
+    ...enReleases,
+    ...enChangelog,
   },
   bn: {
     ...bnCommon,
@@ -61,6 +73,10 @@ const DEFAULT_CATALOGS: Record<SupportedLocale, MessageCatalog> = {
     ...bnMotions,
     ...bnResults,
     ...bnFeedback,
+    ...bnStandings,
+    ...bnBreak,
+    ...bnReleases,
+    ...bnChangelog,
   },
 };
 

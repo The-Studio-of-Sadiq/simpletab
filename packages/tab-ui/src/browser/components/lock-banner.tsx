@@ -35,6 +35,8 @@ function formatLockLabel(
       return roundName
         ? t("lock.autofillingRound", { round: roundName })
         : t("lock.autofillingFallback");
+    case "break.compute":
+      return t("lock.computingBreak");
     default:
       return t("lock.generic", {
         opType: lock.opType,

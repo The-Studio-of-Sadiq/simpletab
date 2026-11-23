@@ -7,6 +7,7 @@ import type {
   HostCancelLongResult,
   HostLockInfo,
   HostStatus,
+  OpUndoInfo,
   ProjectedState,
   StateChangedEvent,
   SubmitResult,
@@ -219,6 +220,10 @@ export class TournamentStore {
 
   async getChangelog(afterSeq?: number, limit?: number): Promise<PublicChainItem[]> {
     return this.hostService.getChangelog(afterSeq, limit);
+  }
+
+  async getOpUndoInfo(): Promise<OpUndoInfo[]> {
+    return this.hostService.getOpUndoInfo();
   }
 
   async createTournament(

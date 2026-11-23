@@ -33,6 +33,7 @@ describe("HostServiceImpl", () => {
     });
     expect(await service.getState()).toBeNull();
     expect(await service.getChangelog()).toEqual([]);
+    expect(await service.getOpUndoInfo()).toEqual([]);
     expect(await service.getLocks()).toEqual([]);
     expect(await service.cancelLong("missing-lock")).toEqual({
       ok: false,
@@ -255,6 +256,18 @@ describe("HostServiceImpl", () => {
     expect(fullLog.length).toBeGreaterThanOrEqual(4);
     expect(afterLog).toHaveLength(2);
     expect(afterLog[0]?.entry.seq).toBe(createInst.seq);
+
+    const undoInfo = await service.getOpUndoInfo();
+    const createInfo = undoInfo.find((info) => info.seq === createInst.seq);
+    expect(createInfo).toBeDefined();
+    expect(createInfo?.writes).toContain("institution:inst-oxf");
+    expect(createInfo?.hasInverse).toBe(true);
+    expect(createInfo?.undoable).toBe(false);
+    expect(createInfo?.blockingSeqs).toContain(validUpdate.ok ? validUpdate.seq : -1);
+
+    const lastUndoEntry = undoInfo.at(-1);
+    expect(lastUndoEntry?.inverseOf).toBe(validUpdate.ok ? validUpdate.seq : -1);
+    expect(lastUndoEntry?.undoable).toBe(true);
   });
 
   it("projects getState according to the local role", async () => {

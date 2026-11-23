@@ -21,6 +21,10 @@ export const SIMPLETAB_OPEN_ALLOCATION_COMMAND = "simpletab.allocation.open";
 export const SIMPLETAB_OPEN_MOTIONS_COMMAND = "simpletab.motions.open";
 export const SIMPLETAB_OPEN_RESULTS_COMMAND = "simpletab.results.open";
 export const SIMPLETAB_OPEN_FEEDBACK_COMMAND = "simpletab.feedback.open";
+export const SIMPLETAB_OPEN_STANDINGS_COMMAND = "simpletab.standings.open";
+export const SIMPLETAB_OPEN_BREAK_COMMAND = "simpletab.break.open";
+export const SIMPLETAB_OPEN_RELEASES_COMMAND = "simpletab.releases.open";
+export const SIMPLETAB_OPEN_CHANGELOG_COMMAND = "simpletab.changelog.open";
 export const SIMPLETAB_OPEN_STATUS_COMMAND = "simpletab.status.open";
 
 @injectable()
@@ -168,6 +172,48 @@ export class SimpleTabNavWidget extends ReactWidget {
               {t("nav.openFeedback")}
             </button>
           ) : null}
+          <button
+            type="button"
+            className="theia-button secondary simpletab-nav-btn"
+            onClick={() => {
+              void this.commandService.executeCommand(
+                SIMPLETAB_OPEN_STANDINGS_COMMAND,
+              );
+            }}
+          >
+            {t("nav.openStandings")}
+          </button>
+          <button
+            type="button"
+            className="theia-button secondary simpletab-nav-btn"
+            onClick={() => {
+              void this.commandService.executeCommand(SIMPLETAB_OPEN_BREAK_COMMAND);
+            }}
+          >
+            {t("nav.openBreak")}
+          </button>
+          <button
+            type="button"
+            className="theia-button secondary simpletab-nav-btn"
+            onClick={() => {
+              void this.commandService.executeCommand(
+                SIMPLETAB_OPEN_RELEASES_COMMAND,
+              );
+            }}
+          >
+            {t("nav.openReleases")}
+          </button>
+          <button
+            type="button"
+            className="theia-button secondary simpletab-nav-btn"
+            onClick={() => {
+              void this.commandService.executeCommand(
+                SIMPLETAB_OPEN_CHANGELOG_COMMAND,
+              );
+            }}
+          >
+            {t("nav.openChangelog")}
+          </button>
           <button
             type="button"
             className="theia-button secondary simpletab-nav-btn"

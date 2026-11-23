@@ -114,6 +114,15 @@ export interface HostServiceClient {
   onLocksChanged?(locks: HostLockInfo[]): void;
 }
 
+export interface OpUndoInfo {
+  seq: number;
+  writes: RecordKey[];
+  hasInverse: boolean;
+  inverseOf: number | null;
+  undoable: boolean;
+  blockingSeqs: number[];
+}
+
 export interface HostService extends RpcServer<HostServiceClient> {
   status(): Promise<HostStatus>;
   openTournament(dbPath: string): Promise<HostStatus>;
@@ -125,4 +134,5 @@ export interface HostService extends RpcServer<HostServiceClient> {
   cancelLong(lockId: string): Promise<HostCancelLongResult>;
   getState(): Promise<ProjectedState | null>;
   getChangelog(afterSeq?: number, limit?: number): Promise<PublicChainItem[]>;
+  getOpUndoInfo(): Promise<OpUndoInfo[]>;
 }

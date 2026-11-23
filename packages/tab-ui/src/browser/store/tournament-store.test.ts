@@ -108,6 +108,7 @@ describe("TournamentStore", () => {
       cancelLong: vi.fn(async (lockId: string) => ({ ok: true as const, lockId })),
       getState: vi.fn(async () => makeProjectedState(currentSeq)),
       getChangelog: vi.fn(async () => []),
+      getOpUndoInfo: vi.fn(async () => []),
     };
 
     const dispatcher = new HostServiceClientDispatcher();
@@ -177,6 +178,7 @@ describe("TournamentStore", () => {
       cancelLong: vi.fn(async (lockId: string) => ({ ok: true as const, lockId })),
       getState: vi.fn(async () => null),
       getChangelog: vi.fn(async () => []),
+      getOpUndoInfo: vi.fn(async () => []),
     };
 
     const store = new TournamentStore(hostService);
@@ -221,6 +223,7 @@ describe("TournamentStore", () => {
       cancelLong: cancelLongMock,
       getState: vi.fn(async () => makeProjectedState(1)),
       getChangelog: vi.fn(async () => []),
+      getOpUndoInfo: vi.fn(async () => []),
     };
 
     const dispatcher = new HostServiceClientDispatcher();

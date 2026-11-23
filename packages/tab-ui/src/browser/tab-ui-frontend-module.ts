@@ -24,16 +24,20 @@ import { ContainerModule } from "@theia/core/shared/inversify";
 import { t } from "./i18n";
 import {
   AllocationViewContribution,
+  BreakViewContribution,
+  ChangelogViewContribution,
   CheckinViewContribution,
   DrawViewContribution,
   FeedbackViewContribution,
   MotionsViewContribution,
   ParticipantsViewContribution,
+  ReleasesViewContribution,
   ResultsViewContribution,
   SetupViewContribution,
   SIMPLETAB_VIEW_CONTAINER_ID,
   SimpleTabContainerContribution,
   SimpleTabContribution,
+  StandingsViewContribution,
 } from "./simpletab-contribution";
 import { SimpleTabStatusWidget } from "./simpletab-status-widget";
 import { HostServiceClientDispatcher } from "./store/host-service-client";
@@ -41,14 +45,18 @@ import { TournamentStore } from "./store/tournament-store";
 import "./style/simpletab-status.css";
 import "./style/simpletab.css";
 import { AllocationWidget } from "./views/allocation-widget";
+import { BreakWidget } from "./views/break-widget";
+import { ChangelogWidget } from "./views/changelog-widget";
 import { CheckinWidget } from "./views/checkin-widget";
 import { DrawWidget } from "./views/draw-widget";
 import { FeedbackWidget } from "./views/feedback-widget";
 import { MotionsWidget } from "./views/motions-widget";
 import { ParticipantsWidget } from "./views/participants-widget";
+import { ReleasesWidget } from "./views/releases-widget";
 import { ResultsWidget } from "./views/results-widget";
 import { SetupWidget } from "./views/setup-widget";
 import { SimpleTabNavWidget } from "./views/simpletab-nav-widget";
+import { StandingsWidget } from "./views/standings-widget";
 
 export default new ContainerModule((bind) => {
   bind(HostServiceClientDispatcher).toSelf().inSingletonScope();
@@ -175,6 +183,38 @@ export default new ContainerModule((bind) => {
     }))
     .inSingletonScope();
 
+  bind(StandingsWidget).toSelf().inSingletonScope();
+  bind(WidgetFactory)
+    .toDynamicValue((ctx) => ({
+      id: StandingsWidget.ID,
+      createWidget: () => ctx.container.get(StandingsWidget),
+    }))
+    .inSingletonScope();
+
+  bind(BreakWidget).toSelf().inSingletonScope();
+  bind(WidgetFactory)
+    .toDynamicValue((ctx) => ({
+      id: BreakWidget.ID,
+      createWidget: () => ctx.container.get(BreakWidget),
+    }))
+    .inSingletonScope();
+
+  bind(ReleasesWidget).toSelf().inSingletonScope();
+  bind(WidgetFactory)
+    .toDynamicValue((ctx) => ({
+      id: ReleasesWidget.ID,
+      createWidget: () => ctx.container.get(ReleasesWidget),
+    }))
+    .inSingletonScope();
+
+  bind(ChangelogWidget).toSelf().inSingletonScope();
+  bind(WidgetFactory)
+    .toDynamicValue((ctx) => ({
+      id: ChangelogWidget.ID,
+      createWidget: () => ctx.container.get(ChangelogWidget),
+    }))
+    .inSingletonScope();
+
   bind(SimpleTabStatusWidget).toSelf().inSingletonScope();
   bind(WidgetFactory)
     .toDynamicValue((ctx) => ({
@@ -192,6 +232,10 @@ export default new ContainerModule((bind) => {
   bindViewContribution(bind, MotionsViewContribution);
   bindViewContribution(bind, ResultsViewContribution);
   bindViewContribution(bind, FeedbackViewContribution);
+  bindViewContribution(bind, StandingsViewContribution);
+  bindViewContribution(bind, BreakViewContribution);
+  bindViewContribution(bind, ReleasesViewContribution);
+  bindViewContribution(bind, ChangelogViewContribution);
   bindViewContribution(bind, SimpleTabContribution);
   bind(FrontendApplicationContribution).toService(SimpleTabContribution);
 });

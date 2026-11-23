@@ -13,11 +13,13 @@ import {
   type ApplyResult,
   type ApplySuccess,
   type OpDef,
+  type OpLogEntry,
   type OpRegistryLookup,
   type OpRequest,
   type RecordKey,
   type TournamentState,
 } from "@simpletab/core/ops";
+import type { OpUndoInfo } from "../../common/host-protocol";
 import type { SqliteDatabase } from "../db/database";
 import { openDatabase } from "../db/database";
 import { loadState, seedState, writeChangedRecords } from "../state/load";
@@ -112,6 +114,13 @@ interface OpLogRow {
 
 interface StoredOpRow {
   inverse: string | null;
+}
+
+interface OpUndoInfoRow {
+  seq: number;
+  writes: string;
+  inverse: string | null;
+  inverse_of: number | null;
 }
 
 interface SubsequentWritesRow {
@@ -462,6 +471,35 @@ export class HostEngine {
       entry: JSON.parse(row.entry) as PublicChainItem["entry"],
       entryHash: row.entry_hash,
     }));
+  }
+
+  /** Returns write sets and undoability metadata for every committed operation. */
+  opUndoInfo(): OpUndoInfo[] {
+    const rows = this.database.prepare(
+      "SELECT seq, writes, inverse, inverse_of FROM ops ORDER BY seq",
+    ).all() as OpUndoInfoRow[];
+    const parsed = rows.map((row) => ({
+      seq: row.seq,
+      writes: JSON.parse(row.writes) as RecordKey[],
+      hasInverse: row.inverse !== null,
+      inverseOf: row.inverse_of,
+    }));
+    const log: OpLogEntry[] = parsed.map((item) => ({
+      seq: item.seq,
+      writes: item.writes,
+      ...(item.inverseOf !== null ? { inverseOf: item.inverseOf } : {}),
+    }));
+    return parsed.map((item) => {
+      const check = canUndo(log, item.seq);
+      return {
+        seq: item.seq,
+        writes: item.writes,
+        hasInverse: item.hasInverse,
+        inverseOf: item.inverseOf,
+        undoable: item.hasInverse && check.ok,
+        blockingSeqs: check.ok ? [] : check.blockingSeqs,
+      };
+    });
   }
 
   async close(): Promise<void> {
