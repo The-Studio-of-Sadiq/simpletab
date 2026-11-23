@@ -1307,7 +1307,9 @@ A resend is not an error: it returns `200 {status: "already_received"}`.
 "STRB" | u8 version=1 | u16 roundSeq | u16 rowCount (multiple of 8)
 rows sorted by rowId: rowId[16] | nonce[12] | ciphertext[512 + 16 tag]
 plaintext = JCS(row) padded with 0x00 to exactly 512 bytes; bundle generation fails if JCS(row) is over 512 bytes
-dummy rows: random rowId, random nonce, 528 random bytes
+dummy rows: random rowId (top 5 bits set to the bucket number), random nonce, 528 random bytes
+AES-GCM additional data = "STRB" | version | u16 roundSeq | rowId, so a row cannot be moved to another round or slot
+every one of the 32 buckets is always published, with at least 8 rows
 row = { room, side?, teammates?: [name], panel?: [{name, role}], forms: [formId], venue }
 ```
 
@@ -1322,11 +1324,11 @@ row = { room, side?, teammates?: [name], panel?: [{name, role}], forms: [formId]
 - Longer data is split into up to 4 fragments:
 
   ```text
-  "ST1F." + sid + "." + index(1..n) + "." + n + "." + totalLength + "." + base64url(SHA-256(fullBody))[0..22]
+  "ST1F." + sid + "." + index(1..n) + "." + n + "." + totalLength + "." + base64url(SHA-256(fullCode))[0..22]
           + "." + fragmentData
   ```
 
-  The host collects fragments by `sid`, in any order, and ignores duplicates. It joins them only when all `n` are present and the length and SHA-256 match. It then checks the HMAC on the joined body as above.
+  `fullCode` is the complete single-code string `"ST1." + body + "." + mac`, which is then cut into fragments. The host collects fragments by `sid`, in any order, ignores exact duplicates and rejects conflicting ones. It joins them only when all `n` are present and the length and SHA-256 match. It then checks the HMAC on the joined body as above.
 - Limits: a body of at most 6,000 characters before splitting, and at most 64 KB after decompression.
 - The copyable text code is the same string, with fragments joined by newlines.
 

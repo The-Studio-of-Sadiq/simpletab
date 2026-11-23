@@ -13,9 +13,14 @@ export default tseslint.config(
     languageOptions: { parser: tseslint.parser },
     rules: {
       "no-restricted-imports": ["error", {
+        // Bare Node built-ins are matched by exact name ("paths"), so core's own folders that
+        // share a name, such as "@/crypto/keys", are not caught by mistake.
+        paths: ["fs", "path", "crypto", "os", "child_process", "worker_threads", "stream", "buffer"].map((name) => ({
+          name,
+          message: "@simpletab/core must not use Node APIs.",
+        })),
         patterns: [
           { group: ["node:*"], message: "@simpletab/core must not use Node APIs." },
-          { group: ["fs", "path", "crypto", "os", "child_process"], message: "@simpletab/core must not use Node APIs." },
           { group: ["react", "react-dom", "react/*"], message: "UI code belongs in tab-ui or the apps, not core." },
           { group: ["electron", "next", "next/*", "firebase", "firebase/*", "firebase-admin", "firebase-admin/*"], message: "Not allowed in @simpletab/core." },
         ],

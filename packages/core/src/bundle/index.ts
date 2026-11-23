@@ -1,0 +1,33 @@
+export {
+  BUNDLE_BUCKET_COUNT,
+  BUNDLE_HEADER_BYTE_LENGTH,
+  BUNDLE_MAGIC,
+  BUNDLE_ROW_MULTIPLE,
+  BUNDLE_VERSION,
+  BundleFormatError,
+  MAX_U16,
+  ROW_CIPHERTEXT_BYTE_LENGTH,
+  ROW_GCM_TAG_BYTE_LENGTH,
+  ROW_ID_BYTE_LENGTH,
+  ROW_NONCE_BYTE_LENGTH,
+  ROW_PLAINTEXT_BYTE_LENGTH,
+  ROW_RECORD_BYTE_LENGTH,
+  RowTooLargeError,
+  bucketForRowId,
+  buildRowAad,
+  compareRowIds,
+  computeRowId,
+  encodeBucketHeader,
+  parseBucketHeader,
+  type BundleBucketHeader,
+  type BundleFormatErrorCode,
+  type RoundBundlePanelMember,
+  type RoundBundleRow,
+} from "./format";
+export { openRow } from "./open";
+export {
+  sealRound,
+  type RowKeyMaterial,
+  type SealRoundInput,
+  type SealRowInput,
+} from "./seal";
