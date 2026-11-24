@@ -93,6 +93,8 @@ export interface PublisherDeps {
   timers?: PublisherTimers;
   /** Delays before each `manifest.json` read-back attempt; defaults to 0, 1 s, 3 s. */
   readBackDelaysMs?: readonly number[];
+  /** Called after each successful publish (the GitHub archive mirror listens). */
+  onPublished?: () => void;
 }
 
 const defaultTimers: PublisherTimers = {
@@ -167,6 +169,7 @@ export class Publisher {
   private readonly clock: () => Date;
   private readonly timers: PublisherTimers;
   private readonly readBackDelaysMs: readonly number[];
+  private readonly onPublished: (() => void) | undefined;
 
   private status: PublishStatus = { state: "idle" };
   private active: Promise<void> | null = null;
@@ -189,6 +192,7 @@ export class Publisher {
     this.clock = deps.clock ?? (() => new Date());
     this.timers = deps.timers ?? defaultTimers;
     this.readBackDelaysMs = deps.readBackDelaysMs ?? DEFAULT_READ_BACK_DELAYS_MS;
+    this.onPublished = deps.onPublished;
   }
 
   /** Current publish status; reports `not_configured` until the CDN settings are complete. */
@@ -462,6 +466,13 @@ export class Publisher {
         ? { url: deploy.deploymentUrl }
         : { url: `https://${settings.cdnHost!.trim()}/` }),
     };
+    if (built !== null) {
+      try {
+        this.onPublished?.();
+      } catch (error) {
+        console.warn("SimpleTab: the publish listener failed", error);
+      }
+    }
     return { ...this.status };
   }
 

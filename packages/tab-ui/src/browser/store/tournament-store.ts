@@ -2,6 +2,7 @@ import type { PublicChainItem } from "@simpletab/core/changelog";
 import type { OpRequest } from "@simpletab/core/ops";
 import type {
   CreateDemoResult,
+  ArchiveStatus,
   CreateTournamentParams,
   CreateTournamentResult,
   HostCancelLongResult,
@@ -265,6 +266,15 @@ export class TournamentStore {
 
   async getPublishStatus(): Promise<PublishStatus> {
     return this.hostService.getPublishStatus();
+  }
+
+  async getArchiveStatus(): Promise<ArchiveStatus> {
+    return this.hostService.getArchiveStatus();
+  }
+
+  /** "Archive to GitHub"; returns when the archive has finished or failed. */
+  async archiveNow(): Promise<ArchiveStatus> {
+    return this.hostService.archiveNow();
   }
 
   /** Asks the host backend to publish; returns when that publish has finished or failed. */

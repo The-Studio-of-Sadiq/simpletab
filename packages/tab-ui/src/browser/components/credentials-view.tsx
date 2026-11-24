@@ -119,6 +119,23 @@ function stepStateLabel(entry: CredentialStatusEntry | undefined): string {
   return t("credentials.statusSet");
 }
 
+const GITHUB_NAME_RE = /^[A-Za-z0-9_.-]{1,100}$/;
+
+/** "owner/name" from "owner/name" or a github.com address; "" clears it; undefined when invalid. */
+export function normalizeGithubRepo(value: string): string | undefined {
+  const trimmed = value
+    .trim()
+    .replace(/^https?:\/\/(www\.)?github\.com\//i, "")
+    .replace(/\/+$/, "")
+    .replace(/\.git$/i, "");
+  if (trimmed.length === 0) return "";
+  const parts = trimmed.split("/");
+  if (parts.length !== 2) return undefined;
+  const [owner, repo] = parts as [string, string];
+  if (!GITHUB_NAME_RE.test(owner) || !GITHUB_NAME_RE.test(repo) || repo === "." || repo === "..") return undefined;
+  return `${owner}/${repo}`;
+}
+
 export const CredentialsView: React.FC<CredentialsViewProps> = ({
   state,
   status,
@@ -165,6 +182,12 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
     setAccountIdInput(onlineSettings.cloudflareAccountId ?? "");
     setPagesProjectInput(onlineSettings.pagesProject ?? "");
   }, [onlineSettings.cloudflareAccountId, onlineSettings.pagesProject]);
+  const [githubRepoInput, setGithubRepoInput] = React.useState<string>(
+    onlineSettings.githubRepo ?? "",
+  );
+  React.useEffect(() => {
+    setGithubRepoInput(onlineSettings.githubRepo ?? "");
+  }, [onlineSettings.githubRepo]);
 
   const entryMap = React.useMemo(() => {
     const map = new Map<CredentialName, CredentialStatusEntry>();
@@ -347,6 +370,16 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
       return;
     }
     await handleOnlinePatch({ cloudflareAccountId: accountId, pagesProject: project });
+  };
+
+  const handleSaveGithubRepo = async (event: React.FormEvent): Promise<void> => {
+    event.preventDefault();
+    const repo = normalizeGithubRepo(githubRepoInput);
+    if (repo === undefined) {
+      setErrorMessage(t("credentials.githubRepoInvalid"));
+      return;
+    }
+    await handleOnlinePatch({ githubRepo: repo });
   };
 
   const keyEntry = entryMap.get("tournamentKey");
@@ -821,6 +854,39 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
               </button>
             </div>
             <p className="simpletab-hint">{t("credentials.pagesHint")}</p>
+          </form>
+
+          <form
+            className="simpletab-field"
+            onSubmit={(e) => {
+              void handleSaveGithubRepo(e);
+            }}
+          >
+            <label htmlFor={`${baseId}-github-repo`}>
+              {t("credentials.githubRepoLabel")}
+            </label>
+            <div className="simpletab-actions">
+              <input
+                id={`${baseId}-github-repo`}
+                type="text"
+                autoComplete="off"
+                spellCheck={false}
+                value={githubRepoInput}
+                placeholder="debate-society/wudc2027-archive"
+                disabled={!status.open || onlineBusy}
+                onChange={(e) => {
+                  setGithubRepoInput(e.target.value);
+                }}
+              />
+              <button
+                type="submit"
+                className="theia-button secondary"
+                disabled={!status.open || onlineBusy}
+              >
+                {t("credentials.githubRepoSave")}
+              </button>
+            </div>
+            <p className="simpletab-hint">{t("credentials.githubRepoHint")}</p>
           </form>
         </div>
       </section>

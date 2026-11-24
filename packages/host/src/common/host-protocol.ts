@@ -90,6 +90,10 @@ export interface OnlineSettings {
   cloudflareAccountId?: string;
   /** Cloudflare Pages project name, e.g. "wudc2027" for wudc2027.pages.dev (not secret; M4). */
   pagesProject?: string;
+  /** GitHub archive repository as "owner/name" (not secret; section 10.1). */
+  githubRepo?: string;
+  /** Follow each live publish with an archive commit, at most one every 10 minutes (off by default). */
+  githubArchiveMirror?: boolean;
 }
 
 export const DEFAULT_ONLINE_SETTINGS: Readonly<OnlineSettings> = {
@@ -122,6 +126,29 @@ export interface PublishStatus {
   reason?: string;
   /** When a failed publish will be retried automatically. */
   nextRetryAt?: string;
+}
+
+export type ArchiveState =
+  | "idle"
+  | "building"
+  | "uploading"
+  | "confirming"
+  | "done"
+  | "failed"
+  | "not_configured";
+
+/** Status of the permanent GitHub archive (design section 10.1). */
+export interface ArchiveStatus {
+  state: ArchiveState;
+  at?: string;
+  /** GitHub Pages address of the archive. */
+  url?: string;
+  /** The `gh-pages` commit of the last archive. */
+  commitSha?: string;
+  /** True when nothing changed since the previous archive, so no commit was made. */
+  unchanged?: boolean;
+  /** Plain-language reason for `failed` / `not_configured`, or a note on a `done` archive. */
+  reason?: string;
 }
 
 export interface HostStatus {
@@ -243,6 +270,9 @@ export interface HostService extends RpcServer<HostServiceClient> {
   pullNow(): Promise<SyncStatus>;
   publishNow(): Promise<PublishStatus>;
   getPublishStatus(): Promise<PublishStatus>;
+  /** "Archive to GitHub" (design section 10.1). */
+  archiveNow(): Promise<ArchiveStatus>;
+  getArchiveStatus(): Promise<ArchiveStatus>;
   getChangelog(afterSeq?: number, limit?: number): Promise<PublicChainItem[]>;
   getOpUndoInfo(): Promise<OpUndoInfo[]>;
 }

@@ -24,6 +24,10 @@ import {
 import { ElectronCredentialsService } from "./credentials";
 import { attachCredentialsIpcHandler } from "./credentials-ipc";
 import {
+  attachGitHubArchiveIpcHandler,
+  isGitHubArchiveIpcRequest,
+} from "./github-archive-ipc";
+import {
   attachPagesDeployIpcHandler,
   isPagesDeployIpcRequest,
 } from "./pages-deploy-ipc";
@@ -39,6 +43,7 @@ export class SimpleTabElectronMainApplication extends ElectronMainApplication {
 
   private detachCredentialsIpc: (() => void) | null = null;
   private detachPagesDeployIpc: (() => void) | null = null;
+  private detachGitHubArchiveIpc: (() => void) | null = null;
   private mainVault: CredentialsVault | null = null;
 
   private mainOnlyVault(): CredentialsVault {
@@ -70,22 +75,31 @@ export class SimpleTabElectronMainApplication extends ElectronMainApplication {
       backendProcess,
       this.simpleTabCredentials,
     );
+    // Electron's network stack, so the system proxy settings apply as for the ballots service.
+    const mainFetch = (input: string, init: RequestInit): Promise<Response> =>
+      net !== undefined && typeof net.fetch === "function"
+        ? net.fetch(input, init)
+        : globalThis.fetch(input, init);
     this.detachPagesDeployIpc = attachPagesDeployIpcHandler(backendProcess, {
       // A vault of its own, not the RPC-served credentials service: every public method of that
       // service is callable from the frontend, and the token must never reach it.
       getToken: async () => this.mainOnlyVault().readSecretForElectronMain("cdnToken"),
-      // Electron's network stack, so the system proxy settings apply as for the ballots service.
-      fetchImpl: (input, init) =>
-        net !== undefined && typeof net.fetch === "function"
-          ? net.fetch(input, init)
-          : globalThis.fetch(input, init),
+      fetchImpl: mainFetch,
+    });
+    this.detachGitHubArchiveIpc = attachGitHubArchiveIpcHandler(backendProcess, {
+      getToken: async () => this.mainOnlyVault().readSecretForElectronMain("githubToken"),
+      fetchImpl: mainFetch,
     });
 
     return new Promise<number>((resolve, reject) => {
       let portResolved = false;
 
       const onMessage = (raw: unknown): void => {
-        if (isCredentialsFetchIpcRequest(raw) || isPagesDeployIpcRequest(raw)) {
+        if (
+          isCredentialsFetchIpcRequest(raw) ||
+          isPagesDeployIpcRequest(raw) ||
+          isGitHubArchiveIpcRequest(raw)
+        ) {
           return;
         }
         if (
@@ -140,6 +154,8 @@ export class SimpleTabElectronMainApplication extends ElectronMainApplication {
     this.detachCredentialsIpc = null;
     this.detachPagesDeployIpc?.();
     this.detachPagesDeployIpc = null;
+    this.detachGitHubArchiveIpc?.();
+    this.detachGitHubArchiveIpc = null;
   }
 
   protected override async getForkOptions(): Promise<ForkOptions> {

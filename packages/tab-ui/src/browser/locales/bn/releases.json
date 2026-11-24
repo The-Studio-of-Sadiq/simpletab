@@ -77,5 +77,21 @@
   "releases.publishRetryAt": "পরবর্তী স্বয়ংক্রিয় চেষ্টা: {time}।",
   "releases.publishNow": "এখনই প্রকাশ করুন",
   "releases.publishRunning": "প্রকাশ হচ্ছে…",
-  "releases.publishOpenSite": "{host} খুলুন"
+  "releases.publishOpenSite": "{host} খুলুন",
+  "releases.archiveTitle": "GitHub-এ স্থায়ী আর্কাইভ",
+  "releases.archiveOff": "GitHub আর্কাইভ বন্ধ আছে। Credentials পাতায় এটি চালু করুন এবং রিপোজিটরি ও একটি GitHub টোকেন যোগ করুন।",
+  "releases.archiveHint": "প্রকাশিত সাইট, চেঞ্জ লগ, CSV ও DebateXML এক্সপোর্ট এবং একটি README {repo}-এর gh-pages ব্রাঞ্চে কমিট করে, যা GitHub Pages বিনামূল্যে দেখায়। আগের সংস্করণগুলো ইতিহাসে থেকে যায়; কিছুই মুছে লেখা হয় না। রাউন্ড বান্ডল, ফর্ম ও ফিডব্যাক কখনো আর্কাইভ হয় না। টুর্নামেন্ট শেষ হওয়ার সময়টাই সবচেয়ে উপযুক্ত।",
+  "releases.archiveMirror": "প্রতিটি প্রকাশ আর্কাইভেও পাঠান (সর্বোচ্চ প্রতি ১০ মিনিটে একবার)",
+  "releases.archiveState.idle": "এখনো আর্কাইভ করা হয়নি",
+  "releases.archiveState.building": "আর্কাইভ তৈরি হচ্ছে",
+  "releases.archiveState.uploading": "GitHub-এ কমিট হচ্ছে",
+  "releases.archiveState.confirming": "GitHub Pages দেখা হচ্ছে",
+  "releases.archiveState.done": "আর্কাইভ করা হয়েছে",
+  "releases.archiveState.failed": "আর্কাইভ ব্যর্থ হয়েছে",
+  "releases.archiveState.not_configured": "সেট আপ করা হয়নি",
+  "releases.archiveUnchanged": "আর্কাইভ করা হয়েছে; আগের আর্কাইভের পর কিছু বদলায়নি",
+  "releases.archiveCommit": "কমিট {sha}",
+  "releases.archiveNow": "GitHub-এ আর্কাইভ করুন",
+  "releases.archiveRunning": "আর্কাইভ হচ্ছে…",
+  "releases.archiveOpen": "আর্কাইভ খুলুন"
 }

@@ -77,5 +77,21 @@
   "releases.publishRetryAt": "Next automatic try: {time}.",
   "releases.publishNow": "Publish now",
   "releases.publishRunning": "Publishing…",
-  "releases.publishOpenSite": "Open {host}"
+  "releases.publishOpenSite": "Open {host}",
+  "releases.archiveTitle": "Permanent archive on GitHub",
+  "releases.archiveOff": "The GitHub archive is off. Turn it on and add the repository and a GitHub token in Credentials.",
+  "releases.archiveHint": "Commits the released site, the change log, CSV and DebateXML exports and a README to the gh-pages branch of {repo}, served free by GitHub Pages. Earlier versions stay in the history; nothing is overwritten. Round bundles, forms and feedback are never archived. The best moment is when the tournament closes.",
+  "releases.archiveMirror": "Mirror every publish to the archive (at most once every 10 minutes)",
+  "releases.archiveState.idle": "Not archived yet",
+  "releases.archiveState.building": "Building the archive",
+  "releases.archiveState.uploading": "Committing to GitHub",
+  "releases.archiveState.confirming": "Checking GitHub Pages",
+  "releases.archiveState.done": "Archived",
+  "releases.archiveState.failed": "Archive failed",
+  "releases.archiveState.not_configured": "Not set up",
+  "releases.archiveUnchanged": "Archived; nothing changed since the last archive",
+  "releases.archiveCommit": "commit {sha}",
+  "releases.archiveNow": "Archive to GitHub",
+  "releases.archiveRunning": "Archiving…",
+  "releases.archiveOpen": "Open the archive"
 }

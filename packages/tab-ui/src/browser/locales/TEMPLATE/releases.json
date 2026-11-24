@@ -77,5 +77,21 @@
   "releases.publishRetryAt": "",
   "releases.publishNow": "",
   "releases.publishRunning": "",
-  "releases.publishOpenSite": ""
+  "releases.publishOpenSite": "",
+  "releases.archiveTitle": "",
+  "releases.archiveOff": "",
+  "releases.archiveHint": "",
+  "releases.archiveMirror": "",
+  "releases.archiveState.idle": "",
+  "releases.archiveState.building": "",
+  "releases.archiveState.uploading": "",
+  "releases.archiveState.confirming": "",
+  "releases.archiveState.done": "",
+  "releases.archiveState.failed": "",
+  "releases.archiveState.not_configured": "",
+  "releases.archiveUnchanged": "",
+  "releases.archiveCommit": "",
+  "releases.archiveNow": "",
+  "releases.archiveRunning": "",
+  "releases.archiveOpen": ""
 }

@@ -5,6 +5,7 @@ import {
   buildPublicProjection,
   needsPublicFeedback,
   PUBLIC_COLLECTION_NAMES,
+  type PublicProjection,
   type PublicSourceData,
   type SourceRecord,
 } from "@simpletab/core/lib/publicView/projection";
@@ -40,6 +41,8 @@ export interface BuildPublicSiteFilesResult {
   /** Relative site path -> exact bytes. */
   files: Map<string, Uint8Array>;
   site: PublicSiteIndex;
+  /** The released projection the files were built from (the archive's exports reuse it). */
+  projection: PublicProjection;
 }
 
 const UTF8 = new TextEncoder();
@@ -148,5 +151,5 @@ export function buildPublicSiteFiles(
     );
   }
 
-  return { files, site: parsed.value };
+  return { files, site: parsed.value, projection };
 }

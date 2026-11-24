@@ -3,6 +3,7 @@ import { Message } from "@theia/core/lib/browser";
 import { ReactWidget } from "@theia/core/lib/browser/widgets/react-widget";
 import { inject, injectable, postConstruct } from "@theia/core/shared/inversify";
 import * as React from "@theia/core/shared/react";
+import { ArchivePanel } from "../components/archive-panel";
 import { PublishPanel } from "../components/publish-panel";
 import { ReleasesView } from "../components/releases-view";
 import { stateHasPermission } from "../lib/permissions";
@@ -57,6 +58,11 @@ export class ReleasesWidget extends ReactWidget {
   private readonly setLive = async (on: boolean): Promise<void> => {
     await this.store.updateOnlineSettings({ livePublicSite: on });
   };
+  private readonly loadArchiveStatus = () => this.store.getArchiveStatus();
+  private readonly archiveNow = () => this.store.archiveNow();
+  private readonly setMirror = async (on: boolean): Promise<void> => {
+    await this.store.updateOnlineSettings({ githubArchiveMirror: on });
+  };
 
   protected override render(): React.ReactNode {
     const snapshot = this.store.getSnapshot();
@@ -69,6 +75,14 @@ export class ReleasesWidget extends ReactWidget {
           loadStatus={this.loadPublishStatus}
           onPublishNow={this.publishNow}
           onSetLive={this.setLive}
+        />
+        <ArchivePanel
+          open={snapshot.status.open}
+          canManage={stateHasPermission(snapshot.state, "releases.manage")}
+          onlineSettings={snapshot.status.onlineSettings ?? DEFAULT_ONLINE_SETTINGS}
+          loadStatus={this.loadArchiveStatus}
+          onArchiveNow={this.archiveNow}
+          onSetMirror={this.setMirror}
         />
         <ReleasesView
         state={snapshot.state}

@@ -33,6 +33,7 @@ import type { BackendApplicationContribution } from "@theia/core/lib/node";
 import { injectable } from "@theia/core/shared/inversify";
 import {
   DEFAULT_ONLINE_SETTINGS,
+  type ArchiveStatus,
   type BallotCollectionMode,
   type CreateDemoResult,
   type CreateTournamentParams,
@@ -56,6 +57,8 @@ import { seedDemoTournament } from "./demo-fixture";
 import { HostEngine, type HostApplyResult, type UndoResult } from "./engine/engine";
 import type { DetailedActiveLock } from "./engine/locks";
 import { readHostNumber } from "./handover/format";
+import { Archiver } from "./publish/archiver";
+import { IpcGitHubArchiver } from "./publish/github-archive-client";
 import { IpcPagesDeployer } from "./publish/pages-deploy-client";
 import { Publisher } from "./publish/publisher";
 import { buildRoundFiles } from "./publish/round-files";
@@ -181,6 +184,8 @@ export class HostServiceImpl
   private syncScheduler: SyncScheduler | null = null;
   private publisher: Publisher | null = null;
   private pagesDeployer: IpcPagesDeployer | null = null;
+  private archiver: Archiver | null = null;
+  private githubArchiver: IpcGitHubArchiver | null = null;
   private publishInFlight: Promise<void> | null = null;
   private publishQueued = false;
 
@@ -612,6 +617,9 @@ export class HostServiceImpl
       patch.pagesProject !== undefined
         ? patch.pagesProject.trim()
         : current.pagesProject;
+    const nextGithubRepo =
+      patch.githubRepo !== undefined ? patch.githubRepo.trim() : current.githubRepo;
+    const nextMirror = patch.githubArchiveMirror ?? current.githubArchiveMirror;
 
     const next: OnlineSettings = {
       ballotPortal: patch.ballotPortal ?? current.ballotPortal,
@@ -640,6 +648,10 @@ export class HostServiceImpl
       ...(nextPagesProject !== undefined && nextPagesProject.length > 0
         ? { pagesProject: nextPagesProject }
         : {}),
+      ...(nextGithubRepo !== undefined && nextGithubRepo.length > 0
+        ? { githubRepo: nextGithubRepo }
+        : {}),
+      ...(nextMirror === true ? { githubArchiveMirror: true } : {}),
     };
     this.engine.database
       .prepare(
@@ -720,6 +732,20 @@ export class HostServiceImpl
     return this.publisher.getStatus();
   }
 
+  async archiveNow(): Promise<ArchiveStatus> {
+    if (this.archiver === null) {
+      return { state: "not_configured", reason: "No tournament is currently open." };
+    }
+    return this.archiver.archiveNow();
+  }
+
+  async getArchiveStatus(): Promise<ArchiveStatus> {
+    if (this.archiver === null) {
+      return { state: "not_configured", reason: "No tournament is currently open." };
+    }
+    return this.archiver.getStatus();
+  }
+
   async getChangelog(afterSeq?: number, limit?: number): Promise<PublicChainItem[]> {
     if (this.engine === null) {
       return [];
@@ -749,6 +775,10 @@ export class HostServiceImpl
     if (this.pagesDeployer !== null) {
       this.pagesDeployer.dispose();
       this.pagesDeployer = null;
+    }
+    if (this.githubArchiver !== null) {
+      this.githubArchiver.dispose();
+      this.githubArchiver = null;
     }
     if (this.smokeTempDir !== null) {
       rmSync(this.smokeTempDir, { recursive: true, force: true });
@@ -816,6 +846,17 @@ export class HostServiceImpl
       },
     });
 
+    this.archiver = new Archiver({
+      engine: nextEngine,
+      archiver: {
+        archive: (request) => this.getGitHubArchiver().archive(request),
+      },
+      getSettings: () => this.readOnlineSettings(nextEngine),
+      publicSiteAssetsDir: resolvePublicSiteAssetsDir(),
+      workspaceDir: path.dirname(dbPath),
+      ...(this.clock !== undefined ? { clock: this.clock } : {}),
+    });
+
     this.publisher = new Publisher({
       engine: nextEngine,
       deployer: {
@@ -825,6 +866,7 @@ export class HostServiceImpl
       getSettings: () => this.readOnlineSettings(nextEngine),
       publicSiteAssetsDir: resolvePublicSiteAssetsDir(),
       workspaceDir: path.dirname(dbPath),
+      onPublished: () => this.archiver?.handlePublished(),
       ...(this.clock !== undefined ? { clock: this.clock } : {}),
     });
 
@@ -891,6 +933,13 @@ export class HostServiceImpl
     this.publishInFlight = promise;
   }
 
+  private getGitHubArchiver(): IpcGitHubArchiver {
+    if (this.githubArchiver === null) {
+      this.githubArchiver = new IpcGitHubArchiver();
+    }
+    return this.githubArchiver;
+  }
+
   private getPagesDeployer(): IpcPagesDeployer {
     if (this.pagesDeployer === null) {
       this.pagesDeployer = new IpcPagesDeployer();
@@ -928,6 +977,10 @@ export class HostServiceImpl
     if (this.publisher !== null) {
       this.publisher.dispose();
       this.publisher = null;
+    }
+    if (this.archiver !== null) {
+      this.archiver.dispose();
+      this.archiver = null;
     }
     this.publishQueued = false;
     if (this.publishInFlight !== null) {
@@ -1082,6 +1135,10 @@ export class HostServiceImpl
         parsed.pagesProject.length > 0
           ? { pagesProject: parsed.pagesProject }
           : {}),
+        ...(typeof parsed.githubRepo === "string" && parsed.githubRepo.length > 0
+          ? { githubRepo: parsed.githubRepo }
+          : {}),
+        ...(parsed.githubArchiveMirror === true ? { githubArchiveMirror: true } : {}),
       };
     } catch {
       return { ...DEFAULT_ONLINE_SETTINGS };

@@ -698,6 +698,8 @@ The live site stays on the tournament's Cloudflare Pages project. The archive is
 
 **Paths.** GitHub project sites are served under `/<repo>/`. So the `simpletab-public` app is built with relative asset paths (Vite `base: './'`) and hash-based routing (`#/draw/3`), and it works the same at a domain root (Cloudflare Pages) or under a sub-path (GitHub Pages).
 
+**As built (M4).** The repository is set as `owner/name` in Online settings (`githubRepo`), next to the `githubArchive` switch; the mirror switch is `githubArchiveMirror`. The archive is built in `<workspace>/archive` from the same public projection as the live site (`archive-build.ts`), so the exports carry only released, redacted fields. DebateXML is skipped, with the reason in the README, when the released data cannot form a valid file (for example no released venues). An archive whose tree matches the current `gh-pages` commit makes no commit. A landed commit counts as done even when GitHub Pages has not served it yet or could not be turned on with the token; the status says so in words. Not yet built: the prompt when the tournament is closed (it waits for the close flow), and the setup checklist's public-repository check.
+
 **Verify page in the archive.** It checks the chain from the archived `manifest.json`. Asking the shared service for its recorded heads stays optional, because the service may be gone years later. The repository's commit history then serves as the independent record of earlier heads.
 
 ### 11. Desktop shell (Theia 1.77.0)
