@@ -1,3 +1,4 @@
+import { BrandMark } from "../components/brand-mark";
 import { CommandService, DisposableCollection } from "@theia/core/lib/common";
 import { Message } from "@theia/core/lib/browser";
 import { ReactWidget } from "@theia/core/lib/browser/widgets/react-widget";
@@ -94,6 +95,10 @@ export class SimpleTabNavWidget extends ReactWidget {
 
     return (
       <div className="simpletab-sidebar">
+        <div className="simpletab-brand">
+          <BrandMark />
+          <span className="simpletab-brand-name">SimpleTab</span>
+        </div>
         <div role="status">{summaryText}</div>
 
         <nav className="simpletab-nav-list" aria-label={t("nav.containerTitle")}>

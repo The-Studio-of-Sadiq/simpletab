@@ -1,0 +1,413 @@
+/*
+ * SimpleTab design system (docs/brand/README.md): Inter, brand blue and violet on a navy or soft
+ * white base, generous spacing, 8–12 px radii, quiet borders. Loaded after simpletab.css.
+ *
+ * Theia writes its theme colours as CSS variables on :root at runtime. Variables set on `body`
+ * override those for everything inside the window, so the brand palette wins without touching
+ * Theia's theme files, and both the dark and light themes stay supported.
+ */
+
+/* Inter 4 (variable weight), SIL Open Font License 1.1: see fonts/OFL-Inter.txt. Latin only;
+   Bangla and other scripts fall back to the system fonts listed in --theia-ui-font-family. */
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./fonts/inter-latin-ext-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329,
+    U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF;
+}
+
+@font-face {
+  font-family: "Inter Variable";
+  font-style: normal;
+  font-display: swap;
+  font-weight: 100 900;
+  src: url("./fonts/inter-latin-wght-normal.woff2") format("woff2-variations");
+  unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329,
+    U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD;
+}
+
+body {
+  /* Brand tokens */
+  --st-blue: #2f7bff;
+  --st-blue-strong: #1e66f5;
+  --st-violet: #7c5cf2;
+  --st-violet-strong: #5b3bd6;
+  --st-ink: #151b2b;
+  --st-mist: #e8eaf0;
+  --st-gradient: linear-gradient(135deg, #3d8bff 0%, #7c5cf2 100%);
+  --st-radius-sm: 6px;
+  --st-radius: 8px;
+  --st-radius-lg: 12px;
+  --st-focus-ring: 0 0 0 3px rgba(47, 123, 255, 0.35);
+
+  /* Inter ships with the app (offline). Bangla falls back to the system's Bengali font. */
+  --theia-ui-font-family: "Inter Variable", "Inter", "Segoe UI Variable", "Segoe UI", "Nirmala UI",
+    "Noto Sans Bengali", system-ui, -apple-system, sans-serif;
+
+  /* Accents shared by both themes */
+  --theia-button-background: var(--st-blue);
+  --theia-button-hoverBackground: var(--st-blue-strong);
+  --theia-button-foreground: #ffffff;
+  --theia-focusBorder: #4c8dff;
+  --theia-progressBar-background: var(--st-violet);
+  --theia-activityBar-activeBorder: var(--st-violet);
+  --theia-tab-activeBorderTop: var(--st-blue);
+  --theia-inputOption-activeBorder: var(--st-blue);
+  --theia-textLink-foreground: #5b9bff;
+  --theia-textLink-activeForeground: #7fb2ff;
+  --theia-badge-background: var(--st-violet);
+  --theia-badge-foreground: #ffffff;
+  --theia-activityBarBadge-background: var(--st-violet);
+  --theia-statusBarItem-remoteBackground: var(--st-violet-strong);
+}
+
+body.theia-dark {
+  --st-surface: #161e30;
+  --st-surface-raised: #1b2438;
+  --st-border: rgba(255, 255, 255, 0.07);
+  --st-border-strong: rgba(255, 255, 255, 0.12);
+  --st-muted: #8d97ad;
+  --st-shadow: 0 1px 2px rgba(0, 0, 0, 0.3), 0 8px 24px rgba(0, 0, 0, 0.18);
+
+  --theia-foreground: #d9dee8;
+  --theia-descriptionForeground: #8d97ad;
+  --theia-editor-background: #111727;
+  --theia-editor-foreground: #d9dee8;
+  --theia-sideBar-background: #0f1524;
+  --theia-sideBarSectionHeader-background: #0f1524;
+  --theia-activityBar-background: #0c111d;
+  --theia-activityBar-foreground: #e6eaf2;
+  --theia-activityBar-inactiveForeground: #69748b;
+  --theia-panel-background: #0f1524;
+  --theia-panel-border: rgba(255, 255, 255, 0.07);
+  --theia-editorGroupHeader-tabsBackground: #0f1524;
+  --theia-tab-activeBackground: #111727;
+  --theia-tab-inactiveBackground: #0f1524;
+  --theia-tab-border: #0c111d;
+  --theia-titleBar-activeBackground: #0c111d;
+  --theia-titleBar-inactiveBackground: #0c111d;
+  --theia-statusBar-background: #0c111d;
+  --theia-statusBar-noFolderBackground: #0c111d;
+  --theia-statusBar-border: rgba(255, 255, 255, 0.06);
+  --theia-menu-background: #161e30;
+  --theia-menu-selectionBackground: rgba(47, 123, 255, 0.22);
+  --theia-input-background: #161e30;
+  --theia-input-border: rgba(255, 255, 255, 0.1);
+  --theia-dropdown-background: #161e30;
+  --theia-dropdown-border: rgba(255, 255, 255, 0.1);
+  --theia-list-hoverBackground: rgba(255, 255, 255, 0.04);
+  --theia-list-activeSelectionBackground: rgba(47, 123, 255, 0.2);
+  --theia-list-inactiveSelectionBackground: rgba(47, 123, 255, 0.12);
+  --theia-button-secondaryBackground: rgba(255, 255, 255, 0.06);
+  --theia-button-secondaryHoverBackground: rgba(255, 255, 255, 0.1);
+  --theia-button-secondaryForeground: #d9dee8;
+}
+
+body.theia-light {
+  --st-surface: #ffffff;
+  --st-surface-raised: #ffffff;
+  --st-border: #e4e7ee;
+  --st-border-strong: #d4d9e3;
+  --st-muted: #5f6b80;
+  --st-shadow: 0 1px 2px rgba(21, 27, 43, 0.05), 0 8px 24px rgba(21, 27, 43, 0.06);
+
+  --theia-foreground: #151b2b;
+  --theia-descriptionForeground: #5f6b80;
+  --theia-editor-background: #f6f7fa;
+  --theia-sideBar-background: #f1f3f7;
+  --theia-sideBarSectionHeader-background: #f1f3f7;
+  --theia-activityBar-background: #151b2b;
+  --theia-activityBar-foreground: #ffffff;
+  --theia-activityBar-inactiveForeground: #8d97ad;
+  --theia-panel-border: #e4e7ee;
+  --theia-editorGroupHeader-tabsBackground: #eef0f5;
+  --theia-tab-activeBackground: #f6f7fa;
+  --theia-tab-inactiveBackground: #eef0f5;
+  --theia-statusBar-background: #151b2b;
+  --theia-statusBar-foreground: #e6eaf2;
+  --theia-input-background: #ffffff;
+  --theia-input-border: #d4d9e3;
+  --theia-list-hoverBackground: rgba(21, 27, 43, 0.04);
+  --theia-list-activeSelectionBackground: rgba(47, 123, 255, 0.14);
+  --theia-list-activeSelectionForeground: #151b2b;
+  --theia-button-secondaryBackground: #eef0f5;
+  --theia-button-secondaryHoverBackground: #e4e7ee;
+  --theia-button-secondaryForeground: #151b2b;
+}
+
+body {
+  font-family: var(--theia-ui-font-family);
+  font-feature-settings: "cv11", "ss01";
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ---- Buttons ----------------------------------------------------------------------------------- */
+
+.theia-button {
+  border-radius: var(--st-radius);
+  font-weight: 550;
+  padding: 6px 14px;
+  min-height: 30px;
+  transition: background-color 120ms ease, box-shadow 120ms ease, border-color 120ms ease;
+}
+
+.theia-button:not(.secondary):not(:disabled) {
+  background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0));
+  box-shadow: 0 1px 2px rgba(15, 22, 40, 0.25);
+}
+
+.theia-button.secondary {
+  border: 1px solid var(--st-border-strong);
+}
+
+.theia-button:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+/* ---- SimpleTab pages --------------------------------------------------------------------------- */
+
+.simpletab-page {
+  padding: 28px 32px 40px;
+  font-size: 13.5px;
+  line-height: 1.5;
+}
+
+.simpletab-page :focus-visible,
+.simpletab-sidebar :focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+  border-radius: var(--st-radius-sm);
+}
+
+.simpletab-header {
+  border-bottom-color: var(--st-border);
+  padding-bottom: 18px;
+  margin-bottom: 24px;
+}
+
+.simpletab-title {
+  font-size: 22px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  margin-bottom: 4px;
+}
+
+.simpletab-subtitle {
+  font-size: 15px;
+  font-weight: 620;
+  letter-spacing: -0.01em;
+  margin-bottom: 14px;
+}
+
+.simpletab-hint {
+  color: var(--st-muted);
+}
+
+.simpletab-section {
+  background: var(--st-surface);
+  border: 1px solid var(--st-border);
+  border-radius: var(--st-radius-lg);
+  box-shadow: var(--st-shadow);
+  padding: 20px 22px;
+  margin-bottom: 20px;
+}
+
+.simpletab-card {
+  background: var(--st-surface-raised);
+  border-color: var(--st-border);
+  border-radius: var(--st-radius-lg);
+}
+
+/* Tabs as an underline bar */
+.simpletab-tabs {
+  border-bottom-color: var(--st-border);
+  gap: 20px;
+  padding-bottom: 0;
+  margin-bottom: 24px;
+}
+
+.simpletab-tab {
+  border: none;
+  border-radius: 0;
+  padding: 8px 2px 10px;
+  color: var(--st-muted);
+  font-weight: 520;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -1px;
+}
+
+.simpletab-tab:hover {
+  background: transparent;
+  color: var(--theia-foreground);
+}
+
+.simpletab-tab[aria-selected="true"] {
+  background: transparent;
+  color: var(--theia-foreground);
+  border-color: transparent;
+  border-bottom: 2px solid var(--st-blue);
+  font-weight: 620;
+}
+
+/* Inputs */
+.simpletab-field input[type="text"],
+.simpletab-field input[type="password"],
+.simpletab-field input[type="number"],
+.simpletab-field input[type="email"],
+.simpletab-field input[type="date"],
+.simpletab-field input[type="time"],
+.simpletab-field select,
+.simpletab-field textarea,
+.simpletab-table select,
+.simpletab-page select {
+  border-radius: var(--st-radius);
+  border: 1px solid var(--theia-input-border);
+  background: var(--theia-input-background);
+  padding: 6px 10px;
+  min-height: 30px;
+  transition: border-color 120ms ease, box-shadow 120ms ease;
+}
+
+.simpletab-field input:focus,
+.simpletab-field select:focus,
+.simpletab-field textarea:focus,
+.simpletab-page select:focus {
+  outline: none;
+  border-color: var(--st-blue);
+  box-shadow: var(--st-focus-ring);
+}
+
+.simpletab-page input[type="checkbox"],
+.simpletab-page input[type="radio"],
+.simpletab-sidebar input[type="checkbox"] {
+  accent-color: var(--st-blue);
+}
+
+/* Tables */
+.simpletab-table {
+  border-collapse: separate;
+  border-spacing: 0;
+}
+
+.simpletab-table th {
+  font-size: 11.5px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--st-muted);
+  border-bottom: 1px solid var(--st-border-strong);
+  padding: 10px 12px;
+}
+
+.simpletab-table td {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--st-border);
+}
+
+.simpletab-table tbody tr:hover td {
+  background: var(--theia-list-hoverBackground);
+}
+
+/* Alerts: a tinted surface with a coloured edge, never colour alone (the text carries the meaning). */
+.simpletab-alert {
+  border-radius: var(--st-radius);
+  border: 1px solid var(--st-border);
+  border-left-width: 3px;
+  padding: 12px 14px;
+  background: var(--st-surface);
+}
+
+.simpletab-alert-error {
+  border-color: var(--st-border);
+  border-left-color: var(--theia-errorForeground);
+}
+
+.simpletab-alert-success {
+  border-color: var(--st-border);
+  border-left-color: var(--theia-testing-iconPassed, #3fb950);
+}
+
+.simpletab-alert-warning {
+  border-color: var(--st-border);
+  border-left-color: var(--theia-editorWarning-foreground, #cca700);
+}
+
+/* Badges as pills */
+.simpletab-badge {
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-weight: 600;
+  font-size: 11.5px;
+  border-color: var(--st-border-strong);
+}
+
+/* ---- Navigation sidebar ------------------------------------------------------------------------ */
+
+.simpletab-sidebar {
+  padding: 16px 12px;
+  gap: 14px;
+}
+
+.simpletab-brand {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px 12px;
+  border-bottom: 1px solid var(--st-border);
+}
+
+.simpletab-brand svg {
+  width: 26px;
+  height: 28px;
+  flex: none;
+}
+
+.simpletab-brand-name {
+  font-size: 17px;
+  font-weight: 650;
+  letter-spacing: -0.02em;
+  color: var(--theia-foreground);
+}
+
+.simpletab-nav-list {
+  gap: 2px;
+}
+
+.simpletab-nav-btn.theia-button,
+.simpletab-nav-btn.theia-button.secondary {
+  background: transparent;
+  background-image: none;
+  border: none;
+  box-shadow: none;
+  color: var(--theia-foreground);
+  font-weight: 500;
+  justify-content: flex-start;
+  padding: 7px 10px;
+  margin: 0;
+  border-radius: var(--st-radius);
+}
+
+.simpletab-nav-btn.theia-button:hover:not(:disabled) {
+  background: var(--theia-list-hoverBackground);
+}
+
+.simpletab-nav-btn.theia-button:focus-visible {
+  box-shadow: var(--st-focus-ring);
+}
+
+/* Devices page */
+.simpletab-pairing-words li::marker {
+  color: var(--st-violet);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .theia-button,
+  .simpletab-field input,
+  .simpletab-field select {
+    transition: none;
+  }
+}

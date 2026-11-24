@@ -60,6 +60,7 @@ import {
 import { TheiaTournamentWorkspaceOpener } from "./workspace-sync";
 import "./style/simpletab-status.css";
 import "./style/simpletab.css";
+import "./style/simpletab-brand.css";
 import { AllocationWidget } from "./views/allocation-widget";
 import { BreakWidget } from "./views/break-widget";
 import { ChangelogWidget } from "./views/changelog-widget";

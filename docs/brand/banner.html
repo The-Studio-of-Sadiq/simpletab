@@ -1,0 +1,35 @@
+<!doctype html><html><head><meta charset="utf-8"><style>
+@font-face{font-family:Inter;src:url("../../packages/tab-ui/src/browser/style/fonts/inter-latin-wght-normal.woff2") format("woff2");font-weight:100 900}
+*{box-sizing:border-box;margin:0}
+body{width:2560px;height:880px;overflow:hidden;font-family:Inter,sans-serif;-webkit-font-smoothing:antialiased}
+.hero{position:relative;width:2560px;height:880px;background:radial-gradient(1200px 700px at 18% 30%,#1D2A4A 0%,transparent 70%),linear-gradient(120deg,#0E1424 0%,#131B30 55%,#0F1628 100%);overflow:hidden}
+.band{position:absolute;width:900px;height:2200px;top:-600px;transform:rotate(32deg);background:linear-gradient(180deg,rgba(61,139,255,.10),rgba(124,92,242,.04));}
+.b1{left:1050px}.b2{left:1400px;width:260px;background:linear-gradient(180deg,rgba(124,92,242,.10),rgba(61,139,255,.03))}.b3{left:1820px;width:120px;background:rgba(255,255,255,.025)}
+.brand{position:absolute;left:180px;top:250px;display:flex;align-items:center;gap:70px}
+.brand svg{width:260px;height:284px}
+h1{color:#F5F7FB;font-size:210px;font-weight:620;letter-spacing:-7px;line-height:1}
+p.tag{color:#A7B2C8;font-size:66px;font-weight:420;margin-top:34px;letter-spacing:-.5px}
+.win{position:absolute;left:1560px;top:150px;width:1120px;height:680px;border-radius:36px;background:linear-gradient(180deg,#1A2234,#151C2C);border:2px solid rgba(255,255,255,.08);box-shadow:0 60px 120px rgba(0,0,0,.45);transform:perspective(2400px) rotateY(-14deg) rotateX(4deg);overflow:hidden;display:flex}
+.side{width:300px;background:#141A28;border-right:2px solid rgba(255,255,255,.06);padding:90px 26px}
+.dots{position:absolute;left:34px;top:34px;display:flex;gap:16px}.dots i{width:22px;height:22px;border-radius:50%;display:block}
+.nav{display:flex;align-items:center;gap:22px;color:#B8C1D4;font-size:30px;padding:20px 24px;border-radius:16px;margin-bottom:10px}
+.nav.on{background:linear-gradient(90deg,#2F7BFF,#3C6BF0);color:#fff}
+.nav b{width:28px;height:28px;border-radius:8px;background:currentColor;opacity:.85;display:block}
+.main{flex:1;padding:80px 60px}
+.title{display:flex;white-space:nowrap;align-items:center;gap:24px;color:#EEF1F7;font-size:40px;font-weight:600}
+.live{font-size:24px;color:#5BE49B;background:rgba(91,228,155,.12);padding:8px 18px;border-radius:999px;font-weight:600}
+.tabs{display:flex;gap:44px;margin:46px 0 40px;color:#8D97AD;font-size:28px}.tabs span.on{color:#fff;border-bottom:5px solid #3D8BFF;padding-bottom:14px}
+.card{background:#1C2436;border:2px solid rgba(255,255,255,.06);border-radius:22px;padding:36px 40px}
+.card h3{color:#E9EDF5;font-size:32px;font-weight:600;margin-bottom:22px}
+table{width:100%;border-collapse:collapse;color:#C9D0DE;font-size:28px}th{color:#7F8AA2;font-weight:500;text-align:left;padding:14px 0}td{padding:16px 0;border-top:2px solid rgba(255,255,255,.05)}td.n{text-align:right}th.n{text-align:right}
+</style></head><body><div class="hero">
+<div class="band b1"></div><div class="band b2"></div><div class="band b3"></div>
+<div class="brand"><svg viewBox="-8 -8 176 192"><defs><linearGradient id="st-blue" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#3D8BFF"/><stop offset="1" stop-color="#1E66F5"/></linearGradient><linearGradient id="st-violet" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#8E6CF7"/><stop offset="1" stop-color="#6A47E0"/></linearGradient><linearGradient id="st-violet2" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#7C5CF2"/><stop offset="1" stop-color="#5B3BD6"/></linearGradient></defs>
+<g stroke-linejoin="round" stroke-width="6"><path d="M4 40 L96 2 L154 30 L56 76 L4 100 Z" fill="url(#st-blue)" stroke="url(#st-blue)"/><path d="M62 89 L112 64 L156 86 L156 111 L106 136 L62 114 Z" fill="url(#st-violet)" stroke="url(#st-violet)"/><path d="M4 153 L56 128 L108 153 L56 179 Z" fill="url(#st-violet2)" stroke="url(#st-violet2)"/></g></svg><div><h1>SimpleTab</h1><p class="tag">Organize. Tabulate. Preserve.</p></div></div>
+<div class="win"><div class="dots"><i style="background:#FF5F57"></i><i style="background:#FEBC2E"></i><i style="background:#28C840"></i></div>
+<div class="side"><div class="nav on"><b></b>Tournament</div><div class="nav"><b></b>Draws</div><div class="nav"><b></b>Results</div><div class="nav"><b></b>Ballots</div><div class="nav"><b></b>Settings</div></div>
+<div class="main"><div class="title">National Debate Open 2027 <span class="live">● Live</span></div>
+<div class="tabs"><span class="on">Overview</span><span>Rounds</span><span>Standings</span><span>Participants</span></div>
+<div class="card"><h3>Standings</h3><table><tr><th>Rank</th><th>Team</th><th class="n">Points</th></tr>
+<tr><td>1</td><td>Riverside University A</td><td class="n">15</td></tr><tr><td>2</td><td>Northfield College B</td><td class="n">14</td></tr><tr><td>3</td><td>Lakeview Institute A</td><td class="n">13</td></tr></table></div></div></div>
+</div></body></html>

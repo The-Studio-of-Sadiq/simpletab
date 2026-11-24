@@ -6,9 +6,12 @@ directories:
 files:
   - lib/**
   - package.json
+  - resources/icons/**
+  - resources/splash/**
 asar: true
 asarUnpack:
   - "**/*.node"
+icon: resources/icons/icon-512.png
 win:
   target:
     - nsis

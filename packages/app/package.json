@@ -38,7 +38,17 @@
       "config": {
         "applicationName": "SimpleTab",
         "electron": {
-          "appUserModelId": "app.simpletab.desktop"
+          "appUserModelId": "app.simpletab.desktop",
+          "windowOptions": {
+            "icon": "resources/icons/icon.png"
+          },
+          "splashScreenOptions": {
+            "content": "resources/splash/splash.html",
+            "width": 560,
+            "height": 340,
+            "minDuration": 600,
+            "maxDuration": 30000
+          }
         }
       }
     },
