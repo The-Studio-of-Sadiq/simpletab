@@ -267,6 +267,7 @@ export class HostEngine {
   private readonly workersWarm: Promise<void>;
   private cachedState: TournamentState | null;
   private _integrity: IntegrityCheckResult;
+  private portalEnforcing = false;
   private queue: Promise<void> = Promise.resolve();
   private readonly listeners = new Set<CommitListener>();
   private readonly lockListeners = new Set<LocksListener>();
@@ -334,6 +335,16 @@ export class HostEngine {
   /** Publishing is allowed only when startup and background integrity checks have passed. */
   canPublish(): boolean {
     return this._integrity.ok;
+  }
+
+  /** Enables or disables portal-enforced ballot/feedback deadlines on incoming ops. */
+  setPortalEnforcing(enforcing: boolean): void {
+    this.portalEnforcing = enforcing;
+  }
+
+  /** Whether portal-enforced deadlines are currently active on this host. */
+  isPortalEnforcing(): boolean {
+    return this.portalEnforcing;
   }
 
   /** Runs the async fast integrity check (using core's `verifyChain`). */
@@ -699,7 +710,14 @@ export class HostEngine {
     if (this.cachedState === null) {
       throw new Error("Cannot submit an operation before the tournament database is initialized.");
     }
-    const result = applyOp(this.cachedState, request, actor, this.registry);
+    const stateWithRuntime: TournamentState = {
+      ...this.cachedState,
+      runtime: {
+        portalEnforcing: this.portalEnforcing,
+        now: this.clock().toISOString(),
+      },
+    };
+    const result = applyOp(stateWithRuntime, request, actor, this.registry);
     if (!result.ok) {
       return result;
     }
@@ -786,7 +804,9 @@ export class HostEngine {
     });
     transaction();
 
-    this.cachedState = result.state;
+    const nextCachedState: TournamentState = { ...result.state };
+    delete nextCachedState.runtime;
+    this.cachedState = nextCachedState;
     const event: CommittedEvent = {
       seq,
       type: request.type,

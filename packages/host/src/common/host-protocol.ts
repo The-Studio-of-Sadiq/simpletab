@@ -47,6 +47,35 @@ export interface HostIntegrityCheckResult {
 
 export type BallotCollectionMode = "online" | "online_qr" | "qr_only";
 
+export type SyncPausedReason =
+  | "OFF"
+  | "QR_ONLY"
+  | "INTEGRITY_FAILED"
+  | "NO_KEY"
+  | "HOST_STALE"
+  | "KEY_REVOKED"
+  | "QUOTA_EXHAUSTED"
+  | "OFFLINE";
+
+export interface SyncStatus {
+  enabled: boolean;
+  active: boolean;
+  pausedReason?: SyncPausedReason;
+  pausedDetail?: string;
+  storedHostNumber?: number;
+  hostNumber: number;
+  ackedThrough: number;
+  lastPushAt?: string;
+  lastPullAt?: string;
+  lastAckAt?: string;
+  lastPublishAt?: string;
+  shareLeft?: number;
+  clockSkewMs?: number;
+  clockSkewWarning?: boolean;
+  consecutiveFailures: number;
+  nextPollAt?: string;
+}
+
 export interface OnlineSettings {
   ballotPortal: boolean;
   livePublicSite: boolean;
@@ -55,6 +84,8 @@ export interface OnlineSettings {
   ballotCollection: BallotCollectionMode;
   trustSignedBallots: boolean;
   keyRequestedAt?: string;
+  cdnHost?: string;
+  ballotsOrigin?: string;
 }
 
 export const DEFAULT_ONLINE_SETTINGS: Readonly<OnlineSettings> = {
@@ -79,6 +110,7 @@ export interface HostStatus {
   hostNumber?: number;
   queuedOps?: number;
   onlineSettings?: OnlineSettings;
+  syncStatus?: SyncStatus;
 }
 
 export interface CreateDemoResult {
@@ -180,6 +212,8 @@ export interface HostService extends RpcServer<HostServiceClient> {
   runFullCheck(): Promise<HostIntegrityCheckResult>;
   getOnlineSettings(): Promise<OnlineSettings>;
   updateOnlineSettings(patch: Partial<OnlineSettings>): Promise<OnlineSettings>;
+  getSyncStatus(): Promise<SyncStatus>;
+  pullNow(): Promise<SyncStatus>;
   getChangelog(afterSeq?: number, limit?: number): Promise<PublicChainItem[]>;
   getOpUndoInfo(): Promise<OpUndoInfo[]>;
 }

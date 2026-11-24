@@ -154,7 +154,28 @@ export function replayOpRow(
     ...(row.request_forced === 1 ? { forced: true } : {}),
   };
 
-  const result = applyOp(state, request, actor, registry);
+  const committedObj =
+    parsedCommitted.value !== null &&
+    typeof parsedCommitted.value === "object" &&
+    !Array.isArray(parsedCommitted.value)
+      ? (parsedCommitted.value as Record<string, unknown>)
+      : null;
+  const committedBallot =
+    committedObj !== null &&
+    committedObj.ballot !== null &&
+    typeof committedObj.ballot === "object" &&
+    !Array.isArray(committedObj.ballot)
+      ? (committedObj.ballot as Record<string, unknown>)
+      : null;
+  const needsPortalEnforcing =
+    (row.type === "ballot.receive_online" && committedObj?.routedToLate === true) ||
+    ((row.type === "ballot.enter" || row.type === "ballot.receive_online") &&
+      committedBallot?.late === true);
+  const replayState: TournamentState = needsPortalEnforcing
+    ? { ...state, runtime: { portalEnforcing: true, now: row.ts } }
+    : state;
+
+  const result = applyOp(replayState, request, actor, registry);
   if (!result.ok) {
     return {
       ok: false,
@@ -175,7 +196,9 @@ export function replayOpRow(
     };
   }
 
-  return { ok: true, state: result.state };
+  const nextState: TournamentState = { ...result.state };
+  delete nextState.runtime;
+  return { ok: true, state: nextState };
 }
 
 function loadLogForVerification(

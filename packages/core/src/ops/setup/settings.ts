@@ -17,7 +17,13 @@ import {
   type CustomPermissionGroup,
 } from "@/lib/staffPermissions";
 import type { Tournament, TournamentPreferences } from "@/types";
-import { recordKey, type OpDef, type RecordKey } from "../types";
+import {
+  recordKey,
+  type OpDef,
+  type OpTournament,
+  type RecordKey,
+  type SimpleTabTournamentExtension,
+} from "../types";
 import { cloneValue, isNonEmptyText, violationsToErrors } from "./helpers";
 
 export interface SettingsUpdatePrevious {
@@ -26,6 +32,7 @@ export interface SettingsUpdatePrevious {
   name?: string;
   shortName?: string;
   format?: Tournament["format"];
+  simpletab?: SimpleTabTournamentExtension | null;
 }
 
 export interface SettingsUpdatePayload {
@@ -34,6 +41,8 @@ export interface SettingsUpdatePayload {
   name?: string;
   shortName?: string;
   format?: Tournament["format"];
+  simpletab?: Partial<SimpleTabTournamentExtension> | null;
+  replaceSimpletab?: boolean;
   override?: RuleOverride;
   previous?: SettingsUpdatePrevious;
 }
@@ -54,12 +63,18 @@ export interface RolesUpdatePayload {
 }
 
 function buildNextTournament(
-  current: Tournament,
+  current: OpTournament,
   payload: Pick<
     SettingsUpdatePayload,
-    "preferences" | "removePreferenceKeys" | "name" | "shortName" | "format"
+    | "preferences"
+    | "removePreferenceKeys"
+    | "name"
+    | "shortName"
+    | "format"
+    | "simpletab"
+    | "replaceSimpletab"
   >,
-): Tournament {
+): OpTournament {
   const nextPreferences: Record<string, unknown> = {
     ...cloneValue(current.preferences),
   };
@@ -76,13 +91,25 @@ function buildNextTournament(
     }
   }
 
-  return {
+  const next: OpTournament = {
     ...cloneValue(current),
     ...(payload.name !== undefined ? { name: payload.name } : {}),
     ...(payload.shortName !== undefined ? { shortName: payload.shortName } : {}),
     ...(payload.format !== undefined ? { format: payload.format } : {}),
     preferences: nextPreferences as unknown as TournamentPreferences,
   };
+
+  if (payload.simpletab === null) {
+    delete next.simpletab;
+  } else if (payload.simpletab !== undefined) {
+    const base = payload.replaceSimpletab ? {} : cloneValue(current.simpletab ?? {});
+    next.simpletab = {
+      ...base,
+      ...cloneValue(payload.simpletab),
+    };
+  }
+
+  return next;
 }
 
 export const settingsUpdateOp: OpDef<SettingsUpdatePayload> = {
@@ -163,6 +190,14 @@ export const settingsUpdateOp: OpDef<SettingsUpdatePayload> = {
       ...(payload.name !== undefined ? { name: state.tournament.name } : {}),
       ...(payload.shortName !== undefined ? { shortName: state.tournament.shortName } : {}),
       ...(payload.format !== undefined ? { format: state.tournament.format } : {}),
+      ...(payload.simpletab !== undefined
+        ? {
+            simpletab:
+              state.tournament.simpletab !== undefined
+                ? cloneValue(state.tournament.simpletab)
+                : null,
+          }
+        : {}),
     };
 
     const nextTournament = buildNextTournament(state.tournament, payload);
@@ -192,6 +227,13 @@ export const settingsUpdateOp: OpDef<SettingsUpdatePayload> = {
         ...(previous.name !== undefined ? { name: previous.name } : {}),
         ...(previous.shortName !== undefined ? { shortName: previous.shortName } : {}),
         ...(previous.format !== undefined ? { format: previous.format } : {}),
+        ...(previous.simpletab !== undefined
+          ? {
+              simpletab:
+                previous.simpletab === null ? null : cloneValue(previous.simpletab),
+              replaceSimpletab: true,
+            }
+          : {}),
         override: { reason: "Undo settings.update" },
       },
     };

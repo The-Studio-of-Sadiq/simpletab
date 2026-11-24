@@ -85,6 +85,7 @@ export class SimpleTabStatusWidget extends ReactWidget {
         error={snapshot.error}
         onRefresh={() => this.refresh()}
         onRunFullCheck={() => this.store.runFullCheck()}
+        onPullNow={() => this.store.pullNow()}
         onCreateDemo={() => {
           void this.commandService.executeCommand(
             SIMPLETAB_CREATE_DEMO_COMMAND_ID,

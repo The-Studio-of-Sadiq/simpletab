@@ -1,16 +1,22 @@
 import path from "node:path";
 import { injectable } from "@theia/core/shared/inversify";
-import { app, safeStorage } from "@theia/electron/shared/electron";
+import { app, net, safeStorage } from "@theia/electron/shared/electron";
 import type {
   CredentialName,
   CredentialStatusEntry,
   CredentialTestResult,
+  CredentialsFetchClient,
+  CredentialsFetchName,
+  CredentialsFetchRequest,
+  CredentialsFetchResponse,
   CredentialsService,
 } from "../common/credentials-protocol";
 import { CredentialsVault } from "./credentials-store";
 
 @injectable()
-export class ElectronCredentialsService implements CredentialsService {
+export class ElectronCredentialsService
+  implements CredentialsService, CredentialsFetchClient
+{
   private smokeQuitScheduled = false;
   private demoQuitScheduled = false;
   private readonly vault = new CredentialsVault({
@@ -18,6 +24,10 @@ export class ElectronCredentialsService implements CredentialsService {
     isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
     encryptString: (plain: string) => safeStorage.encryptString(plain),
     decryptString: (encrypted: Buffer) => safeStorage.decryptString(encrypted),
+    fetchImpl: (input, init) =>
+      net !== undefined && typeof net.fetch === "function"
+        ? net.fetch(input instanceof URL ? input.toString() : input, init)
+        : globalThis.fetch(input, init),
   });
 
   async status(): Promise<CredentialStatusEntry[]> {
@@ -57,5 +67,12 @@ export class ElectronCredentialsService implements CredentialsService {
 
   async test(name: CredentialName): Promise<CredentialTestResult> {
     return this.vault.test(name);
+  }
+
+  async fetch(
+    name: CredentialsFetchName,
+    req: CredentialsFetchRequest,
+  ): Promise<CredentialsFetchResponse> {
+    return this.vault.fetch(name, req);
   }
 }

@@ -38,6 +38,18 @@ describe("setup settings and roles ops", () => {
       expect(updated.tournament.name).toBe("Renamed BP Open");
       expect(updated.tournament.preferences.welcomeMessage).toBe("Welcome debaters");
       expect(updated.tournament.preferences.minSpeakerScore).toBe(55);
+
+      const withSimpletab = expectOpRoundTrip(state, {
+        type: "settings.update",
+        payload: {
+          preferences: {},
+          simpletab: { trustSignedBallots: true, timeZone: "Asia/Dhaka" },
+        },
+      });
+      expect(withSimpletab.tournament.simpletab).toEqual({
+        trustSignedBallots: true,
+        timeZone: "Asia/Dhaka",
+      });
     });
 
     it("rejects invalid preferences and locked settings when ballots exist", () => {

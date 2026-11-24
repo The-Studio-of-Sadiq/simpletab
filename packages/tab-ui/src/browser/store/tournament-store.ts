@@ -13,6 +13,7 @@ import type {
   ProjectedState,
   StateChangedEvent,
   SubmitResult,
+  SyncStatus,
 } from "@simpletab/host/lib/common/host-protocol";
 import { HostService } from "@simpletab/host/lib/common/host-protocol";
 import type { Disposable } from "@theia/core/lib/common";
@@ -249,6 +250,16 @@ export class TournamentStore {
     const updated = await this.hostService.updateOnlineSettings(patch);
     await this.refresh();
     return updated;
+  }
+
+  async getSyncStatus(): Promise<SyncStatus> {
+    return this.hostService.getSyncStatus();
+  }
+
+  async pullNow(): Promise<SyncStatus> {
+    const result = await this.hostService.pullNow();
+    await this.refresh();
+    return result;
   }
 
   async getDisplayState(): Promise<ProjectedState | null> {

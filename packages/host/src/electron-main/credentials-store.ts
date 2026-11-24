@@ -8,9 +8,13 @@ import {
 import path from "node:path";
 import {
   CREDENTIAL_NAMES,
+  CredentialsFetchError,
   type CredentialName,
   type CredentialStatusEntry,
   type CredentialTestResult,
+  type CredentialsFetchName,
+  type CredentialsFetchRequest,
+  type CredentialsFetchResponse,
   type CredentialsService,
   type SmtpCredentialPayload,
 } from "../common/credentials-protocol";
@@ -20,6 +24,8 @@ export interface CredentialsStorageBackend {
   isEncryptionAvailable(): boolean;
   encryptString(plain: string): Buffer;
   decryptString(encrypted: Buffer): string;
+  fetchImpl?: typeof fetch;
+  defaultServiceBaseUrl?: string;
 }
 
 interface CredentialMetaRecord {
@@ -34,6 +40,68 @@ const TOKEN_MIN_LENGTH = 16;
 const GITHUB_TOKEN_RE = /^[A-Za-z0-9_-]{16,}$/;
 const EMAIL_ADDRESS_RE = /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/;
 const DISPLAY_EMAIL_RE = /^[^<>]+<\s*([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)\s*>$/;
+const DEFAULT_BALLOTS_BASE_URL = "https://ballots.simpletab.org";
+const DEFAULT_FETCH_TIMEOUT_MS = 15_000;
+const ALLOWED_HTTP_METHODS = new Set(["GET", "POST", "PUT", "DELETE"]);
+
+function resolveServiceUrl(
+  baseUrlInput: string | undefined,
+  reqPath: string,
+): string {
+  if (
+    typeof reqPath !== "string" ||
+    !reqPath.startsWith("/") ||
+    reqPath.startsWith("//") ||
+    /[\r\n\0]/.test(reqPath)
+  ) {
+    throw new CredentialsFetchError(
+      "INVALID_REQUEST",
+      "Service request path must start with a single '/'.",
+    );
+  }
+  const rawBase =
+    baseUrlInput && baseUrlInput.trim().length > 0
+      ? baseUrlInput.trim()
+      : process.env.SIMPLETAB_BALLOTS_URL ?? DEFAULT_BALLOTS_BASE_URL;
+
+  let parsedBase: URL;
+  try {
+    parsedBase = new URL(rawBase);
+  } catch {
+    throw new CredentialsFetchError(
+      "INVALID_REQUEST",
+      "Invalid ballots service base URL.",
+    );
+  }
+
+  const isLocalDev =
+    parsedBase.protocol === "http:" &&
+    (parsedBase.hostname === "localhost" ||
+      parsedBase.hostname === "127.0.0.1" ||
+      parsedBase.hostname === "[::1]");
+  if (parsedBase.protocol !== "https:" && !isLocalDev) {
+    throw new CredentialsFetchError(
+      "INVALID_REQUEST",
+      "Ballots service URL must use https:.",
+    );
+  }
+  if (parsedBase.username !== "" || parsedBase.password !== "") {
+    throw new CredentialsFetchError(
+      "INVALID_REQUEST",
+      "Ballots service URL must not contain credentials.",
+    );
+  }
+
+  const origin = parsedBase.origin;
+  const target = new URL(reqPath, `${origin}/`);
+  if (target.origin !== origin) {
+    throw new CredentialsFetchError(
+      "INVALID_REQUEST",
+      "Service request path must not change target origin.",
+    );
+  }
+  return target.toString();
+}
 
 function assertCredentialName(name: string): asserts name is CredentialName {
   if (!CREDENTIAL_NAMES.includes(name as CredentialName)) {
@@ -202,6 +270,134 @@ export class CredentialsVault implements CredentialsService {
       };
       this.recordTestResult(name, testedAt, result);
       return result;
+    }
+  }
+
+  async fetch(
+    name: CredentialsFetchName,
+    req: CredentialsFetchRequest,
+  ): Promise<CredentialsFetchResponse> {
+    if (name !== "tournamentKey") {
+      throw new CredentialsFetchError(
+        "INVALID_REQUEST",
+        `Unsupported credential fetch target: "${String(name)}".`,
+      );
+    }
+    if (!ALLOWED_HTTP_METHODS.has(req.method)) {
+      throw new CredentialsFetchError(
+        "INVALID_REQUEST",
+        `Unsupported HTTP method: "${String(req.method)}".`,
+      );
+    }
+
+    const url = resolveServiceUrl(
+      req.baseUrl ?? this.backend.defaultServiceBaseUrl,
+      req.path,
+    );
+
+    const headers: Record<string, string> = {};
+    if (req.headers !== undefined) {
+      for (const [key, value] of Object.entries(req.headers)) {
+        if (key.toLowerCase() === "authorization") {
+          continue;
+        }
+        headers[key] = value;
+      }
+    }
+
+    if (req.hostHeaders !== undefined) {
+      headers["X-Host-Number"] = String(req.hostHeaders.hostNumber);
+      headers["X-Host-Id"] = req.hostHeaders.hostId;
+      headers["X-Host-Rank"] = String(req.hostHeaders.hostRank);
+      if (
+        typeof req.hostHeaders.requestId === "string" &&
+        req.hostHeaders.requestId.length > 0
+      ) {
+        headers["X-Request-Id"] = req.hostHeaders.requestId;
+      }
+    }
+
+    if (req.authenticated !== false) {
+      const secret = this.readDecryptedSecret(name).trim();
+      if (secret.length === 0) {
+        throw new CredentialsFetchError(
+          "CREDENTIAL_NOT_SET",
+          "Tournament key is empty.",
+        );
+      }
+      headers.Authorization = `Bearer ${secret}`;
+    }
+
+    const fetchImpl = this.backend.fetchImpl ?? globalThis.fetch;
+    const timeoutMs =
+      typeof req.timeoutMs === "number" &&
+      Number.isFinite(req.timeoutMs) &&
+      req.timeoutMs > 0
+        ? req.timeoutMs
+        : DEFAULT_FETCH_TIMEOUT_MS;
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      controller.abort();
+    }, timeoutMs);
+    if (typeof timer.unref === "function") {
+      timer.unref();
+    }
+
+    try {
+      const response = await fetchImpl(url, {
+        method: req.method,
+        headers,
+        ...(req.body !== undefined ? { body: req.body } : {}),
+        signal: controller.signal,
+      });
+      const responseHeaders: Record<string, string> = {};
+      response.headers.forEach((value, key) => {
+        responseHeaders[key.toLowerCase()] = value;
+      });
+      const body = await response.text();
+      return {
+        status: response.status,
+        headers: responseHeaders,
+        body,
+      };
+    } catch (error) {
+      if (error instanceof CredentialsFetchError) {
+        throw error;
+      }
+      const message =
+        error instanceof Error && error.name === "AbortError"
+          ? `Request timed out after ${timeoutMs} ms.`
+          : error instanceof Error
+            ? error.message
+            : "Network request failed.";
+      throw new CredentialsFetchError("NETWORK_ERROR", message);
+    } finally {
+      clearTimeout(timer);
+    }
+  }
+
+  private readDecryptedSecret(name: CredentialName): string {
+    const blobFile = this.blobPath(name);
+    if (!existsSync(blobFile)) {
+      throw new CredentialsFetchError(
+        "CREDENTIAL_NOT_SET",
+        `Credential "${name}" is not set.`,
+      );
+    }
+    if (!this.backend.isEncryptionAvailable()) {
+      throw new CredentialsFetchError(
+        "ENCRYPTION_UNAVAILABLE",
+        "Electron safeStorage encryption is unavailable.",
+      );
+    }
+    try {
+      const encrypted = readFileSync(blobFile);
+      return this.backend.decryptString(encrypted);
+    } catch {
+      throw new CredentialsFetchError(
+        "DECRYPT_FAILED",
+        `Unable to decrypt stored credential "${name}".`,
+      );
     }
   }
 

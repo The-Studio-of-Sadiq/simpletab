@@ -246,4 +246,43 @@ describe("CredentialsView", () => {
       screen.getByText("Approval pending since 2026-11-20T10:00:00.000Z"),
     ).toBeTruthy();
   });
+
+  it("saves valid public site host name and rejects URLs with protocol or path", async () => {
+    const updateOnlineSettings = vi.fn(async (patch: Partial<OnlineSettings>) => ({
+      ...DEFAULT_ONLINE_SETTINGS,
+      ...patch,
+    }));
+
+    render(
+      <CredentialsView
+        state={makeState(BUILT_IN_ROLES.host_owner)}
+        status={makeStatus({ ...DEFAULT_ONLINE_SETTINGS })}
+        available={true}
+        credentialsStatus={initialCredentials()}
+        onRefreshCredentials={vi.fn(async () => initialCredentials())}
+        onSetCredential={vi.fn(async () => undefined)}
+        onClearCredential={vi.fn(async () => undefined)}
+        onTestCredential={vi.fn(async () => ({ ok: true }))}
+        onUpdateOnlineSettings={updateOnlineSettings}
+      />,
+    );
+
+    const cdnInput = screen.getByLabelText("Public site host name") as HTMLInputElement;
+    fireEvent.change(cdnInput, { target: { value: "https://bad.example/path" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save host name" }));
+
+    await waitFor(() => {
+      expect(screen.getByText(/Enter a valid bare hostname/i)).toBeTruthy();
+    });
+    expect(updateOnlineSettings).not.toHaveBeenCalled();
+
+    fireEvent.change(cdnInput, { target: { value: "wudc2027.pages.dev" } });
+    fireEvent.click(screen.getByRole("button", { name: "Save host name" }));
+
+    await waitFor(() => {
+      expect(updateOnlineSettings).toHaveBeenCalledWith({
+        cdnHost: "wudc2027.pages.dev",
+      });
+    });
+  });
 });

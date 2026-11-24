@@ -2,6 +2,7 @@ import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { CredentialName, SmtpCredentialPayload } from "../common/credentials-protocol";
+import { createTestCredentialsIpcBridge } from "../node/sync/credentials-ipc-client";
 import { CredentialsVault, validateCredentialFormat } from "./credentials-store";
 
 const mockUserDataState = vi.hoisted(() => ({
@@ -57,7 +58,7 @@ describe("ElectronCredentialsService & CredentialsVault", () => {
     )
       .filter((name) => name !== "constructor")
       .sort();
-    expect(protoMethods).toEqual(["clear", "set", "status", "test"]);
+    expect(protoMethods).toEqual(["clear", "fetch", "set", "status", "test"]);
 
     const initialStatus = await service.status();
     expect(initialStatus).toHaveLength(5);
@@ -142,5 +143,94 @@ describe("ElectronCredentialsService & CredentialsVault", () => {
       false,
     );
     expect(names).toHaveLength(5);
+  });
+
+  it("injects Bearer key and host headers in electron-main fetch without exposing the secret over IPC", async () => {
+    const storageDir = path.join(makeTempDir(), "vault-fetch");
+    const secretKey = "tk_live_ultra_secret_key_99887766";
+    const capturedFetches: Array<{
+      url: string;
+      method: string;
+      headers: Record<string, string>;
+      body?: string;
+    }> = [];
+
+    const vault = new CredentialsVault({
+      getStorageDir: () => storageDir,
+      isEncryptionAvailable: () => true,
+      encryptString: (plain) => Buffer.from(plain, "utf8"),
+      decryptString: (buf) => buf.toString("utf8"),
+      defaultServiceBaseUrl: "https://ballots.example.org",
+      fetchImpl: async (input, init) => {
+        const hdrs: Record<string, string> = {};
+        if (init?.headers && typeof init.headers === "object") {
+          for (const [k, v] of Object.entries(
+            init.headers as Record<string, string>,
+          )) {
+            hdrs[k] = v;
+          }
+        }
+        capturedFetches.push({
+          url: String(input),
+          method: init?.method ?? "GET",
+          headers: hdrs,
+          ...(typeof init?.body === "string" ? { body: init.body } : {}),
+        });
+        return new Response(JSON.stringify({ schema: 1, ok: true }), {
+          status: 200,
+          headers: {
+            "Content-Type": "application/json",
+            Date: "Tue, 24 Nov 2026 10:00:00 GMT",
+          },
+        });
+      },
+    });
+
+    await vault.set("tournamentKey", secretKey);
+    const bridge = createTestCredentialsIpcBridge(vault);
+    try {
+      const res = await bridge.client.fetch("tournamentKey", {
+        method: "POST",
+        path: "/v1/host/permits",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: "Bearer spoofed-by-backend",
+        },
+        hostHeaders: {
+          hostNumber: 3,
+          hostId: "host-abc",
+          hostRank: 1,
+          requestId: "req-123",
+        },
+        body: JSON.stringify({ hello: "world" }),
+      });
+
+      expect(res.status).toBe(200);
+      expect(res.headers.date).toBe("Tue, 24 Nov 2026 10:00:00 GMT");
+      expect(JSON.stringify(res)).not.toContain(secretKey);
+
+      // Verify backend-side IPC message never carried or received Authorization or secretKey
+      expect(bridge.sentRequests).toHaveLength(1);
+      const sentReq = bridge.sentRequests[0]!;
+      expect(sentReq.req.headers?.Authorization).toBeUndefined();
+      expect(sentReq.req.headers?.authorization).toBeUndefined();
+      expect(JSON.stringify(bridge.sentRequests)).not.toContain(secretKey);
+      expect(JSON.stringify(bridge.receivedReplies)).not.toContain(secretKey);
+
+      // Verify electron-main outgoing HTTP fetch had the real Bearer token and host headers
+      expect(capturedFetches).toHaveLength(1);
+      expect(capturedFetches[0]!.url).toBe(
+        "https://ballots.example.org/v1/host/permits",
+      );
+      expect(capturedFetches[0]!.headers.Authorization).toBe(
+        `Bearer ${secretKey}`,
+      );
+      expect(capturedFetches[0]!.headers["X-Host-Number"]).toBe("3");
+      expect(capturedFetches[0]!.headers["X-Host-Id"]).toBe("host-abc");
+      expect(capturedFetches[0]!.headers["X-Host-Rank"]).toBe("1");
+      expect(capturedFetches[0]!.headers["X-Request-Id"]).toBe("req-123");
+    } finally {
+      bridge.dispose();
+    }
   });
 });

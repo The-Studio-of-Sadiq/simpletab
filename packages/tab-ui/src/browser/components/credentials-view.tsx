@@ -1,3 +1,4 @@
+import { isValidCdnHost } from "../lib/links-generator";
 import {
   CREDENTIAL_NAMES,
   type CredentialName,
@@ -144,6 +145,16 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
   const [errorMessage, setErrorMessage] = React.useState<string | null>(null);
   const [onlineBusy, setOnlineBusy] = React.useState(false);
 
+  const onlineSettings: OnlineSettings =
+    status.onlineSettings ?? DEFAULT_ONLINE_SETTINGS;
+
+  const [cdnHostInput, setCdnHostInput] = React.useState<string>(
+    onlineSettings.cdnHost ?? "",
+  );
+  React.useEffect(() => {
+    setCdnHostInput(onlineSettings.cdnHost ?? "");
+  }, [onlineSettings.cdnHost]);
+
   const entryMap = React.useMemo(() => {
     const map = new Map<CredentialName, CredentialStatusEntry>();
     for (const entry of credentialsStatus) {
@@ -165,9 +176,6 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
       </div>
     );
   }
-
-  const onlineSettings: OnlineSettings =
-    status.onlineSettings ?? DEFAULT_ONLINE_SETTINGS;
 
   const beginEdit = (name: CredentialName): void => {
     setErrorMessage(null);
@@ -301,6 +309,18 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
     } finally {
       setOnlineBusy(false);
     }
+  };
+
+  const handleSaveCdnHost = async (
+    event: React.FormEvent,
+  ): Promise<void> => {
+    event.preventDefault();
+    const trimmed = cdnHostInput.trim().toLowerCase();
+    if (trimmed.length > 0 && !isValidCdnHost(trimmed)) {
+      setErrorMessage(t("credentials.cdnHostInvalid"));
+      return;
+    }
+    await handleOnlinePatch({ cdnHost: trimmed });
   };
 
   const keyEntry = entryMap.get("tournamentKey");
@@ -697,6 +717,37 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
                 : t("credentials.switchOff")}
             </span>
           </label>
+
+          <form
+            className="simpletab-field"
+            onSubmit={(e) => {
+              void handleSaveCdnHost(e);
+            }}
+          >
+            <label htmlFor={`${baseId}-cdn-host`}>
+              {t("credentials.cdnHostLabel")}
+            </label>
+            <div className="simpletab-actions">
+              <input
+                id={`${baseId}-cdn-host`}
+                type="text"
+                value={cdnHostInput}
+                placeholder={t("credentials.cdnHostPlaceholder")}
+                disabled={!status.open || onlineBusy}
+                onChange={(e) => {
+                  setCdnHostInput(e.target.value);
+                }}
+              />
+              <button
+                type="submit"
+                className="theia-button secondary"
+                disabled={!status.open || onlineBusy}
+              >
+                {t("credentials.cdnHostSave")}
+              </button>
+            </div>
+            <p className="simpletab-hint">{t("credentials.cdnHostHint")}</p>
+          </form>
         </div>
       </section>
 

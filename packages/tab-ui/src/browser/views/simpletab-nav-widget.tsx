@@ -25,6 +25,7 @@ export const SIMPLETAB_OPEN_STANDINGS_COMMAND = "simpletab.standings.open";
 export const SIMPLETAB_OPEN_BREAK_COMMAND = "simpletab.break.open";
 export const SIMPLETAB_OPEN_RELEASES_COMMAND = "simpletab.releases.open";
 export const SIMPLETAB_OPEN_CHANGELOG_COMMAND = "simpletab.changelog.open";
+export const SIMPLETAB_OPEN_LINKS_COMMAND = "simpletab.links.open";
 export const SIMPLETAB_OPEN_CREDENTIALS_COMMAND = "simpletab.credentials.open";
 export const SIMPLETAB_OPEN_PROJECTOR_CONTROL_COMMAND =
   "simpletab.projectorControl.open";
@@ -77,6 +78,8 @@ export class SimpleTabNavWidget extends ReactWidget {
       state === null || stateHasPermission(state, "feedback.view");
     const canManageCredentials =
       state === null || stateHasPermission(state, "credentials.manage");
+    const canManageLinks =
+      state === null || stateHasPermission(state, "links.manage");
     const locale = getLocale();
     const summaryText =
       status.open && status.slug
@@ -219,6 +222,19 @@ export class SimpleTabNavWidget extends ReactWidget {
           >
             {t("nav.openChangelog")}
           </button>
+          {canManageLinks ? (
+            <button
+              type="button"
+              className="theia-button secondary simpletab-nav-btn"
+              onClick={() => {
+                void this.commandService.executeCommand(
+                  SIMPLETAB_OPEN_LINKS_COMMAND,
+                );
+              }}
+            >
+              {t("nav.openLinks")}
+            </button>
+          ) : null}
           {canManageCredentials ? (
             <button
               type="button"

@@ -1,7 +1,8 @@
-import type { ForkOptions } from "node:child_process";
+import { fork, type ForkOptions } from "node:child_process";
 import path from "node:path";
 import { FileUri } from "@theia/core/lib/common/file-uri";
 import { ConnectionHandler, RpcConnectionHandler } from "@theia/core/lib/common/messaging";
+import { ElectronSecurityToken } from "@theia/core/lib/electron-common/electron-token";
 import {
   ElectronMainApplication,
   ElectronMainApplicationContribution,
@@ -10,6 +11,7 @@ import { ElectronConnectionHandler } from "@theia/core/lib/electron-main/messagi
 import { inject, injectable } from "@theia/core/shared/inversify";
 import { ContainerModule } from "@theia/core/shared/inversify";
 import { app, safeStorage } from "@theia/electron/shared/electron";
+import { isCredentialsFetchIpcRequest } from "../common/credentials-ipc";
 import {
   CREDENTIALS_SERVICE_PATH,
   CredentialsService,
@@ -19,6 +21,7 @@ import {
   type ProjectorServiceClient,
 } from "../common/projector-protocol";
 import { ElectronCredentialsService } from "./credentials";
+import { attachCredentialsIpcHandler } from "./credentials-ipc";
 import { ElectronProjectorService } from "./projector-window";
 
 const BACKEND_MAX_OLD_SPACE_ARG = "--max-old-space-size=2048";
@@ -26,12 +29,92 @@ const SMOKE_TIMEOUT_MS = 45_000;
 
 @injectable()
 export class SimpleTabElectronMainApplication extends ElectronMainApplication {
+  @inject(ElectronCredentialsService)
+  protected readonly simpleTabCredentials!: ElectronCredentialsService;
+
+  private detachCredentialsIpc: (() => void) | null = null;
+
+  protected override async startBackend(): Promise<number> {
+    if (process.argv.includes("--no-cluster")) {
+      return super.startBackend();
+    }
+
+    process.env.THEIA_ELECTRON_VERSION = process.versions.electron;
+    const backendProcess = fork(
+      this.globals.THEIA_BACKEND_MAIN_PATH,
+      this.processArgv.getProcessArgvWithoutBin(),
+      await this.getForkOptions(),
+    );
+
+    this.detachCredentialsIpc?.();
+    this.detachCredentialsIpc = attachCredentialsIpcHandler(
+      backendProcess,
+      this.simpleTabCredentials,
+    );
+
+    return new Promise<number>((resolve, reject) => {
+      let portResolved = false;
+
+      const onMessage = (raw: unknown): void => {
+        if (isCredentialsFetchIpcRequest(raw)) {
+          return;
+        }
+        if (
+          raw !== null &&
+          typeof raw === "object" &&
+          typeof (raw as { port?: unknown }).port === "number"
+        ) {
+          if (!portResolved) {
+            portResolved = true;
+            backendProcess.off("message", onMessage);
+            resolve((raw as { port: number }).port);
+          }
+        }
+      };
+
+      backendProcess.on("message", onMessage);
+      backendProcess.on("error", (error) => {
+        if (!portResolved) {
+          portResolved = true;
+          reject(error);
+        }
+      });
+      backendProcess.on("exit", (code) => {
+        this.detachCredentialsIpc?.();
+        this.detachCredentialsIpc = null;
+        if (!portResolved) {
+          portResolved = true;
+          reject(new Error(`Backend exited before reporting port (code=${String(code)})`));
+        }
+      });
+
+      app.on("quit", () => {
+        this.detachCredentialsIpc?.();
+        this.detachCredentialsIpc = null;
+        if (
+          backendProcess.exitCode === null &&
+          backendProcess.signalCode === null &&
+          backendProcess.pid !== undefined
+        ) {
+          try {
+            process.kill(backendProcess.pid);
+          } catch (error) {
+            if ((error as NodeJS.ErrnoException).code !== "ESRCH") {
+              throw error;
+            }
+          }
+        }
+      });
+    });
+  }
+
   protected override async getForkOptions(): Promise<ForkOptions> {
     const baseOptions = await super.getForkOptions();
     const filteredExecArgv = (baseOptions.execArgv ?? process.execArgv).filter(
       (arg) => !arg.startsWith("--max-old-space-size"),
     );
     const env: NodeJS.ProcessEnv = { ...(baseOptions.env ?? process.env) };
+    env[ElectronSecurityToken] = JSON.stringify(this.electronSecurityToken);
     const appProjectPath =
       env.THEIA_APP_PROJECT_PATH ?? process.env.THEIA_APP_PROJECT_PATH;
     if (!env.THEIA_DEFAULT_PLUGINS && appProjectPath) {
@@ -98,9 +181,16 @@ export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
   bind<ConnectionHandler>(ElectronConnectionHandler)
     .toDynamicValue(
       (ctx) =>
-        new RpcConnectionHandler(CREDENTIALS_SERVICE_PATH, () =>
-          ctx.container.get<CredentialsService>(CredentialsService),
-        ),
+        new RpcConnectionHandler(CREDENTIALS_SERVICE_PATH, () => {
+          const service = ctx.container.get<CredentialsService>(CredentialsService);
+          // Expose only status/set/clear/test to the renderer; credentials.fetch stays backend-only.
+          return {
+            status: () => service.status(),
+            set: (name, value) => service.set(name, value),
+            clear: (name) => service.clear(name),
+            test: (name) => service.test(name),
+          } satisfies CredentialsService;
+        }),
     )
     .inSingletonScope();
   bind<ConnectionHandler>(ElectronConnectionHandler)

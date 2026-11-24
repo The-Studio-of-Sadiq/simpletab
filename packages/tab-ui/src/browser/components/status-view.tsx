@@ -4,6 +4,8 @@ import {
   type HostStatus,
   type OnlineSettings,
   type ProjectedState,
+  type SyncPausedReason,
+  type SyncStatus,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
 import { t } from "../i18n";
@@ -17,6 +19,7 @@ export interface StatusViewProps {
   error: string | null;
   onRefresh: () => Promise<HostStatus | null | void>;
   onRunFullCheck: () => Promise<HostIntegrityCheckResult>;
+  onPullNow?: () => Promise<SyncStatus | void>;
   onCreateDemo: () => Promise<void> | void;
 }
 
@@ -24,6 +27,7 @@ interface AddonRow {
   key: string;
   label: string;
   enabled: boolean;
+  active: boolean;
   pauseReason: string;
 }
 
@@ -42,6 +46,9 @@ function summarizeOnlineStatusBar(status: HostStatus): string {
   }
   if (status.integrityOk === false) {
     return t("statusBar.onlinePaused");
+  }
+  if (settings.ballotPortal && status.syncStatus?.active === true) {
+    return t("statusBar.onlineOk");
   }
   return t("statusBar.onlinePaused");
 }
@@ -110,6 +117,46 @@ function ballotCollectionLabel(mode: OnlineSettings["ballotCollection"]): string
   }
 }
 
+function formatSyncPausedReason(
+  reason: SyncPausedReason | undefined,
+  detail: string | undefined,
+): string {
+  switch (reason) {
+    case "QR_ONLY":
+      return t("status.pauseReasonQrOnly");
+    case "INTEGRITY_FAILED":
+      return t("status.pauseReasonIntegrity");
+    case "NO_KEY":
+      return t("status.pauseReasonNoKey");
+    case "HOST_STALE":
+      return t("status.pauseReasonHostStale");
+    case "KEY_REVOKED":
+      return t("status.pauseReasonKeyRevoked");
+    case "QUOTA_EXHAUSTED":
+      return t("status.pauseReasonQuota");
+    case "OFFLINE":
+      return detail
+        ? t("status.pauseReasonOfflineDetail", { detail })
+        : t("status.pauseReasonOffline");
+    case "OFF":
+    case undefined:
+      return t("status.pauseReasonM3");
+  }
+}
+
+function formatClockSkew(sync: SyncStatus | undefined): string {
+  if (sync?.clockSkewMs === undefined) {
+    return t("status.clockSkewOffline");
+  }
+  const absSeconds = Math.round(Math.abs(sync.clockSkewMs) / 1000);
+  const signedSeconds =
+    sync.clockSkewMs >= 0 ? `+${absSeconds}s` : `-${absSeconds}s`;
+  if (sync.clockSkewWarning) {
+    return t("status.clockSkewWarning", { skew: signedSeconds });
+  }
+  return t("status.clockSkewValue", { skew: signedSeconds });
+}
+
 export const StatusView: React.FC<StatusViewProps> = ({
   status,
   state,
@@ -117,9 +164,11 @@ export const StatusView: React.FC<StatusViewProps> = ({
   error,
   onRefresh,
   onRunFullCheck,
+  onPullNow,
   onCreateDemo,
 }) => {
   const [runningFullCheck, setRunningFullCheck] = React.useState(false);
+  const [pulling, setPulling] = React.useState(false);
 
   const tournamentLabel = loading
     ? t("status.loading")
@@ -137,20 +186,35 @@ export const StatusView: React.FC<StatusViewProps> = ({
     status.onlineSettings ?? DEFAULT_ONLINE_SETTINGS;
 
   const integrityBlocked = status.open && status.integrityOk === false;
+  const syncStatus = status.syncStatus;
+
+  const portalActive =
+    !integrityBlocked &&
+    onlineSettings.ballotPortal &&
+    syncStatus?.active === true;
+
+  const portalPauseReason = integrityBlocked
+    ? t("status.pauseReasonIntegrity")
+    : syncStatus === undefined
+      ? t("status.pauseReasonM3")
+      : formatSyncPausedReason(
+          syncStatus.pausedReason,
+          syncStatus.pausedDetail,
+        );
 
   const addons: AddonRow[] = [
     {
       key: "portal",
       label: t("status.addonPortal"),
       enabled: onlineSettings.ballotPortal,
-      pauseReason: integrityBlocked
-        ? t("status.pauseReasonIntegrity")
-        : t("status.pauseReasonM3"),
+      active: portalActive,
+      pauseReason: portalPauseReason,
     },
     {
       key: "liveSite",
       label: t("status.addonLiveSite"),
       enabled: onlineSettings.livePublicSite,
+      active: false,
       pauseReason: integrityBlocked
         ? t("status.pauseReasonIntegrity")
         : t("status.pauseReasonM4"),
@@ -159,6 +223,7 @@ export const StatusView: React.FC<StatusViewProps> = ({
       key: "githubArchive",
       label: t("status.addonGithubArchive"),
       enabled: onlineSettings.githubArchive,
+      active: false,
       pauseReason: integrityBlocked
         ? t("status.pauseReasonIntegrity")
         : t("status.pauseReasonM4"),
@@ -167,6 +232,7 @@ export const StatusView: React.FC<StatusViewProps> = ({
       key: "registration",
       label: t("status.addonRegistration"),
       enabled: onlineSettings.onlineRegistration,
+      active: false,
       pauseReason: integrityBlocked
         ? t("status.pauseReasonIntegrity")
         : t("status.pauseReasonM10"),
@@ -239,6 +305,18 @@ export const StatusView: React.FC<StatusViewProps> = ({
     }
   };
 
+  const handlePullNow = async (): Promise<void> => {
+    if (!onPullNow) {
+      return;
+    }
+    setPulling(true);
+    try {
+      await onPullNow();
+    } finally {
+      setPulling(false);
+    }
+  };
+
   return (
     <div>
       <div className="simpletab-status-header">
@@ -253,6 +331,18 @@ export const StatusView: React.FC<StatusViewProps> = ({
           >
             {t("status.refresh")}
           </button>
+          {onPullNow ? (
+            <button
+              type="button"
+              className="theia-button secondary"
+              disabled={!status.open || pulling}
+              onClick={() => {
+                void handlePullNow();
+              }}
+            >
+              {pulling ? t("status.pulling") : t("status.pullNow")}
+            </button>
+          ) : null}
           <button
             type="button"
             className="theia-button secondary"
@@ -338,22 +428,44 @@ export const StatusView: React.FC<StatusViewProps> = ({
         <div className="simpletab-status-value">{t("status.devicesNone")}</div>
 
         <div className="simpletab-status-label">{t("status.lastPush")}</div>
-        <div className="simpletab-status-value">{t("status.never")}</div>
+        <div className="simpletab-status-value">
+          {syncStatus?.lastPushAt ?? t("status.never")}
+        </div>
 
         <div className="simpletab-status-label">{t("status.lastPull")}</div>
-        <div className="simpletab-status-value">{t("status.never")}</div>
+        <div className="simpletab-status-value">
+          {syncStatus?.lastPullAt ?? t("status.never")}
+        </div>
+
+        {syncStatus !== undefined ? (
+          <>
+            <div className="simpletab-status-label">{t("status.lastAck")}</div>
+            <div className="simpletab-status-value">
+              {syncStatus.lastAckAt
+                ? t("status.lastAckValue", {
+                    ackedThrough: syncStatus.ackedThrough,
+                    at: syncStatus.lastAckAt,
+                  })
+                : t("status.never")}
+            </div>
+          </>
+        ) : null}
 
         <div className="simpletab-status-label">{t("status.lastPublish")}</div>
-        <div className="simpletab-status-value">{t("status.never")}</div>
+        <div className="simpletab-status-value">
+          {syncStatus?.lastPublishAt ?? t("status.never")}
+        </div>
 
         <div className="simpletab-status-label">{t("status.shareLeft")}</div>
         <div className="simpletab-status-value">
-          {t("status.shareLeftOffline")}
+          {syncStatus?.shareLeft !== undefined
+            ? String(syncStatus.shareLeft)
+            : t("status.shareLeftOffline")}
         </div>
 
         <div className="simpletab-status-label">{t("status.clockSkew")}</div>
         <div className="simpletab-status-value">
-          {t("status.clockSkewOffline")}
+          {formatClockSkew(syncStatus)}
         </div>
 
         <div className="simpletab-status-label">
@@ -389,9 +501,11 @@ export const StatusView: React.FC<StatusViewProps> = ({
                   <td>
                     {!addon.enabled
                       ? t("status.addonStateOff")
-                      : t("status.addonStatePaused", {
-                          reason: addon.pauseReason,
-                        })}
+                      : addon.active
+                        ? t("status.addonStateOk")
+                        : t("status.addonStatePaused", {
+                            reason: addon.pauseReason,
+                          })}
                   </td>
                 </tr>
               ))}

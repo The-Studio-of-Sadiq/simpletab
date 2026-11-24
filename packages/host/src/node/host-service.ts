@@ -48,14 +48,52 @@ import {
   type ProjectedState,
   type StateChangedEvent,
   type SubmitResult,
+  type SyncStatus,
 } from "../common/host-protocol";
+import type { CredentialsFetchClient } from "../common/credentials-protocol";
 import { seedDemoTournament } from "./demo-fixture";
 import { HostEngine, type HostApplyResult, type UndoResult } from "./engine/engine";
 import type { DetailedActiveLock } from "./engine/locks";
 import { readHostNumber } from "./handover/format";
+import { buildRoundFiles } from "./publish/round-files";
+import { IpcCredentialsFetchClient } from "./sync/credentials-ipc-client";
+import { SyncScheduler } from "./sync/scheduler";
+import { readHostIdentity, ServiceClient } from "./sync/service-client";
 
 const DEMO_DB_FILENAME = "bp-demo.simpletab.db";
 const DEFAULT_PRELIM_ROUNDS = 4;
+
+const DNS_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+
+function isValidCdnHost(host: string): boolean {
+  if (host.length === 0 || host.length > 253 || /[/:?#@\s\\]/.test(host) || host.endsWith(".")) {
+    return false;
+  }
+  const labels = host.split(".");
+  if (labels.length < 2) {
+    return false;
+  }
+  return labels.every((label) => DNS_LABEL_RE.test(label));
+}
+
+function isPublishRelevantOp(opType: string): boolean {
+  return (
+    opType.startsWith("draw.") ||
+    opType.startsWith("allocation.") ||
+    opType.startsWith("motion.") ||
+    opType.startsWith("private_urls.") ||
+    opType.startsWith("links.") ||
+    opType === "round.set_ballot_deadline" ||
+    opType === "round.set_completion" ||
+    opType === "round.cancel" ||
+    opType === "round.update" ||
+    opType === "settings.update" ||
+    opType.startsWith("swing.") ||
+    opType.startsWith("team.") ||
+    opType.startsWith("adjudicator.") ||
+    opType.startsWith("venue.")
+  );
+}
 
 const TOURNAMENT_GITIGNORE_ENTRIES = [
   "*.simpletab.db",
@@ -122,6 +160,10 @@ export class HostServiceImpl
   private demoHandled = false;
   private demoTempDir: string | null = null;
   private prewarmWorkers = false;
+  private credentialsFetchClient: CredentialsFetchClient = new IpcCredentialsFetchClient();
+  private syncScheduler: SyncScheduler | null = null;
+  private publishInFlight: Promise<void> | null = null;
+  private publishQueued = false;
 
   /** Start each opened tournament's long-op worker immediately (the desktop app does this). */
   enableWorkerPrewarm(): void {
@@ -131,6 +173,10 @@ export class HostServiceImpl
 
   setClock(clock: (() => Date) | undefined): void {
     this.clock = clock;
+  }
+
+  setCredentialsFetchClient(client: CredentialsFetchClient): void {
+    this.credentialsFetchClient = client;
   }
 
   setClient(client: HostServiceClient | undefined): void {
@@ -489,7 +535,41 @@ export class HostServiceImpl
         `Invalid ballotCollection mode: "${String(patch.ballotCollection)}".`,
       );
     }
+    if (patch.cdnHost !== undefined) {
+      const trimmedCdn = patch.cdnHost.trim().toLowerCase();
+      if (trimmedCdn.length > 0 && !isValidCdnHost(trimmedCdn)) {
+        throw new Error(
+          `Invalid public site host name: "${patch.cdnHost}". Enter a bare hostname such as wudc2027.pages.dev.`,
+        );
+      }
+    }
+    if (patch.ballotsOrigin !== undefined && patch.ballotsOrigin.trim().length > 0) {
+      let parsed: URL;
+      try {
+        parsed = new URL(patch.ballotsOrigin.trim());
+      } catch {
+        throw new Error(`Invalid ballots service URL: "${patch.ballotsOrigin}".`);
+      }
+      const isLocal =
+        parsed.protocol === "http:" &&
+        (parsed.hostname === "localhost" ||
+          parsed.hostname === "127.0.0.1" ||
+          parsed.hostname === "[::1]");
+      if (parsed.protocol !== "https:" && !isLocal) {
+        throw new Error("Ballots service URL must use https:.");
+      }
+    }
+
     const current = this.readOnlineSettings(this.engine);
+    const nextCdnHost =
+      patch.cdnHost !== undefined
+        ? patch.cdnHost.trim().toLowerCase()
+        : current.cdnHost;
+    const nextBallotsOrigin =
+      patch.ballotsOrigin !== undefined
+        ? patch.ballotsOrigin.trim()
+        : current.ballotsOrigin;
+
     const next: OnlineSettings = {
       ballotPortal: patch.ballotPortal ?? current.ballotPortal,
       livePublicSite: patch.livePublicSite ?? current.livePublicSite,
@@ -504,6 +584,12 @@ export class HostServiceImpl
         : current.keyRequestedAt !== undefined
           ? { keyRequestedAt: current.keyRequestedAt }
           : {}),
+      ...(nextCdnHost !== undefined && nextCdnHost.length > 0
+        ? { cdnHost: nextCdnHost }
+        : {}),
+      ...(nextBallotsOrigin !== undefined && nextBallotsOrigin.length > 0
+        ? { ballotsOrigin: nextBallotsOrigin }
+        : {}),
     };
     this.engine.database
       .prepare(
@@ -511,12 +597,57 @@ export class HostServiceImpl
           "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
       )
       .run(JSON.stringify(next));
+    if (patch.trustSignedBallots !== undefined) {
+      const currentTrust =
+        this.engine.getState()?.tournament.simpletab?.trustSignedBallots === true;
+      if (currentTrust !== next.trustSignedBallots) {
+        const res = await this.engine.submit(
+          {
+            type: "settings.update",
+            payload: {
+              preferences: {},
+              simpletab: { trustSignedBallots: next.trustSignedBallots },
+            },
+          },
+          HOST_OWNER_ACTOR,
+        );
+        if (!res.ok) {
+          throw new Error(
+            `Failed to update trustSignedBallots setting: ${res.errors.join("; ")}`,
+          );
+        }
+      }
+    }
+    this.syncScheduler?.updateSettings(next);
+    if (patch.ballotCollection !== undefined) {
+      this.scheduleRoundFilesBuild();
+    }
     this.emitStateChanged({
       seq: this.engine.head().seq,
       type: "settings.online_updated",
       writes: [],
     });
     return next;
+  }
+
+  async getSyncStatus(): Promise<SyncStatus> {
+    if (this.syncScheduler !== null) {
+      return this.syncScheduler.getSyncStatus();
+    }
+    return {
+      enabled: false,
+      active: false,
+      hostNumber: 1,
+      ackedThrough: 0,
+      consecutiveFailures: 0,
+    };
+  }
+
+  async pullNow(): Promise<SyncStatus> {
+    if (this.syncScheduler === null) {
+      return this.getSyncStatus();
+    }
+    return this.syncScheduler.pullNow();
   }
 
   async getChangelog(afterSeq?: number, limit?: number): Promise<PublicChainItem[]> {
@@ -542,6 +673,9 @@ export class HostServiceImpl
 
   async onStop(): Promise<void> {
     await this.closeCurrentEngine();
+    if (this.credentialsFetchClient instanceof IpcCredentialsFetchClient) {
+      this.credentialsFetchClient.dispose();
+    }
     if (this.smokeTempDir !== null) {
       rmSync(this.smokeTempDir, { recursive: true, force: true });
       this.smokeTempDir = null;
@@ -582,16 +716,92 @@ export class HostServiceImpl
   private attachEngine(nextEngine: HostEngine, dbPath: string): void {
     this.engine = nextEngine;
     this.openDbPath = dbPath;
+
+    const serviceClient = new ServiceClient({
+      fetchClient: this.credentialsFetchClient,
+      getHostIdentity: () => readHostIdentity(nextEngine.database),
+      getBaseUrl: () => this.readOnlineSettings(nextEngine).ballotsOrigin,
+      ...(this.clock !== undefined ? { clock: this.clock } : {}),
+    });
+
+    this.syncScheduler = new SyncScheduler({
+      engine: nextEngine,
+      client: serviceClient,
+      initialSettings: this.readOnlineSettings(nextEngine),
+      hostNumber: readHostNumber(nextEngine.database),
+      ...(this.clock !== undefined ? { clock: this.clock } : {}),
+      onPortalEnforcingChanged: (enforcing) => {
+        nextEngine.setPortalEnforcing(enforcing);
+      },
+      onStatusChanged: () => {
+        this.emitStateChanged({
+          seq: nextEngine.head().seq,
+          type: "sync.status_updated",
+          writes: [],
+        });
+      },
+    });
+
     this.unsubscribeCommit = nextEngine.onCommitted((event) => {
       this.emitStateChanged({
         seq: event.seq,
         type: event.type,
         writes: [...event.writes],
       });
+      this.syncScheduler?.handleCommitted(event);
+      if (isPublishRelevantOp(event.type)) {
+        this.scheduleRoundFilesBuild();
+      }
     });
     this.unsubscribeLocks = nextEngine.onLocksChanged((locks) => {
       this.emitLocksChanged(this.mapLocks(locks));
     });
+  }
+
+  private scheduleRoundFilesBuild(): void {
+    if (this.engine === null || this.openDbPath === null) {
+      return;
+    }
+    if (this.publishInFlight !== null) {
+      this.publishQueued = true;
+      return;
+    }
+    const run = async (): Promise<void> => {
+      do {
+        this.publishQueued = false;
+        const activeEngine = this.engine;
+        const activeDbPath = this.openDbPath;
+        if (activeEngine === null || activeDbPath === null) {
+          break;
+        }
+        const state = activeEngine.getState();
+        if (state === null) {
+          break;
+        }
+        const settings = this.readOnlineSettings(activeEngine);
+        const workspaceDir = path.dirname(activeDbPath);
+        try {
+          await buildRoundFiles({
+            state,
+            workspaceDir,
+            ballotCollection: settings.ballotCollection,
+            headHash: activeEngine.head().entryHash,
+            ...(this.clock !== undefined
+              ? { nowIso: this.clock().toISOString() }
+              : {}),
+          });
+        } catch {
+          // Static round file generation runs in background and never blocks tabbing ops.
+        }
+      } while (this.publishQueued && this.engine !== null);
+    };
+
+    const promise = run().finally(() => {
+      if (this.publishInFlight === promise) {
+        this.publishInFlight = null;
+      }
+    });
+    this.publishInFlight = promise;
   }
 
   private emitStateChanged(event: StateChangedEvent): void {
@@ -617,6 +827,14 @@ export class HostServiceImpl
   }
 
   private async closeCurrentEngine(): Promise<void> {
+    if (this.syncScheduler !== null) {
+      this.syncScheduler.dispose();
+      this.syncScheduler = null;
+    }
+    this.publishQueued = false;
+    if (this.publishInFlight !== null) {
+      await this.publishInFlight;
+    }
     if (this.unsubscribeCommit !== null) {
       this.unsubscribeCommit();
       this.unsubscribeCommit = null;
@@ -751,6 +969,13 @@ export class HostServiceImpl
         parsed.keyRequestedAt.length > 0
           ? { keyRequestedAt: parsed.keyRequestedAt }
           : {}),
+        ...(typeof parsed.cdnHost === "string" && parsed.cdnHost.length > 0
+          ? { cdnHost: parsed.cdnHost }
+          : {}),
+        ...(typeof parsed.ballotsOrigin === "string" &&
+        parsed.ballotsOrigin.length > 0
+          ? { ballotsOrigin: parsed.ballotsOrigin }
+          : {}),
       };
     } catch {
       return { ...DEFAULT_ONLINE_SETTINGS };
@@ -786,6 +1011,9 @@ export class HostServiceImpl
       hostNumber: readHostNumber(this.engine.database),
       queuedOps: 0,
       onlineSettings: this.readOnlineSettings(this.engine),
+      ...(this.syncScheduler !== null
+        ? { syncStatus: this.syncScheduler.getSyncStatus() }
+        : {}),
     };
   }
 }

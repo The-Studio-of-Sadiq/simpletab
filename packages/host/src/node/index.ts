@@ -89,3 +89,46 @@ export {
   stateHashFromState,
   type StateHashTableName,
 } from "./state/state-hash";
+export {
+  buildRoundFiles,
+  mapBallotCollectionMode,
+  type BuildRoundFilesOptions,
+  type BuildRoundFilesResult,
+} from "./publish/round-files";
+export {
+  IpcCredentialsFetchClient,
+  createTestCredentialsIpcBridge,
+  type IpcCredentialsFetchClientOptions,
+  type TestCredentialsIpcBridge,
+} from "./sync/credentials-ipc-client";
+export {
+  SERVICE_ACTOR,
+  processInboxItems,
+  type InboxItemError,
+  type ProcessInboxResult,
+} from "./sync/inbox-to-ops";
+export {
+  buildPermitUpload,
+  isRoundOpenOnService,
+} from "./sync/permits";
+export {
+  CLOCK_SKEW_WARNING_MS,
+  IDLE_POLL_MS,
+  OPEN_ROUND_POLL_MS,
+  SyncScheduler,
+  type SyncSchedulerOptions,
+} from "./sync/scheduler";
+export {
+  ServiceClient,
+  readHostIdentity,
+  type AckResponse,
+  type HeadResponse,
+  type HostIdentity,
+  type KeyRequestResponse,
+  type PermitUploadResponse,
+  type ServiceCallFailure,
+  type ServiceCallResult,
+  type ServiceCallSuccess,
+  type ServiceClientOptions,
+  type ServiceErrorKind,
+} from "./sync/service-client";

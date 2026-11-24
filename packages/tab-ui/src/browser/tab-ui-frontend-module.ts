@@ -37,6 +37,7 @@ import {
   CredentialsViewContribution,
   DrawViewContribution,
   FeedbackViewContribution,
+  LinksViewContribution,
   MotionsViewContribution,
   ParticipantsViewContribution,
   ProjectorControlViewContribution,
@@ -65,6 +66,7 @@ import { CheckinWidget } from "./views/checkin-widget";
 import { CredentialsWidget } from "./views/credentials-widget";
 import { DrawWidget } from "./views/draw-widget";
 import { FeedbackWidget } from "./views/feedback-widget";
+import { LinksWidget } from "./views/links-widget";
 import { MotionsWidget } from "./views/motions-widget";
 import { ParticipantsWidget } from "./views/participants-widget";
 import { ProjectorControlWidget } from "./views/projector-widget";
@@ -268,6 +270,14 @@ export default new ContainerModule((bind) => {
     }))
     .inSingletonScope();
 
+  bind(LinksWidget).toSelf().inSingletonScope();
+  bind(WidgetFactory)
+    .toDynamicValue((ctx) => ({
+      id: LinksWidget.ID,
+      createWidget: () => ctx.container.get(LinksWidget),
+    }))
+    .inSingletonScope();
+
   bind(ProjectorControlWidget).toSelf().inSingletonScope();
   bind(WidgetFactory)
     .toDynamicValue((ctx) => ({
@@ -298,6 +308,7 @@ export default new ContainerModule((bind) => {
   bindViewContribution(bind, ReleasesViewContribution);
   bindViewContribution(bind, ChangelogViewContribution);
   bindViewContribution(bind, CredentialsViewContribution);
+  bindViewContribution(bind, LinksViewContribution);
   bindViewContribution(bind, ProjectorControlViewContribution);
   bindViewContribution(bind, SimpleTabContribution);
   bind(FrontendApplicationContribution).toService(SimpleTabContribution);

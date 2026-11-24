@@ -44,3 +44,57 @@ export interface CredentialsService {
   clear(name: CredentialName): Promise<void>;
   test(name: CredentialName): Promise<CredentialTestResult>;
 }
+
+export type CredentialsFetchName = "tournamentKey";
+
+export type CredentialsFetchMethod = "GET" | "POST" | "PUT" | "DELETE";
+
+export interface CredentialsFetchHostHeaders {
+  hostNumber: number;
+  hostId: string;
+  hostRank: number;
+  requestId?: string;
+}
+
+export interface CredentialsFetchRequest {
+  method: CredentialsFetchMethod;
+  path: string;
+  baseUrl?: string;
+  headers?: Record<string, string>;
+  body?: string;
+  hostHeaders?: CredentialsFetchHostHeaders;
+  authenticated?: boolean;
+  timeoutMs?: number;
+}
+
+export interface CredentialsFetchResponse {
+  status: number;
+  headers: Record<string, string>;
+  body: string;
+}
+
+export interface CredentialsFetchClient {
+  fetch(
+    name: CredentialsFetchName,
+    req: CredentialsFetchRequest,
+  ): Promise<CredentialsFetchResponse>;
+}
+
+export type CredentialsFetchErrorCode =
+  | "CREDENTIAL_NOT_SET"
+  | "ENCRYPTION_UNAVAILABLE"
+  | "DECRYPT_FAILED"
+  | "INVALID_REQUEST"
+  | "NETWORK_ERROR"
+  | "IPC_UNAVAILABLE"
+  | "IPC_TIMEOUT";
+
+export class CredentialsFetchError extends Error {
+  readonly code: CredentialsFetchErrorCode;
+
+  constructor(code: CredentialsFetchErrorCode, message: string) {
+    super(message);
+    this.name = "CredentialsFetchError";
+    this.code = code;
+  }
+}

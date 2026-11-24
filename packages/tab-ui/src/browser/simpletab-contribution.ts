@@ -28,6 +28,7 @@ import { CheckinWidget } from "./views/checkin-widget";
 import { CredentialsWidget } from "./views/credentials-widget";
 import { DrawWidget } from "./views/draw-widget";
 import { FeedbackWidget } from "./views/feedback-widget";
+import { LinksWidget } from "./views/links-widget";
 import { MotionsWidget } from "./views/motions-widget";
 import { ParticipantsWidget } from "./views/participants-widget";
 import { ProjectorControlWidget } from "./views/projector-widget";
@@ -42,6 +43,7 @@ import {
   SIMPLETAB_OPEN_CREDENTIALS_COMMAND,
   SIMPLETAB_OPEN_DRAW_COMMAND,
   SIMPLETAB_OPEN_FEEDBACK_COMMAND,
+  SIMPLETAB_OPEN_LINKS_COMMAND,
   SIMPLETAB_OPEN_MOTIONS_COMMAND,
   SIMPLETAB_OPEN_PARTICIPANTS_COMMAND,
   SIMPLETAB_OPEN_PROJECTOR_CONTROL_COMMAND,
@@ -74,6 +76,7 @@ export const SIMPLETAB_CHANGELOG_TOGGLE_COMMAND_ID =
   "simpletab.changelog.toggle";
 export const SIMPLETAB_CREDENTIALS_TOGGLE_COMMAND_ID =
   "simpletab.credentials.toggle";
+export const SIMPLETAB_LINKS_TOGGLE_COMMAND_ID = "simpletab.links.toggle";
 export const SIMPLETAB_PROJECTOR_CONTROL_TOGGLE_COMMAND_ID =
   "simpletab.projectorControl.toggle";
 export const SIMPLETAB_OPEN_PROJECTOR_COMMAND_ID = "simpletab.projector.open";
@@ -410,6 +413,30 @@ export class CredentialsViewContribution extends AbstractViewContribution<Creden
     super.registerCommands(commands);
     commands.registerCommand(
       { id: SIMPLETAB_OPEN_CREDENTIALS_COMMAND },
+      {
+        execute: () => this.openView({ activate: true, reveal: true }),
+      },
+    );
+  }
+}
+
+@injectable()
+export class LinksViewContribution extends AbstractViewContribution<LinksWidget> {
+  constructor() {
+    super({
+      widgetId: LinksWidget.ID,
+      widgetName: t("links.widgetLabel"),
+      defaultWidgetOptions: {
+        area: "main",
+      },
+      toggleCommandId: SIMPLETAB_LINKS_TOGGLE_COMMAND_ID,
+    });
+  }
+
+  override registerCommands(commands: CommandRegistry): void {
+    super.registerCommands(commands);
+    commands.registerCommand(
+      { id: SIMPLETAB_OPEN_LINKS_COMMAND },
       {
         execute: () => this.openView({ activate: true, reveal: true }),
       },

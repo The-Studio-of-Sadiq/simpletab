@@ -63,6 +63,15 @@ function makeProjectedState(seq: number, slug = "demo"): ProjectedState {
   };
 }
 
+const OFF_SYNC_STATUS = {
+  enabled: false,
+  active: false,
+  pausedReason: "OFF" as const,
+  hostNumber: 1,
+  ackedThrough: 0,
+  consecutiveFailures: 0,
+};
+
 describe("TournamentStore", () => {
   it("caches ProjectedState, refreshes on onStateChanged, and returns per-op SubmitResult", async () => {
     let currentSeq = 1;
@@ -118,6 +127,8 @@ describe("TournamentStore", () => {
       updateOnlineSettings: vi.fn(async (patch) => ({ ...DEFAULT_ONLINE_SETTINGS, ...patch })),
       getChangelog: vi.fn(async () => []),
       getOpUndoInfo: vi.fn(async () => []),
+      getSyncStatus: vi.fn(async () => OFF_SYNC_STATUS),
+      pullNow: vi.fn(async () => OFF_SYNC_STATUS),
     };
 
     const dispatcher = new HostServiceClientDispatcher();
@@ -204,6 +215,8 @@ describe("TournamentStore", () => {
       updateOnlineSettings: vi.fn(async (patch) => ({ ...DEFAULT_ONLINE_SETTINGS, ...patch })),
       getChangelog: vi.fn(async () => []),
       getOpUndoInfo: vi.fn(async () => []),
+      getSyncStatus: vi.fn(async () => OFF_SYNC_STATUS),
+      pullNow: vi.fn(async () => OFF_SYNC_STATUS),
     };
 
     const store = new TournamentStore(hostService, undefined, workspaceOpener);
@@ -264,6 +277,8 @@ describe("TournamentStore", () => {
       updateOnlineSettings: vi.fn(async (patch) => ({ ...DEFAULT_ONLINE_SETTINGS, ...patch })),
       getChangelog: vi.fn(async () => []),
       getOpUndoInfo: vi.fn(async () => []),
+      getSyncStatus: vi.fn(async () => OFF_SYNC_STATUS),
+      pullNow: vi.fn(async () => OFF_SYNC_STATUS),
     };
 
     const dispatcher = new HostServiceClientDispatcher();

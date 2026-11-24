@@ -280,4 +280,117 @@ describe("StatusView & formatStatusBarText", () => {
     expect(screen.getByText("Sync blocked")).toBeTruthy();
     expect(screen.getByText("Paused: Integrity check failed")).toBeTruthy();
   });
+
+  it("displays live syncStatus timestamps, clock skew, shareLeft, HOST_STALE pause reason, and Pull now", async () => {
+    expect(
+      formatStatusBarText({
+        open: true,
+        slug: "wudc",
+        headSeq: 42,
+        integrityOk: true,
+        canSync: true,
+        locks: [],
+        onlineSettings: { ...DEFAULT_ONLINE_SETTINGS, ballotPortal: true },
+        syncStatus: {
+          enabled: true,
+          active: true,
+          hostNumber: 2,
+          ackedThrough: 19,
+          consecutiveFailures: 0,
+        },
+      }),
+    ).toBe("SimpleTab: wudc · seq 42 · Integrity OK · Online: OK");
+
+    const pullNow = vi.fn(async () => ({
+      enabled: true,
+      active: true,
+      hostNumber: 2,
+      ackedThrough: 20,
+      consecutiveFailures: 0,
+    }));
+
+    const { rerender } = render(
+      <StatusView
+        status={{
+          open: true,
+          slug: "status-test",
+          headSeq: 12,
+          integrityOk: true,
+          canSync: true,
+          locks: [],
+          hostNumber: 2,
+          onlineSettings: { ...DEFAULT_ONLINE_SETTINGS, ballotPortal: true },
+          syncStatus: {
+            enabled: true,
+            active: true,
+            hostNumber: 2,
+            ackedThrough: 19,
+            lastPushAt: "2026-11-24T08:01:00.000Z",
+            lastPullAt: "2026-11-24T08:02:00.000Z",
+            lastAckAt: "2026-11-24T08:03:00.000Z",
+            lastPublishAt: "2026-11-24T08:04:00.000Z",
+            shareLeft: 412,
+            clockSkewMs: 150_000,
+            clockSkewWarning: true,
+            consecutiveFailures: 0,
+          },
+        }}
+        state={makeStatusState()}
+        loading={false}
+        error={null}
+        onRefresh={vi.fn(async () => undefined)}
+        onRunFullCheck={vi.fn(async () => ({ ok: true }))}
+        onPullNow={pullNow}
+        onCreateDemo={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("2026-11-24T08:01:00.000Z")).toBeTruthy();
+    expect(screen.getByText("2026-11-24T08:02:00.000Z")).toBeTruthy();
+    expect(screen.getByText("through 19 at 2026-11-24T08:03:00.000Z")).toBeTruthy();
+    expect(screen.getByText("2026-11-24T08:04:00.000Z")).toBeTruthy();
+    expect(screen.getByText("412")).toBeTruthy();
+    expect(screen.getByText("+150s — clock skew warning (exceeds 120s)")).toBeTruthy();
+    expect(screen.getByText("OK")).toBeTruthy();
+
+    fireEvent.click(screen.getByRole("button", { name: "Pull now" }));
+    await waitFor(() => {
+      expect(pullNow).toHaveBeenCalledTimes(1);
+    });
+
+    rerender(
+      <StatusView
+        status={{
+          open: true,
+          slug: "status-test",
+          headSeq: 12,
+          integrityOk: true,
+          canSync: true,
+          locks: [],
+          hostNumber: 2,
+          onlineSettings: { ...DEFAULT_ONLINE_SETTINGS, ballotPortal: true },
+          syncStatus: {
+            enabled: true,
+            active: false,
+            pausedReason: "HOST_STALE",
+            hostNumber: 2,
+            storedHostNumber: 4,
+            ackedThrough: 19,
+            consecutiveFailures: 0,
+          },
+        }}
+        state={makeStatusState()}
+        loading={false}
+        error={null}
+        onRefresh={vi.fn(async () => undefined)}
+        onRunFullCheck={vi.fn(async () => ({ ok: true }))}
+        onPullNow={pullNow}
+        onCreateDemo={vi.fn()}
+      />,
+    );
+
+    expect(
+      screen.getByText("Paused: This host is behind another host (HOST_STALE)"),
+    ).toBeTruthy();
+  });
 });
