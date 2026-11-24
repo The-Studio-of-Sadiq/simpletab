@@ -13,6 +13,7 @@
     }
   ],
   "dependencies": {
+    "@noble/hashes": "2.4.0",
     "@simpletab/core": "*",
     "@theia/core": "1.77.0",
     "@theia/electron": "1.77.0",

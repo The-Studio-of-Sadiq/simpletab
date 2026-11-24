@@ -1,5 +1,4 @@
 import { fork, type ForkOptions } from "node:child_process";
-import { existsSync } from "node:fs";
 import path from "node:path";
 import { CredentialsVault } from "./credentials-store";
 import { FileUri } from "@theia/core/lib/common/file-uri";
@@ -12,7 +11,7 @@ import {
 import { ElectronConnectionHandler } from "@theia/core/lib/electron-main/messaging/electron-connection-handler";
 import { inject, injectable } from "@theia/core/shared/inversify";
 import { ContainerModule } from "@theia/core/shared/inversify";
-import { app, safeStorage } from "@theia/electron/shared/electron";
+import { app, net, safeStorage } from "@theia/electron/shared/electron";
 import { isCredentialsFetchIpcRequest } from "../common/credentials-ipc";
 import {
   CREDENTIALS_SERVICE_PATH,
@@ -32,20 +31,6 @@ import { ElectronProjectorService } from "./projector-window";
 
 const BACKEND_MAX_OLD_SPACE_ARG = "--max-old-space-size=2048";
 const SMOKE_TIMEOUT_MS = 45_000;
-
-/** Finds the app's `resources` directory, preferring whichever candidate has a Wrangler install. */
-function resolveAppResourcesDir(): string {
-  const projectPath = process.env.THEIA_APP_PROJECT_PATH;
-  const candidates = [
-    ...(projectPath !== undefined ? [path.join(projectPath, "resources")] : []),
-    path.join(app.getAppPath(), "resources"),
-  ];
-  return (
-    candidates.find((dir) => existsSync(path.join(dir, "wrangler", "cli.json"))) ??
-    candidates[0] ??
-    path.join(app.getAppPath(), "resources")
-  );
-}
 
 @injectable()
 export class SimpleTabElectronMainApplication extends ElectronMainApplication {
@@ -89,7 +74,11 @@ export class SimpleTabElectronMainApplication extends ElectronMainApplication {
       // A vault of its own, not the RPC-served credentials service: every public method of that
       // service is callable from the frontend, and the token must never reach it.
       getToken: async () => this.mainOnlyVault().readSecretForElectronMain("cdnToken"),
-      resourcesDir: resolveAppResourcesDir(),
+      // Electron's network stack, so the system proxy settings apply as for the ballots service.
+      fetchImpl: (input, init) =>
+        net !== undefined && typeof net.fetch === "function"
+          ? net.fetch(input, init)
+          : globalThis.fetch(input, init),
     });
 
     return new Promise<number>((resolve, reject) => {

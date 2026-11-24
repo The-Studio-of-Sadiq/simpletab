@@ -3,8 +3,8 @@
  * tournament's Cloudflare Pages project (design section 10, step 2).
  *
  * The Cloudflare API token never leaves electron-main: the backend only names a directory it has
- * already built, and electron-main runs Wrangler with the token from the credentials vault in the
- * child process's environment. Non-secret settings (account id, project name) travel with the
+ * already built, and electron-main uploads it through Cloudflare's Pages API with the token from
+ * the credentials vault. Non-secret settings (account id, project name) travel with the
  * request so electron-main does not need to read tournament state.
  */
 
@@ -27,7 +27,7 @@ export type PagesDeployResult =
       ok: false;
       /** Plain-language reason, already scrubbed of secrets. */
       error: string;
-      kind: "NO_TOKEN" | "WRANGLER_MISSING" | "DEPLOY_FAILED" | "TIMEOUT";
+      kind: "NO_TOKEN" | "DEPLOY_FAILED" | "TIMEOUT";
     };
 
 /** Implemented in the backend by an IPC client and in tests by a fake. */

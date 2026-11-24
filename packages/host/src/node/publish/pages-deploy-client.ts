@@ -16,16 +16,16 @@ import { DEFAULT_DEPLOY_TIMEOUT_MS } from "../../electron-main/cloudflare-pages"
 
 /**
  * Backend-side `PagesDeployer`: sends a deploy request over the forked-process IPC channel to
- * electron-main, which owns the Cloudflare token and runs Wrangler. Mirrors
+ * electron-main, which owns the Cloudflare token and uploads to Cloudflare Pages. Mirrors
  * `IpcCredentialsFetchClient` (request ids, per-request timers, dispose).
  */
 
-/** Slightly above electron-main's Wrangler timeout so its own TIMEOUT result wins. */
+/** Slightly above electron-main's upload timeout so its own TIMEOUT result wins. */
 const IPC_GRACE_MS = 15_000;
 
 export interface IpcPagesDeployerOptions {
   endpoint?: PagesDeployIpcEndpoint;
-  /** Overall client timeout; defaults to the Wrangler timeout plus a grace period. */
+  /** Overall client timeout; defaults to the upload timeout plus a grace period. */
   defaultTimeoutMs?: number;
 }
 

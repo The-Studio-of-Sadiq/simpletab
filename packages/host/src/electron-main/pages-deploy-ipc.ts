@@ -1,19 +1,14 @@
-import { existsSync, readFileSync } from "node:fs";
-import path from "node:path";
 import {
   PAGES_DEPLOY_IPC_CHANNEL,
   type PagesDeployRequest,
   type PagesDeployResult,
 } from "../common/pages-deploy";
-import {
-  deployToPages,
-  resolveWranglerCliPath,
-  type RunProcess,
-} from "./cloudflare-pages";
+import { deployToPages, type PagesFetch } from "./cloudflare-pages";
 
 /**
  * electron-main side of the publish upload bridge. The backend asks for a directory it has already
- * built; electron-main reads the `cdnToken` from the credentials vault, runs Wrangler, and replies
+ * built; electron-main reads the `cdnToken` from the credentials vault, uploads the directory through
+ * Cloudflare's Pages API, and replies
  * with a scrubbed result. Only one deploy runs at a time (design section 10: publishes are batched).
  */
 
@@ -58,7 +53,6 @@ export function isPagesDeployRequest(value: unknown): value is PagesDeployReques
 
 const DEPLOY_ERROR_KINDS: ReadonlySet<string> = new Set([
   "NO_TOKEN",
-  "WRANGLER_MISSING",
   "DEPLOY_FAILED",
   "TIMEOUT",
 ]);
@@ -98,21 +92,15 @@ export function isPagesDeployIpcResponse(value: unknown): value is PagesDeployIp
   );
 }
 
-export interface CredentialDecryptor {
-  getStorageDir(): string;
-  isEncryptionAvailable(): boolean;
-  decryptString(encrypted: Buffer): string;
-}
-
 export interface PagesDeployIpcHandlerOptions {
   getToken(): Promise<string | undefined>;
-  /** Directory that contains `wrangler/cli.json` (usually `<app>/resources`). */
-  resourcesDir: string;
-  /** Test/embedding override; defaults to `resolveWranglerCliPath(resourcesDir)`. */
-  wranglerCliPath?: string;
-  runProcess?: RunProcess;
+  /** Electron's `net.fetch` in the app (system proxy settings); a fake in tests. */
+  fetchImpl?: PagesFetch;
+  /** Test override of the Cloudflare API base URL. */
+  apiBase?: string;
   timeoutMs?: number;
   now?: () => number;
+  sleep?: (ms: number) => Promise<void>;
 }
 
 function reply(child: PagesDeployIpcEndpoint, message: PagesDeployIpcResponse): void {
@@ -154,12 +142,11 @@ export function attachPagesDeployIpcHandler(
     void (async () => {
       let result: PagesDeployResult;
       try {
-        const wranglerCliPath =
-          options.wranglerCliPath ?? resolveWranglerCliPath(options.resourcesDir);
         result = await deployToPages(req, {
           getToken: options.getToken,
-          wranglerCliPath,
-          ...(options.runProcess !== undefined ? { runProcess: options.runProcess } : {}),
+          ...(options.fetchImpl !== undefined ? { fetchImpl: options.fetchImpl } : {}),
+          ...(options.apiBase !== undefined ? { apiBase: options.apiBase } : {}),
+          ...(options.sleep !== undefined ? { sleep: options.sleep } : {}),
           ...(options.timeoutMs !== undefined ? { timeoutMs: options.timeoutMs } : {}),
           ...(options.now !== undefined ? { now: options.now } : {}),
         });

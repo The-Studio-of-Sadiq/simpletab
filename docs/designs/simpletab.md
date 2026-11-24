@@ -1,7 +1,7 @@
 # SimpleTab
 
 *   **Author:** Golam Kuadir Khan Prince
-*   **Status:** Approved (revision 3, approved by the author on 2026-11-21; amendment 1 on 2026-11-23 adds the permanent GitHub archive, section 10.1; amendment 2 on 2026-11-23 adds per-round ballot deadlines, section 8.1; amendment 3 on 2026-11-23 makes every online feature optional and non-blocking, section 1.1; amendment 4 on 2026-11-23 adds the 1000-team benchmark level, QR-only ballots and bubble-sheet ballots, sections 8.2 and 8.3; amendment 5 on 2026-11-24 splits the R2 archive into small parts to fit the free plan's 10 ms CPU limit, adds the inbox `scanned` position, and raises the default request share, sections 7, 7.1 and 13)
+*   **Status:** Approved (revision 3, approved by the author on 2026-11-21; amendment 1 on 2026-11-23 adds the permanent GitHub archive, section 10.1; amendment 2 on 2026-11-23 adds per-round ballot deadlines, section 8.1; amendment 3 on 2026-11-23 makes every online feature optional and non-blocking, section 1.1; amendment 4 on 2026-11-23 adds the 1000-team benchmark level, QR-only ballots and bubble-sheet ballots, sections 8.2 and 8.3; amendment 5 on 2026-11-24 splits the R2 archive into small parts to fit the free plan's 10 ms CPU limit, adds the inbox `scanned` position, and raises the default request share, sections 7, 7.1 and 13; amendment 6 on 2026-11-25 replaces the bundled Wrangler with Cloudflare's Pages upload API, section 10)
 *   **Date:** 2026-11-23
 *   **Predecessors:** [concepts_brief.md](concepts_brief.md), [review_report.md](review_report.md) (concept review), [design_review_report.md](design_review_report.md) (design review)
 
@@ -640,7 +640,7 @@ credentials.clear(name: CredentialName): void
 credentials.test(name: CredentialName): { ok: boolean; error?: string }
 credentials.fetch(name: "tournamentKey", req: { method, path, headers, body? })
     : { status: number; headers: Record<string,string>; body: string }   // electron-main adds the secret header and makes the HTTPS request itself
-credentials.runPublish(name: "cdnToken", args: PublishArgs): { ok: boolean; log: string }  // electron-main runs Wrangler with the token in its environment
+credentials.runPublish(name: "cdnToken", args: PublishArgs): { ok: boolean; log: string }  // electron-main uploads through Cloudflare's Pages API with the token (amendment 6)
 credentials.sendMail(name: "smtp", msg: MailBatch): { sent: number; failed: { to: string; error: string }[] }
 credentials.archiveToGitHub(name: "githubToken", args: ArchiveArgs): { ok: boolean; commitSha?: string; pagesUrl?: string; error?: string }  // section 10.1
 CredentialName = "tournamentKey" | "cdnToken" | "smtp" | "ownWorkerToken" | "githubToken"
@@ -658,7 +658,7 @@ Secret values never reach the backend, the frontend or any log.
    - the pinned `simpletab-public` assets;
    - `motions/`, the bundle files in `rounds/`, and the form definitions in `forms/`;
    - `manifest.json`, holding the schema, publish time, head hash and public chain.
-2. **Upload.** electron-main runs Wrangler 4.165.0 (`wrangler pages deploy`), bundled as a JavaScript package. It runs with Electron's own Node (`ELECTRON_RUN_AS_NODE=1`), so no separate Node install is needed. It uses the tournament's own Cloudflare API token, scoped to "Pages: Edit" on that account, passed in Wrangler's environment. The M4 checkpoint runs this on the reference laptop. Cloudflare Pages is the only CDN in the first release; GitHub Pages is a future option (its project sites live under a path, which the link format does not carry).
+2. **Upload (amendment 6).** electron-main uploads the built directory through Cloudflare's Pages Direct Upload API with `fetch`, the same steps `wrangler pages deploy` takes: an upload token, `check-missing`, `upload` of only the missing files (batches of at most 40 MiB and 1,000 files), `upsert-hashes`, then the deployment with a manifest of every file. Asset keys are Wrangler's (the first 32 hex characters of BLAKE3 of the base64 contents plus the extension), computed with `@noble/hashes`. Bundling Wrangler was dropped: its CLI needs the workerd and esbuild native binaries even for a static upload, about 220 MB. It uses the tournament's own Cloudflare API token, scoped to "Pages: Edit" on that account; the token never leaves electron-main and is scrubbed from every error. The M4 checkpoint runs this on the reference laptop. Cloudflare Pages is the only CDN in the first release; GitHub Pages is a future option (its project sites live under a path, which the link format does not carry).
 3. **Confirm.** The host sends the head to the service, then confirms the publish by fetching `manifest.json` from the CDN.
 
 Publishes are batched to at most one every 30 s.
@@ -975,7 +975,7 @@ Every milestone ends with its checkpoint commands passing on CI and on the refer
 | Translation | `intl-messageformat` 12.2.0 |
 | Pairing words | the BIP39 English word list, bundled as JSON (MIT), with no runtime package |
 | Certificates | `@peculiar/x509` 3.1.0 (self-signed P-256 certificates for pairing) |
-| Cloudflare Pages publishing | `wrangler` 4.165.0, bundled and run as a child process |
+| Cloudflare Pages publishing | Cloudflare's Pages Direct Upload API over `fetch` from electron-main; `@noble/hashes` 2.4.0 for BLAKE3 asset keys (amendment 6) |
 | Updates and installer | `electron-updater` 6.8.11; `electron-builder` 26.18.0 |
 | UI | `react` 19.3.1, `react-dom` 19.3.1 |
 | Service | `wrangler` 4.165.0; `@cloudflare/workers-types` 5.20261119.1; `@cloudflare/vitest-pool-workers` 0.23.0 for tests (it uses the same workerd runtime as the pinned Wrangler) |
@@ -1025,7 +1025,7 @@ TypeScript keeps CrabbyTab's settings: `strict` on and `noUncheckedIndexedAccess
 | 34 | `packages/cli/**` | M6 | Create | `simpletab pair | status | show <area> | op <type> --json | proposals list|accept|reject` (accept and reject need a human role), plus a README for AI agents. |
 | 35 | `packages/app/package.json`, `electron-builder.yml`, `src-gen` config | M1 (plugins at M2) | Create | Theia app with the packages in section 11; `theiaPlugins` lists only `vscode.git` and `vscode.git-base` at M2. Branding: SimpleTab, `app.simpletab.desktop`. NSIS, unsigned, publishing to GitHub Releases. `postinstall`: `electron-rebuild -f -w better-sqlite3`. |
 | 36 | `packages/app/resources/public-site/` + `scripts/fetch-public-site.mjs` | M1 (stub) / M4 | Create | M1–M3: a stub site, "Public site not built yet". M4: downloads the pinned `simpletab-public` release zip and checks its SHA-256. |
-| 37 | `packages/app/resources/wrangler/` + `scripts/fetch-wrangler.mjs` | M4 | Create | The bundled Wrangler 4.165.0. |
+| 37 | `packages/host/src/electron-main/cloudflare-pages.ts` | M4 | Create | Pages Direct Upload over `fetch` (amendment 6; replaces the bundled Wrangler). |
 | 38 | `tools/bench/{generate-wudc.ts,bench.ts}` | M1 | Create | A seeded generator with two sizes: `--size wudc` (400 teams, 500 adjudicators, 100 rooms) and `--size xl` (1000 teams, 1,250 adjudicators, 250 rooms). For `wudc` the benchmark fails if any Goal 2 target is missed. |
 | 38a | `packages/host/src/node/omr/{reader,align,bubbles,qr,folder-watch,review-queue}.ts`, `packages/host/src/node/omr/fixtures/**`, tests | M11 | Create | Section 8.3: worker-thread reader (`@techstark/opencv-js` 4.5.2, `jsqr`), the watched folder (scanner output, PDF pages split with `pdf-lib` 1.17.1), and the review queue. `npm run omr:accuracy` runs the fixture set. |
 | 38b | `packages/core/src/omr/{sheet-layout,sheet-id}.ts` + tests; `packages/tab-ui/src/browser/views/{omr-print,omr-review}.tsx` | M11 | Create | Sheet layout from tournament settings (score range, format, speakers); signed sheet IDs; printing to PDF; the review screen with the straightened photo and highlighted rows. |
