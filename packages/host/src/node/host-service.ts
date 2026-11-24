@@ -76,6 +76,19 @@ export class HostServiceImpl
   private lastFullCheck: HostIntegrityCheckResult | undefined;
   private smokeHandled = false;
   private smokeTempDir: string | null = null;
+  private demoHandled = false;
+  private demoTempDir: string | null = null;
+  private prewarmWorkers = false;
+
+  /** Start each opened tournament's long-op worker immediately (the desktop app does this). */
+  enableWorkerPrewarm(): void {
+    this.prewarmWorkers = true;
+  }
+  private clock: (() => Date) | undefined;
+
+  setClock(clock: (() => Date) | undefined): void {
+    this.clock = clock;
+  }
 
   setClient(client: HostServiceClient | undefined): void {
     this.client = client;
@@ -98,6 +111,10 @@ export class HostServiceImpl
   }
 
   async status(): Promise<HostStatus> {
+    if (process.env.SIMPLETAB_DEMO === "1" && !this.demoHandled) {
+      this.demoHandled = true;
+      await this.runDemoSequence();
+    }
     if (process.env.SIMPLETAB_SMOKE === "1" && !this.smokeHandled) {
       this.smokeHandled = true;
       await this.runSmokeSequence();
@@ -108,12 +125,11 @@ export class HostServiceImpl
   async openTournament(dbPath: string): Promise<HostStatus> {
     const resolvedPath = path.resolve(dbPath);
     await this.closeCurrentEngine();
-    const nextEngine = HostEngine.open(
-      resolvedPath,
-      this.longOpWorkerDelayMs !== undefined
-        ? { longOpWorkerDelayMs: this.longOpWorkerDelayMs }
-        : {},
-    );
+    const nextEngine = HostEngine.open(resolvedPath, {
+      ...(this.longOpWorkerDelayMs !== undefined ? { longOpWorkerDelayMs: this.longOpWorkerDelayMs } : {}),
+      ...(this.clock !== undefined ? { clock: this.clock } : {}),
+      prewarmWorkers: this.prewarmWorkers,
+    });
     try {
       await nextEngine.runFastCheck();
       this.attachEngine(nextEngine);
@@ -206,7 +222,7 @@ export class HostServiceImpl
       ...defaultPreferences(preset.format),
       ...rulesPresetPreferences(preset),
     };
-    const now = new Date().toISOString();
+    const now = (this.clock !== undefined ? this.clock() : new Date()).toISOString();
     const tournamentId = `t-${slug}`;
     const tournament: Tournament = {
       id: tournamentId,
@@ -228,6 +244,8 @@ export class HostServiceImpl
       ...(this.longOpWorkerDelayMs !== undefined
         ? { longOpWorkerDelayMs: this.longOpWorkerDelayMs }
         : {}),
+      ...(this.clock !== undefined ? { clock: this.clock } : {}),
+      prewarmWorkers: this.prewarmWorkers,
     });
     try {
       const defaultBreakSize = preferences.teamsInDebate === 4 ? 8 : 4;
@@ -242,7 +260,10 @@ export class HostServiceImpl
         firstPrelimDrawType: preset.firstPrelimDrawType,
       });
 
-      for (const round of rounds) {
+      // buildRounds stamps rounds with the wall clock; use the service's clock so a tournament
+      // created with an injected clock (tests, the scripted demo) is fully reproducible.
+      for (const builtRound of rounds) {
+        const round = { ...builtRound, createdAt: now };
         const res = await nextEngine.submit(
           { type: "round.create", payload: { round } },
           HOST_OWNER_ACTOR,
@@ -478,6 +499,27 @@ export class HostServiceImpl
       rmSync(this.smokeTempDir, { recursive: true, force: true });
       this.smokeTempDir = null;
     }
+    if (this.demoTempDir !== null) {
+      rmSync(this.demoTempDir, { recursive: true, force: true });
+      this.demoTempDir = null;
+    }
+  }
+
+  private async runDemoSequence(): Promise<void> {
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "simpletab-demo-"));
+    this.demoTempDir = tempDir;
+    const demoModule = await import("./demo/scripted-demo");
+    const result = await demoModule.runScriptedDemo({
+      teamCount: 24,
+      format: "bp",
+      presetId: "bp",
+      slug: "bp-electron-demo",
+      name: "BP Electron Demo",
+      seed: 4242,
+      directory: tempDir,
+      clock: new Date("2026-11-24T09:00:00.000Z"),
+    });
+    console.log(`SIMPLETAB_DEMO_OK rounds=${result.rounds} head=${result.head}`);
   }
 
   private async runSmokeSequence(): Promise<void> {

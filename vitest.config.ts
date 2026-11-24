@@ -61,6 +61,38 @@ export default defineConfig({
           },
         },
       },
+      {
+          test: {
+            name: "bench",
+            root: ".",
+            include: ["tools/bench/**/*.test.ts"],
+            globals: true,
+            environment: "node",
+            testTimeout: 600_000,
+          },
+          resolve: {
+            alias: {
+              "@": path.resolve(__dirname, "packages/core/src"),
+              "@simpletab/core": path.resolve(__dirname, "packages/core/src"),
+            },
+          },
+        },
+        {
+          test: {
+            name: "e2e",
+            root: ".",
+            include: ["tools/e2e/**/*.test.ts"],
+            globals: true,
+            environment: "node",
+            testTimeout: 300_000,
+          },
+          resolve: {
+            alias: {
+              "@": path.resolve(__dirname, "packages/core/src"),
+              "@simpletab/core": path.resolve(__dirname, "packages/core/src"),
+            },
+          },
+        },
     ],
   },
 });

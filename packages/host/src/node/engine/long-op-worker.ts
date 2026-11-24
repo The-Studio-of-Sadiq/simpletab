@@ -31,6 +31,9 @@ function spinWait(ms: number): void {
 
 if (parentPort !== null) {
   const port = parentPort;
+  // Tells the pool this worker has finished loading (see LongOpWorkerPool.warm). The message has no
+  // request id, so task listeners ignore it.
+  port.postMessage({ ready: true });
   port.on("message", (message: LongOpWorkerRequest) => {
     try {
       if (message.debugDelayMs !== undefined && message.debugDelayMs > 0) {

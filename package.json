@@ -12,13 +12,16 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "test": "vitest run",
+    "test": "vitest run --project core --project tabbycat-diff --project host --project tab-ui --project e2e",
     "typecheck": "tsc -p packages/core/tsconfig.json --noEmit && tsc -p packages/host/tsconfig.json --noEmit && tsc -p packages/tab-ui/tsconfig.json --noEmit",
     "lint": "eslint . && npm run typecheck",
     "port-check": "node tools/port-check.mjs",
     "i18n:check": "node packages/tab-ui/scripts/i18n-check.mjs",
     "port-from-crabbytab": "node tools/port-from-crabbytab.mjs",
     "tabbycat-diff": "vitest run --project tabbycat-diff",
+    "bench": "vitest run --project bench tools/bench/bench.test.ts -t wudc",
+    "bench:xl": "vitest run --project bench tools/bench/bench.test.ts -t xl",
+    "e2e:demo": "vitest run --project e2e tools/e2e/demo.test.ts",
     "determinism": "vitest run --project core packages/core/test/determinism",
     "determinism:update": "node tools/update-draw-hashes.mjs"
   },

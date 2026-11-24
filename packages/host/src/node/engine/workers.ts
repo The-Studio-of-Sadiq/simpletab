@@ -63,6 +63,33 @@ export class LongOpWorkerPool {
     this.debugDelayMs = options.debugDelayMs ?? 0;
   }
 
+  /**
+   * Starts one idle worker ahead of time and resolves once it has loaded. A cold worker loads all
+   * of core first (and, when running from TypeScript sources, compiles it), which takes seconds;
+   * warming at startup keeps that cost off the first draw or allocation of the day.
+   */
+  warm(): Promise<void> {
+    if (this.closed || this.slots.size > 0) return Promise.resolve();
+    const worker = new Worker(WORKER_BOOTSTRAP_URL);
+    const slot: PoolSlot = { worker, busy: false };
+    this.slots.add(slot);
+    return new Promise<void>((resolve) => {
+      const done = (): void => {
+        worker.off("message", onMessage);
+        worker.off("error", done);
+        worker.off("exit", done);
+        resolve();
+      };
+      const onMessage = (message: unknown): void => {
+        if (typeof message === "object" && message !== null && (message as { ready?: unknown }).ready === true) done();
+      };
+      worker.on("message", onMessage);
+      // A worker that fails to start is reported when a task runs on it; warming just stops waiting.
+      worker.once("error", done);
+      worker.once("exit", done);
+    });
+  }
+
   /** Submits `applyOp` work to a worker thread and returns a cancellable task handle. */
   run<P>(
     state: TournamentState,

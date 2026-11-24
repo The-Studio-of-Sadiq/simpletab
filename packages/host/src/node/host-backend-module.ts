@@ -12,7 +12,14 @@ import {
 import { HostServiceImpl } from "./host-service";
 
 export default new ContainerModule((bind) => {
-  bind(HostServiceImpl).toSelf().inSingletonScope();
+  bind(HostServiceImpl)
+    .toSelf()
+    .inSingletonScope()
+    // The running app warms its long-op worker when a tournament opens; tests leave this off.
+    .onActivation((_ctx, service) => {
+      service.enableWorkerPrewarm();
+      return service;
+    });
   bind(HostService).toService(HostServiceImpl);
   bind(BackendApplicationContribution).toService(HostServiceImpl);
   bind(ConnectionHandler)

@@ -12,6 +12,7 @@ import { CredentialsVault } from "./credentials-store";
 @injectable()
 export class ElectronCredentialsService implements CredentialsService {
   private smokeQuitScheduled = false;
+  private demoQuitScheduled = false;
   private readonly vault = new CredentialsVault({
     getStorageDir: () => path.join(app.getPath("userData"), "credentials"),
     isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
@@ -31,6 +32,16 @@ export class ElectronCredentialsService implements CredentialsService {
         }, 3000);
         forceExitTimer.unref();
       }, 2000);
+    }
+    if (process.env.SIMPLETAB_DEMO === "1" && !this.demoQuitScheduled) {
+      this.demoQuitScheduled = true;
+      setTimeout(() => {
+        app.quit();
+        const forceExitTimer = setTimeout(() => {
+          app.exit(0);
+        }, 5000);
+        forceExitTimer.unref();
+      }, 5000);
     }
 
     return entries;

@@ -58,6 +58,11 @@ export interface HostEngineOptions {
   workerPoolSize?: number;
   /** Optional synchronous worker-thread delay in ms for deterministic tests. */
   longOpWorkerDelayMs?: number;
+  /**
+   * Start a long-op worker as soon as the engine opens, so the first draw or allocation does not
+   * pay the worker's start-up cost. The desktop app turns this on; tests leave it off.
+   */
+  prewarmWorkers?: boolean;
 }
 
 export interface CommittedEvent {
@@ -259,6 +264,7 @@ export class HostEngine {
   private readonly snapshotEvery: number;
   private readonly lockManager = new LockManager();
   private readonly workerPool: LongOpWorkerPool;
+  private readonly workersWarm: Promise<void>;
   private cachedState: TournamentState | null;
   private _integrity: IntegrityCheckResult;
   private queue: Promise<void> = Promise.resolve();
@@ -281,6 +287,7 @@ export class HostEngine {
         ? { debugDelayMs: options.longOpWorkerDelayMs }
         : {}),
     });
+    this.workersWarm = options.prewarmWorkers === true ? this.workerPool.warm() : Promise.resolve();
 
     const existing = loadState(database);
     if (existing === null && options.initialState !== undefined) {
@@ -500,6 +507,11 @@ export class HostEngine {
         blockingSeqs: check.ok ? [] : check.blockingSeqs,
       };
     });
+  }
+
+  /** Resolves once the worker started by `prewarmWorkers` has loaded (immediately when off). */
+  workersReady(): Promise<void> {
+    return this.workersWarm;
   }
 
   async close(): Promise<void> {
