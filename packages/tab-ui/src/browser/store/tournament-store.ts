@@ -5,6 +5,8 @@ import type {
   ArchiveStatus,
   CreateTournamentParams,
   DevicesStatus,
+  JoinHostParams,
+  JoinProgress,
   CreateTournamentResult,
   HostCancelLongResult,
   HostIntegrityCheckResult,
@@ -19,7 +21,7 @@ import type {
   SyncStatus,
 } from "@simpletab/host/lib/common/host-protocol";
 import { HostService } from "@simpletab/host/lib/common/host-protocol";
-import type { IssuedPairingCode } from "@simpletab/host/lib/common/collab-protocol";
+import type { IssuedPairingCode, PresenceInfo } from "@simpletab/host/lib/common/collab-protocol";
 import type { Disposable } from "@theia/core/lib/common";
 import { inject, injectable, optional } from "@theia/core/shared/inversify";
 import { HostServiceClientDispatcher } from "./host-service-client";
@@ -268,6 +270,37 @@ export class TournamentStore {
 
   async getPublishStatus(): Promise<PublishStatus> {
     return this.hostService.getPublishStatus();
+  }
+
+  async startJoin(params: JoinHostParams): Promise<JoinProgress> {
+    return this.hostService.startJoin(params);
+  }
+
+  async getJoinProgress(): Promise<JoinProgress> {
+    const progress = await this.hostService.getJoinProgress();
+    if (progress.state === "joined") {
+      await this.refresh();
+    }
+    return progress;
+  }
+
+  async leaveHost(): Promise<void> {
+    await this.hostService.leaveHost();
+    await this.refresh();
+  }
+
+  async dismissRejectedEdits(): Promise<void> {
+    await this.hostService.dismissRejectedEdits();
+    await this.refresh();
+  }
+
+  /** Best effort: presence never blocks or fails a screen. */
+  async setPresence(info: PresenceInfo): Promise<void> {
+    try {
+      await this.hostService.setPresence(info);
+    } catch {
+      // A closed tournament or a lost connection simply shows no presence.
+    }
   }
 
   async getDevicesStatus(): Promise<DevicesStatus> {

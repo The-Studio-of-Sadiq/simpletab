@@ -9,6 +9,7 @@ import { Message } from "@theia/core/lib/browser";
 import { ReactWidget } from "@theia/core/lib/browser/widgets/react-widget";
 import { inject, injectable, postConstruct } from "@theia/core/shared/inversify";
 import * as React from "@theia/core/shared/react";
+import { DeviceBanner } from "./components/device-banner";
 import { StatusView } from "./components/status-view";
 import { onLocaleChange, t } from "./i18n";
 import {
@@ -77,7 +78,16 @@ export class SimpleTabStatusWidget extends ReactWidget {
 
   protected override render(): React.ReactNode {
     const snapshot = this.store.getSnapshot();
+    const device = snapshot.status.device;
     return (
+      <>
+        {device !== undefined ? (
+          <DeviceBanner
+            device={device}
+            onLeave={() => this.store.leaveHost()}
+            onDismissRejected={() => this.store.dismissRejectedEdits()}
+          />
+        ) : null}
       <StatusView
         status={snapshot.status}
         state={snapshot.state}
@@ -92,6 +102,7 @@ export class SimpleTabStatusWidget extends ReactWidget {
           );
         }}
       />
+      </>
     );
   }
 }

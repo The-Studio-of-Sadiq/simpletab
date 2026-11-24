@@ -37,6 +37,8 @@ import {
   type BallotCollectionMode,
   type CreateDemoResult,
   type DevicesStatus,
+  type JoinHostParams,
+  type JoinProgress,
   type CreateTournamentParams,
   type CreateTournamentResult,
   type HostCancelLongResult,
@@ -58,8 +60,17 @@ import { seedDemoTournament } from "./demo-fixture";
 import { HostEngine, type HostApplyResult, type UndoResult } from "./engine/engine";
 import type { DetailedActiveLock } from "./engine/locks";
 import { readHostNumber } from "./handover/format";
-import type { IssuedPairingCode } from "../common/collab-protocol";
+import type {
+  CollabRequestMethod,
+  CollabStateView,
+  IssuedPairingCode,
+  PresenceInfo,
+} from "../common/collab-protocol";
 import { HostCollab } from "./devices/host-collab";
+import { DeviceMode } from "./device/device-mode";
+import { ProjectionStream } from "./collab/projection-stream";
+import { restoreHiddenFields } from "./collab/hidden-fields";
+import { buildProjectedStateFor } from "./state/projected-state";
 import { Archiver } from "./publish/archiver";
 import { IpcGitHubArchiver } from "./publish/github-archive-client";
 import { IpcPagesDeployer } from "./publish/pages-deploy-client";
@@ -191,6 +202,9 @@ export class HostServiceImpl
   private pagesDeployer: IpcPagesDeployer | null = null;
   private archiver: Archiver | null = null;
   private collab: HostCollab | null = null;
+  private deviceMode: DeviceMode | null = null;
+  private stream: ProjectionStream | null = null;
+  private collabListen: { port: number; host?: string } | undefined;
   private githubArchiver: IpcGitHubArchiver | null = null;
   private publishInFlight: Promise<void> | null = null;
   private publishQueued = false;
@@ -221,6 +235,94 @@ export class HostServiceImpl
     this.localRole = role;
   }
 
+  /** Where the device server listens when no port is given (tests use 127.0.0.1 and port 0). */
+  setCollabListen(listen: { port: number; host?: string } | undefined): void {
+    this.collabListen = listen;
+  }
+
+  /** Replaces the device-mode controller (tests point it at a temporary pairing folder). */
+  setDeviceMode(deviceMode: DeviceMode | null): void {
+    this.deviceMode?.dispose();
+    this.deviceMode = deviceMode;
+  }
+
+  /** Reconnects to the host this laptop is paired with, if any (called once at start-up). */
+  resumeDeviceMode(): void {
+    try {
+      this.getDeviceMode().resume();
+    } catch (error) {
+      console.warn("SimpleTab: could not resume device mode", error);
+    }
+  }
+
+  private getDeviceMode(): DeviceMode {
+    if (this.deviceMode === null) {
+      this.deviceMode = new DeviceMode({ onChange: () => this.onDeviceChanged() });
+    }
+    return this.deviceMode;
+  }
+
+  /** The host connection when this laptop runs as a staff device. */
+  private remote() {
+    return this.deviceMode?.active() ?? null;
+  }
+
+  private onDeviceChanged(): void {
+    const remote = this.remote();
+    this.emitStateChanged({
+      seq: remote?.getState()?.seq ?? 0,
+      type: "device.updated",
+      writes: [],
+    });
+    if (remote !== null) {
+      this.emitLocksChanged(remote.getLocks());
+    }
+  }
+
+  /** Host-only actions are refused on a staff device, in words. */
+  private assertNotDevice(action: string): void {
+    const remote = this.remote();
+    if (remote !== null) {
+      throw new Error(
+        `This laptop is joined to the host at ${remote.status().hostAddress} as a device, so it cannot ${action}. Leave the host first.`,
+      );
+    }
+  }
+
+  async startJoin(params: JoinHostParams): Promise<JoinProgress> {
+    if (this.engine !== null) {
+      throw new Error("Close the open tournament before joining another host as a device.");
+    }
+    return this.getDeviceMode().startJoin(params);
+  }
+
+  async getJoinProgress(): Promise<JoinProgress> {
+    return this.deviceMode?.joinProgress() ?? { state: "idle" };
+  }
+
+  async leaveHost(): Promise<void> {
+    this.deviceMode?.leave();
+    this.emitStateChanged({ seq: 0, type: "device.left", writes: [] });
+  }
+
+  async dismissRejectedEdits(): Promise<void> {
+    this.remote()?.dismissRejected();
+  }
+
+  async setPresence(info: PresenceInfo): Promise<void> {
+    const clean: PresenceInfo = {
+      ...(typeof info.view === "string" ? { view: info.view.slice(0, 100) } : {}),
+      ...(typeof info.roundId === "string" ? { roundId: info.roundId.slice(0, 100) } : {}),
+      ...(typeof info.debateId === "string" ? { debateId: info.debateId.slice(0, 100) } : {}),
+    };
+    const remote = this.remote();
+    if (remote !== null) {
+      remote.setPresence(clean);
+      return;
+    }
+    this.stream?.setHostPresence({ ...clean, name: "Host" });
+  }
+
   setLongOpWorkerDelayMs(delayMs: number | undefined): void {
     this.longOpWorkerDelayMs = delayMs;
   }
@@ -242,6 +344,7 @@ export class HostServiceImpl
   }
 
   async openTournament(dbPath: string): Promise<HostStatus> {
+    this.assertNotDevice("open a tournament of its own");
     const resolvedPath = path.resolve(dbPath);
     await this.closeCurrentEngine();
     const nextEngine = HostEngine.open(resolvedPath, {
@@ -265,6 +368,7 @@ export class HostServiceImpl
   }
 
   async createDemoTournament(dir: string): Promise<CreateDemoResult> {
+    this.assertNotDevice("create a tournament of its own");
     const targetDir =
       dir.trim().length > 0
         ? path.resolve(dir)
@@ -293,6 +397,7 @@ export class HostServiceImpl
   async createTournament(
     params: CreateTournamentParams,
   ): Promise<CreateTournamentResult> {
+    this.assertNotDevice("create a tournament of its own");
     const trimmedName = params.name.trim();
     if (trimmedName.length === 0) {
       throw new Error("Tournament name must not be empty.");
@@ -451,6 +556,10 @@ export class HostServiceImpl
   }
 
   async submit(request: OpRequest): Promise<SubmitResult> {
+    const remote = this.remote();
+    if (remote !== null) {
+      return remote.submit(request);
+    }
     if (this.engine === null) {
       return {
         ok: false,
@@ -463,6 +572,10 @@ export class HostServiceImpl
   }
 
   async undo(seq: number): Promise<SubmitResult> {
+    const remote = this.remote();
+    if (remote !== null) {
+      return remote.undo(seq);
+    }
     if (this.engine === null) {
       return {
         ok: false,
@@ -475,6 +588,10 @@ export class HostServiceImpl
   }
 
   async getLocks(): Promise<HostLockInfo[]> {
+    const remote = this.remote();
+    if (remote !== null) {
+      return remote.getLocks();
+    }
     if (this.engine === null) {
       return [];
     }
@@ -482,6 +599,10 @@ export class HostServiceImpl
   }
 
   async cancelLong(lockId: string): Promise<HostCancelLongResult> {
+    const remote = this.remote();
+    if (remote !== null) {
+      return remote.cancelLong(lockId);
+    }
     if (this.engine === null) {
       return {
         ok: false,
@@ -502,6 +623,10 @@ export class HostServiceImpl
   }
 
   async getState(): Promise<ProjectedState | null> {
+    const remote = this.remote();
+    if (remote !== null) {
+      return remote.getState();
+    }
     return this.buildProjectedState();
   }
 
@@ -552,6 +677,7 @@ export class HostServiceImpl
   async updateOnlineSettings(
     patch: Partial<OnlineSettings>,
   ): Promise<OnlineSettings> {
+    this.assertNotDevice("change the host's online settings");
     if (this.engine === null) {
       throw new Error("No tournament is currently open.");
     }
@@ -719,6 +845,7 @@ export class HostServiceImpl
   }
 
   async publishNow(): Promise<PublishStatus> {
+    this.assertNotDevice("publish; only the host publishes");
     if (this.publisher === null) {
       return {
         state: "not_configured",
@@ -739,6 +866,7 @@ export class HostServiceImpl
   }
 
   private requireCollab(): HostCollab {
+    this.assertNotDevice("manage devices; only the host pairs devices");
     if (this.collab === null) {
       throw new Error("No tournament is currently open.");
     }
@@ -758,7 +886,7 @@ export class HostServiceImpl
       if (port !== undefined && (!Number.isInteger(port) || port < 1024 || port > 65535)) {
         throw new Error("Choose a port between 1024 and 65535.");
       }
-      await collab.start(port);
+      await collab.start(port ?? this.collabListen?.port, port === undefined ? this.collabListen?.host : undefined);
     } else {
       await collab.stop();
     }
@@ -786,6 +914,7 @@ export class HostServiceImpl
   }
 
   async archiveNow(): Promise<ArchiveStatus> {
+    this.assertNotDevice("archive; only the host archives");
     if (this.archiver === null) {
       return { state: "not_configured", reason: "No tournament is currently open." };
     }
@@ -800,6 +929,10 @@ export class HostServiceImpl
   }
 
   async getChangelog(afterSeq?: number, limit?: number): Promise<PublicChainItem[]> {
+    const remote = this.remote();
+    if (remote !== null) {
+      return remote.getChangelog(afterSeq, limit);
+    }
     if (this.engine === null) {
       return [];
     }
@@ -814,6 +947,10 @@ export class HostServiceImpl
   }
 
   async getOpUndoInfo(): Promise<OpUndoInfo[]> {
+    const remote = this.remote();
+    if (remote !== null) {
+      return remote.getOpUndoInfo();
+    }
     if (this.engine === null) {
       return [];
     }
@@ -822,6 +959,7 @@ export class HostServiceImpl
 
   async onStop(): Promise<void> {
     await this.closeCurrentEngine();
+    this.deviceMode?.dispose();
     if (this.credentialsFetchClient instanceof IpcCredentialsFetchClient) {
       this.credentialsFetchClient.dispose();
     }
@@ -899,6 +1037,21 @@ export class HostServiceImpl
       },
     });
 
+    const stream = new ProjectionStream({
+      getView: (role) => {
+        const raw = nextEngine.getState();
+        return raw === null
+          ? null
+          : (buildProjectedStateFor(raw, role, nextEngine.head().seq) as unknown as CollabStateView);
+      },
+      getLocks: () => this.mapLocks(nextEngine.detailedLocks()),
+      handleRequest: (method, params, actor) =>
+        this.handleDeviceRequest(nextEngine, method, params, actor),
+      deviceName: (deviceId) =>
+        nextEngine.getState()?.devices.find((device) => device.id === deviceId)?.name ?? deviceId,
+    });
+    this.stream = stream;
+
     this.collab = new HostCollab({
       engine: {
         getState: () => nextEngine.getState(),
@@ -927,6 +1080,9 @@ export class HostServiceImpl
           type: "devices.status_updated",
           writes: [],
         });
+      },
+      onSession: (session) => {
+        stream.addSession(session);
       },
     });
 
@@ -961,6 +1117,7 @@ export class HostServiceImpl
         writes: [...event.writes],
       });
       this.syncScheduler?.handleCommitted(event);
+      this.stream?.notifyCommitted(event.type);
       this.publisher?.handleCommitted(event);
       if (isPublishRelevantOp(event.type)) {
         this.scheduleRoundFilesBuild();
@@ -968,6 +1125,7 @@ export class HostServiceImpl
     });
     this.unsubscribeLocks = nextEngine.onLocksChanged((locks) => {
       this.emitLocksChanged(this.mapLocks(locks));
+      this.stream?.notifyLocksChanged();
     });
   }
 
@@ -1066,6 +1224,10 @@ export class HostServiceImpl
       this.archiver.dispose();
       this.archiver = null;
     }
+    if (this.stream !== null) {
+      this.stream.dispose();
+      this.stream = null;
+    }
     if (this.collab !== null) {
       await this.collab.stop().catch((error: unknown) => {
         console.warn("SimpleTab: stopping the device server failed", error);
@@ -1132,28 +1294,7 @@ export class HostServiceImpl
     if (raw === null) {
       return null;
     }
-    const projected = project(raw, this.localRole);
-    const canEnterLate = hasPermission(this.localRole, "results.enter_late");
-    const canViewIntake =
-      hasPermission(this.localRole, "results.enter") ||
-      hasPermission(this.localRole, "ballots.intake") ||
-      hasPermission(this.localRole, "standings.view");
-    return {
-      ...projected,
-      tournament: projected.tournament as OpTournament,
-      rounds: projected.rounds as OpRound[],
-      ballots: projected.ballots as OpBallotSubmission[],
-      seq: this.engine.head().seq,
-      roleId: this.localRole.id,
-      permissions: [...this.localRole.permissions],
-      ...(canEnterLate
-        ? { lateSubmissions: structuredClone(raw.lateSubmissions ?? []) }
-        : {}),
-      ...(canViewIntake
-        ? { ballotIntake: structuredClone(raw.ballotIntake ?? []) }
-        : {}),
-      versions: { ...raw.versions },
-    };
+    return buildProjectedStateFor(raw, this.localRole, this.engine.head().seq);
   }
 
   private mapLocks(locks: readonly DetailedActiveLock[]): HostLockInfo[] {
@@ -1236,6 +1377,18 @@ export class HostServiceImpl
   }
 
   private buildStatus(): HostStatus {
+    const remote = this.remote();
+    if (remote !== null) {
+      const state = remote.getState();
+      const device = remote.status();
+      return {
+        open: state !== null,
+        ...(state !== null ? { slug: state.tournament.slug, headSeq: state.seq } : {}),
+        locks: remote.getLocks(),
+        queuedOps: device.queued.length,
+        device,
+      };
+    }
     if (this.engine === null) {
       return {
         open: false,
@@ -1267,6 +1420,63 @@ export class HostServiceImpl
       ...(this.syncScheduler !== null
         ? { syncStatus: this.syncScheduler.getSyncStatus() }
         : {}),
+      ...(this.stream !== null && this.stream.sessionCount() > 0
+        ? { presence: this.stream.presence() }
+        : {}),
     };
+  }
+
+  /**
+   * Runs a staff device's request as that device's own actor (design section 4.1): its role's
+   * permissions apply in the engine, and host precedence never does.
+   */
+  private async handleDeviceRequest(
+    engine: HostEngine,
+    method: CollabRequestMethod,
+    params: unknown[],
+    actor: Actor,
+  ): Promise<unknown> {
+    switch (method) {
+      case "submit": {
+        const request = params[0];
+        if (
+          request === null ||
+          typeof request !== "object" ||
+          typeof (request as { type?: unknown }).type !== "string"
+        ) {
+          throw new Error("The change was not in a form the host understands.");
+        }
+        const { forced: _forced, ...op } = request as OpRequest & { forced?: boolean };
+        const current = engine.getState();
+        const safe = current === null ? op : restoreHiddenFields(op, current, actor.role);
+        return this.mapApplyResult(await engine.submit(safe, actor));
+      }
+      case "undo": {
+        const seq = params[0];
+        if (typeof seq !== "number" || !Number.isInteger(seq) || seq < 1) {
+          throw new Error("Undo needs the number of the change to undo.");
+        }
+        return this.mapUndoResult(await engine.undo(seq, actor));
+      }
+      case "cancelLong": {
+        const lockId = params[0];
+        if (typeof lockId !== "string") {
+          throw new Error("Cancelling needs the id of the running task.");
+        }
+        return engine.cancelLong(lockId, actor);
+      }
+      case "getChangelog": {
+        const afterSeq = typeof params[0] === "number" ? params[0] : undefined;
+        const limit = typeof params[1] === "number" ? params[1] : undefined;
+        let items = engine.changelog();
+        if (afterSeq !== undefined) items = items.filter((item) => item.entry.seq > afterSeq);
+        if (limit !== undefined && limit >= 0) items = items.slice(0, limit);
+        return items;
+      }
+      case "getOpUndoInfo":
+        return engine.opUndoInfo();
+      default:
+        throw new Error("The host does not offer that action to devices.");
+    }
   }
 }

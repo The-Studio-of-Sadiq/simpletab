@@ -140,6 +140,11 @@ describe("TournamentStore", () => {
       approveJoin: vi.fn(),
       rejectJoin: vi.fn(),
       removeDevice: vi.fn(),
+      startJoin: vi.fn(),
+      getJoinProgress: vi.fn(async () => ({ state: "idle" as const })),
+      leaveHost: vi.fn(),
+      dismissRejectedEdits: vi.fn(),
+      setPresence: vi.fn(),
     };
 
     const dispatcher = new HostServiceClientDispatcher();
@@ -239,6 +244,11 @@ describe("TournamentStore", () => {
       approveJoin: vi.fn(),
       rejectJoin: vi.fn(),
       removeDevice: vi.fn(),
+      startJoin: vi.fn(),
+      getJoinProgress: vi.fn(async () => ({ state: "idle" as const })),
+      leaveHost: vi.fn(),
+      dismissRejectedEdits: vi.fn(),
+      setPresence: vi.fn(),
     };
 
     const store = new TournamentStore(hostService, undefined, workspaceOpener);
@@ -312,6 +322,11 @@ describe("TournamentStore", () => {
       approveJoin: vi.fn(),
       rejectJoin: vi.fn(),
       removeDevice: vi.fn(),
+      startJoin: vi.fn(),
+      getJoinProgress: vi.fn(async () => ({ state: "idle" as const })),
+      leaveHost: vi.fn(),
+      dismissRejectedEdits: vi.fn(),
+      setPresence: vi.fn(),
     };
 
     const dispatcher = new HostServiceClientDispatcher();

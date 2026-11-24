@@ -2,6 +2,8 @@ import type {
   ConnectedDeviceInfo,
   IssuedPairingCode,
   PendingJoin,
+  PresenceEntry,
+  PresenceInfo,
 } from "./collab-protocol";
 import type { PublicChainItem } from "@simpletab/core/changelog";
 import type {
@@ -189,6 +191,59 @@ export interface DevicesStatus {
   pairableRoles: PairableRole[];
 }
 
+export type DeviceConnectionState =
+  | "connecting"
+  | "connected"
+  | "reconnecting"
+  /** The host removed this device; its copy was deleted. */
+  | "removed";
+
+export interface QueuedEditInfo {
+  id: string;
+  opType: string;
+  queuedAt: string;
+}
+
+export interface RejectedEditInfo extends QueuedEditInfo {
+  /** The host's reasons, in plain language. */
+  errors: string[];
+  at: string;
+}
+
+/** This laptop runs as a staff device of another host (design section 4.1). */
+export interface DeviceModeStatus {
+  connection: DeviceConnectionState;
+  /** This laptop's device id at the host. */
+  deviceId: string;
+  hostAddress: string;
+  deviceName: string;
+  roleId: string;
+  roleName: string;
+  lastConnectedAt?: string;
+  error?: string;
+  /** Edits waiting to be sent, oldest first. */
+  queued: QueuedEditInfo[];
+  /** Edits the host refused after a reconnect. */
+  rejected: RejectedEditInfo[];
+  presence: PresenceEntry[];
+}
+
+export type JoinState = "idle" | "connecting" | "waiting" | "joined" | "failed";
+
+export interface JoinProgress {
+  state: JoinState;
+  /** The six words to compare with the host's screen, once connected. */
+  words?: string[];
+  error?: string;
+}
+
+export interface JoinHostParams {
+  /** "192.168.1.20", "192.168.1.20:47820" or "wss://…". */
+  address: string;
+  code: string;
+  deviceName: string;
+}
+
 export interface HostStatus {
   open: boolean;
   slug?: string;
@@ -203,6 +258,10 @@ export interface HostStatus {
   queuedOps?: number;
   onlineSettings?: OnlineSettings;
   syncStatus?: SyncStatus;
+  /** Present when this laptop is a staff device of another host. */
+  device?: DeviceModeStatus;
+  /** Who is working where (host: its connected devices; device: from the host). */
+  presence?: PresenceEntry[];
 }
 
 export interface CreateDemoResult {
@@ -250,7 +309,9 @@ export type SubmitErrorCode =
   | "OVERRIDDEN_BY_HOST"
   | "LOCKED"
   | "CANCELLED"
-  | "CANNOT_UNDO";
+  | "CANNOT_UNDO"
+  /** A staff device is out of reach of the host: the edit waits on the device (section 4.1). */
+  | "QUEUED";
 
 export interface SubmitSuccessResult {
   ok: true;
@@ -308,6 +369,15 @@ export interface HostService extends RpcServer<HostServiceClient> {
   pullNow(): Promise<SyncStatus>;
   publishNow(): Promise<PublishStatus>;
   getPublishStatus(): Promise<PublishStatus>;
+  /** Device mode (design section 4.1): join another host as a staff device. */
+  startJoin(params: JoinHostParams): Promise<JoinProgress>;
+  getJoinProgress(): Promise<JoinProgress>;
+  /** Leaves the host and deletes this laptop's copy and pairing. */
+  leaveHost(): Promise<void>;
+  /** Clears the list of edits the host refused. */
+  dismissRejectedEdits(): Promise<void>;
+  /** Tells others what this person is looking at (presence chips). */
+  setPresence(info: PresenceInfo): Promise<void>;
   /** Devices page (design section 4). Every call needs `devices.manage`. */
   getDevicesStatus(): Promise<DevicesStatus>;
   setDevicesEnabled(enabled: boolean, port?: number): Promise<DevicesStatus>;

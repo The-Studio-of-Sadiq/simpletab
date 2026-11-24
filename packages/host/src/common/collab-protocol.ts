@@ -174,3 +174,124 @@ export interface ConnectedDeviceInfo {
   connectedAt: string;
   remoteAddress?: string;
 }
+
+// ---- step b: live data, requests, locks and presence ---------------------------------------------
+//
+// After `welcome` / `pair_result ok`, the host sends one `snapshot` of the device's role view, then a
+// `delta` after each batch of commits (at most every COLLAB_DELTA_BATCH_MS). Deltas are computed by
+// diffing the role's previous and next view (`diffProjectedState`), never by filtering single ops,
+// because a release can reveal records it did not write. Every delta carries the seq it starts from;
+// a device that sees a gap asks for a fresh snapshot with `resync`.
+
+/** Commits are batched into one delta per role at most this often. */
+export const COLLAB_DELTA_BATCH_MS = 100;
+/** Presence updates are forwarded at most this often per device. */
+export const COLLAB_PRESENCE_THROTTLE_MS = 250;
+
+/** The role view as `HostService.getState` returns it (structurally `ProjectedState`). */
+export type CollabStateView = Record<string, unknown> & { seq: number; roleId: string };
+
+/**
+ * Changes between two views of the same role.
+ *
+ * - `collections`: for each top-level array of records with string `id`s: `ids` is the full new
+ *   order, `upsert` the records that are new or changed (deep-equal compare), and every id missing
+ *   from `ids` is gone.
+ * - `maps`: for each top-level plain-object map whose values are not records (for example
+ *   `versions`): keys to set and keys to remove.
+ * - `replace`: any other top-level key whose value changed, replaced whole.
+ * - `remove`: top-level keys that disappeared.
+ */
+export interface StateDelta {
+  collections?: Record<string, { ids: string[]; upsert: Array<Record<string, unknown> & { id: string }> }>;
+  maps?: Record<string, { set: Record<string, unknown>; remove: string[] }>;
+  replace?: Record<string, unknown>;
+  remove?: string[];
+}
+
+export interface SnapshotMessage {
+  schema: 1;
+  kind: "snapshot";
+  state: CollabStateView;
+  locks: CollabLock[];
+}
+
+export interface DeltaMessage {
+  schema: 1;
+  kind: "delta";
+  /** The view's seq before this delta; the device must hold exactly this seq. */
+  fromSeq: number;
+  toSeq: number;
+  delta: StateDelta;
+  /** Committed op types in this batch (for the UI's change notices), in order. */
+  opTypes: string[];
+}
+
+export interface CollabLock {
+  lockId: string;
+  opType: string;
+  actorRef: string;
+  startedAt: string;
+  roundId?: string;
+}
+
+export interface LocksMessage {
+  schema: 1;
+  kind: "locks";
+  locks: CollabLock[];
+}
+
+/** What a person is doing, so others see "Rafi is editing Round 3 allocation". */
+export interface PresenceInfo {
+  /** Widget or page, e.g. "allocation". */
+  view?: string;
+  roundId?: string;
+  /** A debate being dragged or edited ("holding" in the allocation screen). */
+  debateId?: string;
+}
+
+export interface PresenceEntry extends PresenceInfo {
+  deviceId: string;
+  name: string;
+  roleId: string;
+  since: string;
+}
+
+export interface PresenceMessage {
+  schema: 1;
+  kind: "presence";
+  /** Every connected device plus the host itself (deviceId "host"). */
+  entries: PresenceEntry[];
+}
+
+export interface SetPresenceMessage extends PresenceInfo {
+  schema: 1;
+  kind: "set_presence";
+}
+
+export interface ResyncMessage {
+  schema: 1;
+  kind: "resync";
+}
+
+/** Host methods a device may call; each runs as the device's own actor and role. */
+export type CollabRequestMethod = "submit" | "undo" | "cancelLong" | "getChangelog" | "getOpUndoInfo";
+
+export interface RequestMessage {
+  schema: 1;
+  kind: "request";
+  /** Unique per device connection; echoed in the response. */
+  requestId: string;
+  method: CollabRequestMethod;
+  /** submit: [OpRequest]; undo: [seq]; cancelLong: [lockId]; getChangelog: [afterSeq?, limit?]; getOpUndoInfo: []. */
+  params: unknown[];
+}
+
+export type ResponseMessage =
+  | { schema: 1; kind: "response"; requestId: string; ok: true; value: unknown }
+  | { schema: 1; kind: "response"; requestId: string; ok: false; error: string };
+
+/** Device actors are named `device:<deviceId>` in the op log and changelog. */
+export function deviceActorRef(deviceId: string): string {
+  return `device:${deviceId}`;
+}

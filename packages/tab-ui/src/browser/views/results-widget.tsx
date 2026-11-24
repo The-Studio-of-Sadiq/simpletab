@@ -3,6 +3,7 @@ import { Message } from "@theia/core/lib/browser";
 import { ReactWidget } from "@theia/core/lib/browser/widgets/react-widget";
 import { inject, injectable, postConstruct } from "@theia/core/shared/inversify";
 import * as React from "@theia/core/shared/react";
+import { PresenceChips } from "../components/presence-chips";
 import { ResultsView } from "../components/results-view";
 import { onLocaleChange, t } from "../i18n";
 import { TournamentStore } from "../store/tournament-store";
@@ -29,6 +30,7 @@ export class ResultsWidget extends ReactWidget {
 
   protected override onActivateRequest(msg: Message): void {
     super.onActivateRequest(msg);
+    void this.store.setPresence({ view: "results" });
     this.node.focus();
   }
 
@@ -51,7 +53,11 @@ export class ResultsWidget extends ReactWidget {
 
   protected override render(): React.ReactNode {
     const snapshot = this.store.getSnapshot();
+    const presence = snapshot.status.presence ?? snapshot.status.device?.presence ?? [];
+    const selfId = snapshot.status.device?.deviceId ?? "host";
     return (
+      <>
+      <PresenceChips entries={presence} view="results" selfId={selfId} />
       <ResultsView
         state={snapshot.state}
         status={snapshot.status}
@@ -63,6 +69,7 @@ export class ResultsWidget extends ReactWidget {
           void this.commandService.executeCommand(SIMPLETAB_OPEN_SETUP_COMMAND_ID);
         }}
       />
+      </>
     );
   }
 }

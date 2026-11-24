@@ -3,6 +3,7 @@ import { Message } from "@theia/core/lib/browser";
 import { ReactWidget } from "@theia/core/lib/browser/widgets/react-widget";
 import { inject, injectable, postConstruct } from "@theia/core/shared/inversify";
 import * as React from "@theia/core/shared/react";
+import { PresenceChips } from "../components/presence-chips";
 import { DrawView } from "../components/draw-view";
 import { onLocaleChange, t } from "../i18n";
 import { TournamentStore } from "../store/tournament-store";
@@ -29,6 +30,7 @@ export class DrawWidget extends ReactWidget {
 
   protected override onActivateRequest(msg: Message): void {
     super.onActivateRequest(msg);
+    void this.store.setPresence({ view: "draw" });
     this.node.focus();
   }
 
@@ -56,7 +58,11 @@ export class DrawWidget extends ReactWidget {
       selectedRoundId !== undefined
         ? this.store.getLastRoundOpSeq("draw.generate", selectedRoundId)
         : undefined;
+    const presence = snapshot.status.presence ?? snapshot.status.device?.presence ?? [];
+    const selfId = snapshot.status.device?.deviceId ?? "host";
     return (
+      <>
+      <PresenceChips entries={presence} view="draw" selfId={selfId} />
       <DrawView
         state={snapshot.state}
         status={snapshot.status}
@@ -71,6 +77,7 @@ export class DrawWidget extends ReactWidget {
           void this.commandService.executeCommand(SIMPLETAB_OPEN_SETUP_COMMAND_ID);
         }}
       />
+      </>
     );
   }
 }

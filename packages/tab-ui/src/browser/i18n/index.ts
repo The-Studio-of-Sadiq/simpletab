@@ -14,6 +14,7 @@ import bnParticipants from "../locales/bn/participants.json";
 import bnProjector from "../locales/bn/projector.json";
 import bnReleases from "../locales/bn/releases.json";
 import bnDevices from "../locales/bn/devices.json";
+import bnDeviceMode from "../locales/bn/device-mode.json";
 import bnResults from "../locales/bn/results.json";
 import bnSetup from "../locales/bn/setup.json";
 import bnStandings from "../locales/bn/standings.json";
@@ -32,6 +33,7 @@ import enParticipants from "../locales/en/participants.json";
 import enProjector from "../locales/en/projector.json";
 import enReleases from "../locales/en/releases.json";
 import enDevices from "../locales/en/devices.json";
+import enDeviceMode from "../locales/en/device-mode.json";
 import enResults from "../locales/en/results.json";
 import enSetup from "../locales/en/setup.json";
 import enStandings from "../locales/en/standings.json";
@@ -70,6 +72,7 @@ const DEFAULT_CATALOGS: Record<SupportedLocale, MessageCatalog> = {
     ...enBreak,
     ...enReleases,
     ...enDevices,
+    ...enDeviceMode,
     ...enChangelog,
     ...enCredentials,
     ...enProjector,
@@ -90,6 +93,7 @@ const DEFAULT_CATALOGS: Record<SupportedLocale, MessageCatalog> = {
     ...bnBreak,
     ...bnReleases,
     ...bnDevices,
+    ...bnDeviceMode,
     ...bnChangelog,
     ...bnCredentials,
     ...bnProjector,

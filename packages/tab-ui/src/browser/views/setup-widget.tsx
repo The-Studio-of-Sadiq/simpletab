@@ -4,6 +4,8 @@ import { ReactWidget } from "@theia/core/lib/browser/widgets/react-widget";
 import { inject, injectable, optional, postConstruct } from "@theia/core/shared/inversify";
 import * as React from "@theia/core/shared/react";
 import { FileDialogService } from "@theia/filesystem/lib/browser/file-dialog";
+import { DeviceBanner } from "../components/device-banner";
+import { JoinHostPanel } from "../components/join-host-panel";
 import { SetupView } from "../components/setup-view";
 import { onLocaleChange, t } from "../i18n";
 import { TournamentStore } from "../store/tournament-store";
@@ -78,9 +80,19 @@ export class SetupWidget extends ReactWidget {
     return uri?.path.fsPath();
   }
 
+  private readonly startJoin = (params: Parameters<TournamentStore["startJoin"]>[0]) => this.store.startJoin(params);
+  private readonly loadJoinProgress = () => this.store.getJoinProgress();
+  private readonly leaveHost = () => this.store.leaveHost();
+  private readonly dismissRejected = () => this.store.dismissRejectedEdits();
+
   protected override render(): React.ReactNode {
     const snapshot = this.store.getSnapshot();
+    const device = snapshot.status.device;
     return (
+      <>
+        {device !== undefined ? (
+          <DeviceBanner device={device} onLeave={this.leaveHost} onDismissRejected={this.dismissRejected} />
+        ) : null}
       <SetupView
         state={snapshot.state}
         status={snapshot.status}
@@ -94,6 +106,10 @@ export class SetupWidget extends ReactWidget {
           this.fileDialogService ? () => this.pickDbFile() : undefined
         }
       />
+        {!snapshot.status.open && device === undefined ? (
+          <JoinHostPanel onStartJoin={this.startJoin} loadProgress={this.loadJoinProgress} />
+        ) : null}
+      </>
     );
   }
 }

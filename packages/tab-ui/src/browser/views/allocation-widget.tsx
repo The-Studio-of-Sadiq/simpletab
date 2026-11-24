@@ -3,6 +3,7 @@ import { Message } from "@theia/core/lib/browser";
 import { ReactWidget } from "@theia/core/lib/browser/widgets/react-widget";
 import { inject, injectable, postConstruct } from "@theia/core/shared/inversify";
 import * as React from "@theia/core/shared/react";
+import { PresenceChips } from "../components/presence-chips";
 import { AllocationView } from "../components/allocation-view";
 import { onLocaleChange, t } from "../i18n";
 import { TournamentStore } from "../store/tournament-store";
@@ -29,6 +30,7 @@ export class AllocationWidget extends ReactWidget {
 
   protected override onActivateRequest(msg: Message): void {
     super.onActivateRequest(msg);
+    void this.store.setPresence({ view: "allocation" });
     this.node.focus();
   }
 
@@ -56,7 +58,11 @@ export class AllocationWidget extends ReactWidget {
       selectedRoundId !== undefined
         ? this.store.getLastRoundOpSeq("allocation.auto", selectedRoundId)
         : undefined;
+    const presence = snapshot.status.presence ?? snapshot.status.device?.presence ?? [];
+    const selfId = snapshot.status.device?.deviceId ?? "host";
     return (
+      <>
+      <PresenceChips entries={presence} view="allocation" selfId={selfId} />
       <AllocationView
         state={snapshot.state}
         status={snapshot.status}
@@ -71,6 +77,7 @@ export class AllocationWidget extends ReactWidget {
           void this.commandService.executeCommand(SIMPLETAB_OPEN_SETUP_COMMAND_ID);
         }}
       />
+      </>
     );
   }
 }

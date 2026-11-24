@@ -74,6 +74,7 @@ export interface DeviceSession {
   send(message: HostToDeviceMessage | CollabJsonMessage): void;
   close(code?: number, reason?: string): void;
   onMessage(listener: (message: CollabJsonMessage) => void): () => void;
+  onClose(listener: () => void): () => void;
 }
 
 export interface CollabServerDeps {
@@ -106,6 +107,7 @@ interface ActiveSessionEntry {
   info: ConnectedDeviceInfo;
   ws: WebSocket;
   listeners: Set<(message: CollabJsonMessage) => void>;
+  closeListeners: Set<() => void>;
   lastActivityMs: number;
   disconnectedNotified: boolean;
 }
@@ -668,6 +670,7 @@ export class CollabServer {
     }
 
     const listeners = new Set<(message: CollabJsonMessage) => void>();
+    const closeListeners = new Set<() => void>();
     const session: DeviceSession = {
       deviceId: opts.deviceId,
       role: opts.role,
@@ -685,6 +688,12 @@ export class CollabServer {
           listeners.delete(listener);
         };
       },
+      onClose: (listener) => {
+        closeListeners.add(listener);
+        return () => {
+          closeListeners.delete(listener);
+        };
+      },
     };
 
     const info: ConnectedDeviceInfo = {
@@ -700,6 +709,7 @@ export class CollabServer {
       info,
       ws: opts.ws,
       listeners,
+      closeListeners,
       lastActivityMs: this.now(),
       disconnectedNotified: false,
     };
@@ -715,6 +725,15 @@ export class CollabServer {
       return;
     }
     entry.disconnectedNotified = true;
+    const closeListeners = [...entry.closeListeners];
+    entry.closeListeners.clear();
+    for (const listener of closeListeners) {
+      try {
+        listener();
+      } catch {
+        // Keep disconnect notifications isolated from listener errors.
+      }
+    }
     this.deps.onDeviceDisconnected?.(entry.session.deviceId);
   }
 

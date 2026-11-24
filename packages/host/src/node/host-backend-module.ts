@@ -18,6 +18,10 @@ export default new ContainerModule((bind) => {
     // The running app warms its long-op worker when a tournament opens; tests leave this off.
     .onActivation((_ctx, service) => {
       service.enableWorkerPrewarm();
+      // A laptop paired as a staff device reconnects to its host at start-up (section 4.1).
+      if (process.env.SIMPLETAB_SMOKE !== "1" && process.env.SIMPLETAB_DEMO !== "1") {
+        service.resumeDeviceMode();
+      }
       return service;
     });
   bind(HostService).toService(HostServiceImpl);

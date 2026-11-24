@@ -273,4 +273,70 @@ describe("CollabServer", () => {
     expect(disconnected).toEqual(["dev-1"]);
     expect(server.connected()).toEqual([]);
   });
+
+  it("fires session.onClose once when replaced by a newer connection and when client disconnects", async () => {
+    const hostCert = await generateSelfSignedCertificate({ commonName: "host" });
+    const deviceCert = await generateSelfSignedCertificate({ commonName: "device" });
+    const sessions: DeviceSession[] = [];
+    const closeCounts: number[] = [];
+
+    const registry: DeviceRegistry = {
+      approve: async () => ({ deviceId: "dev-1", role: BUILT_IN_ROLES.tab_director }),
+      lookup: (id) =>
+        id === "dev-1"
+          ? {
+              fingerprint: deviceCert.fingerprint,
+              role: BUILT_IN_ROLES.tab_director,
+              removed: false,
+              name: "Rafi laptop",
+            }
+          : undefined,
+    };
+
+    const server = new CollabServer({
+      certificate: hostCert,
+      codes: new PairingCodes(),
+      registry,
+      getHostIdentity: () => createHostIdentity(hostCert),
+      onDeviceConnected: (s) => {
+        const idx = sessions.length;
+        sessions.push(s);
+        closeCounts.push(0);
+        s.onClose(() => {
+          closeCounts[idx]! += 1;
+        });
+      },
+    });
+    cleanupCallbacks.push(() => server.close());
+
+    const { port } = await server.listen(0, "127.0.0.1");
+
+    const connectHello = async (): Promise<WebSocket> => {
+      const ws = new WebSocket(`wss://127.0.0.1:${port}`, { agent: createAgent(deviceCert) });
+      const welcomed = new Promise<void>((resolve, reject) => {
+        ws.once("message", () => resolve());
+        ws.once("error", reject);
+      });
+      await new Promise<void>((resolve, reject) => {
+        ws.once("open", resolve);
+        ws.once("error", reject);
+      });
+      ws.send(JSON.stringify({ schema: 1, kind: "hello", deviceId: "dev-1", lastSeq: 0 }));
+      await welcomed;
+      return ws;
+    };
+
+    const ws1 = await connectHello();
+    const ws1Closed = waitForClose(ws1);
+    const ws2 = await connectHello();
+    await ws1Closed;
+    expect(closeCounts).toEqual([1, 0]);
+
+    const ws2Closed = new Promise<void>((resolve) => {
+      sessions[1]!.onClose(() => resolve());
+    });
+    ws2.close();
+    await ws2Closed;
+    expect(closeCounts).toEqual([1, 1]);
+  });
 });
