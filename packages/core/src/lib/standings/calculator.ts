@@ -123,7 +123,6 @@ export function calculateStandings(
   );
 
   const isReplyPosition = tournament.preferences?.replyScoresEnabled && !isBP;
-  const substantiveSpeakersPerTeam = tournament.preferences?.substantiveSpeakers ?? (isBP ? 2 : 3);
 
   /* ---------------------------------------------------------------------- */
   /* 1. Accumulate raw per-round data for every team                        */

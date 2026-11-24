@@ -5,6 +5,7 @@ import type {
   TournamentPreferences,
 } from "@/types";
 import { acceptsSchema } from "./messages";
+import { parsePublicSiteIndex, type PublicSiteIndex } from "./public-site";
 import { err, ok, type Result } from "./result";
 
 /**
@@ -51,6 +52,8 @@ export interface TournamentManifest {
   currentRoundSeq: number;
   rounds: RoundManifestEntry[];
   headHash?: string;
+  /** Public results site files (M4); absent on publishes that carry only the phone portal. */
+  site?: PublicSiteIndex;
 }
 
 export interface BallotSpeakerRoster {
@@ -317,6 +320,16 @@ export function parseManifest(input: unknown): Result<TournamentManifest> {
     }
   }
 
+  let site: PublicSiteIndex | undefined;
+  if (input.site !== undefined) {
+    const parsedSite = parsePublicSiteIndex(input.site);
+    if (parsedSite.ok) {
+      site = parsedSite.value;
+    } else {
+      errors.push(...parsedSite.errors);
+    }
+  }
+
   if (errors.length > 0) {
     return err(errors);
   }
@@ -339,6 +352,9 @@ export function parseManifest(input: unknown): Result<TournamentManifest> {
   }
   if (typeof input.headHash === "string") {
     manifest.headHash = input.headHash;
+  }
+  if (site !== undefined) {
+    manifest.site = site;
   }
   return ok(manifest);
 }
