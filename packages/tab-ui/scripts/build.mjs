@@ -1,4 +1,4 @@
-import { copyFileSync, existsSync, mkdirSync, statSync } from "node:fs";
+import { copyFileSync, cpSync, existsSync, mkdirSync, statSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import esbuild from "esbuild";
@@ -67,6 +67,7 @@ await esbuild.build({
 const assets = [
   ["src/browser/style/simpletab-status.css", "lib/browser/style/simpletab-status.css"],
   ["src/browser/style/simpletab.css", "lib/browser/style/simpletab.css"],
+  ["src/browser/style/simpletab-brand.css", "lib/browser/style/simpletab-brand.css"],
   ["src/browser/style/simpletab-projector.css", "lib/browser/style/simpletab-projector.css"],
   ["src/browser/projector.html", "lib/browser/projector.html"],
 ];
@@ -79,4 +80,10 @@ for (const [srcRel, destRel] of assets) {
   const destPath = path.join(uiDir, destRel);
   mkdirSync(path.dirname(destPath), { recursive: true });
   copyFileSync(srcPath, destPath);
+}
+
+// The brand stylesheet loads Inter from ./fonts (with its licence), so the folder ships next to it.
+const fontsSrc = path.join(uiDir, "src/browser/style/fonts");
+if (existsSync(fontsSrc)) {
+  cpSync(fontsSrc, path.join(uiDir, "lib/browser/style/fonts"), { recursive: true });
 }
