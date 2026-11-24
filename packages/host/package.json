@@ -14,11 +14,14 @@
   ],
   "dependencies": {
     "@noble/hashes": "2.4.0",
+    "@peculiar/x509": "3.1.0",
     "@simpletab/core": "*",
     "@theia/core": "1.77.0",
     "@theia/electron": "1.77.0",
     "better-sqlite3": "13.2.0",
-    "fflate": "0.8.3"
+    "fflate": "0.8.3",
+    "reflect-metadata": "0.2.2",
+    "ws": "8.23.0"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.13",

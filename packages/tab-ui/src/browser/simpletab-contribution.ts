@@ -33,6 +33,7 @@ import { MotionsWidget } from "./views/motions-widget";
 import { ParticipantsWidget } from "./views/participants-widget";
 import { ProjectorControlWidget } from "./views/projector-widget";
 import { ReleasesWidget } from "./views/releases-widget";
+import { DevicesWidget } from "./views/devices-widget";
 import { ResultsWidget } from "./views/results-widget";
 import { SetupWidget } from "./views/setup-widget";
 import {
@@ -41,6 +42,7 @@ import {
   SIMPLETAB_OPEN_CHANGELOG_COMMAND,
   SIMPLETAB_OPEN_CHECKIN_COMMAND,
   SIMPLETAB_OPEN_CREDENTIALS_COMMAND,
+  SIMPLETAB_OPEN_DEVICES_COMMAND,
   SIMPLETAB_OPEN_DRAW_COMMAND,
   SIMPLETAB_OPEN_FEEDBACK_COMMAND,
   SIMPLETAB_OPEN_LINKS_COMMAND,
@@ -72,6 +74,7 @@ export const SIMPLETAB_STANDINGS_TOGGLE_COMMAND_ID =
   "simpletab.standings.toggle";
 export const SIMPLETAB_BREAK_TOGGLE_COMMAND_ID = "simpletab.break.toggle";
 export const SIMPLETAB_RELEASES_TOGGLE_COMMAND_ID = "simpletab.releases.toggle";
+export const SIMPLETAB_DEVICES_TOGGLE_COMMAND_ID = "simpletab.devices.toggle";
 export const SIMPLETAB_CHANGELOG_TOGGLE_COMMAND_ID =
   "simpletab.changelog.toggle";
 export const SIMPLETAB_CREDENTIALS_TOGGLE_COMMAND_ID =
@@ -341,6 +344,30 @@ export class BreakViewContribution extends AbstractViewContribution<BreakWidget>
     super.registerCommands(commands);
     commands.registerCommand(
       { id: SIMPLETAB_OPEN_BREAK_COMMAND },
+      {
+        execute: () => this.openView({ activate: true, reveal: true }),
+      },
+    );
+  }
+}
+
+@injectable()
+export class DevicesViewContribution extends AbstractViewContribution<DevicesWidget> {
+  constructor() {
+    super({
+      widgetId: DevicesWidget.ID,
+      widgetName: t("devices.widgetLabel"),
+      defaultWidgetOptions: {
+        area: "main",
+      },
+      toggleCommandId: SIMPLETAB_DEVICES_TOGGLE_COMMAND_ID,
+    });
+  }
+
+  override registerCommands(commands: CommandRegistry): void {
+    super.registerCommands(commands);
+    commands.registerCommand(
+      { id: SIMPLETAB_OPEN_DEVICES_COMMAND },
       {
         execute: () => this.openView({ activate: true, reveal: true }),
       },

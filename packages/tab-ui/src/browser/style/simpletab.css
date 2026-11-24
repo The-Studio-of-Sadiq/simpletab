@@ -722,3 +722,26 @@
     background: #ffffff;
   }
 }
+
+/* Devices page (design section 4): pairing codes and the six words to compare. */
+.simpletab-card {
+  border: 1px solid var(--theia-panel-border);
+  border-radius: 4px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+
+.simpletab-pairing-code {
+  font-family: var(--theia-code-font-family, monospace);
+  font-size: 1.4em;
+  letter-spacing: 0.08em;
+}
+
+.simpletab-pairing-words {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 20px;
+  padding-left: 1.6em;
+  font-size: 1.25em;
+  font-weight: 600;
+}

@@ -4,6 +4,7 @@ import type {
   CreateDemoResult,
   ArchiveStatus,
   CreateTournamentParams,
+  DevicesStatus,
   CreateTournamentResult,
   HostCancelLongResult,
   HostIntegrityCheckResult,
@@ -18,6 +19,7 @@ import type {
   SyncStatus,
 } from "@simpletab/host/lib/common/host-protocol";
 import { HostService } from "@simpletab/host/lib/common/host-protocol";
+import type { IssuedPairingCode } from "@simpletab/host/lib/common/collab-protocol";
 import type { Disposable } from "@theia/core/lib/common";
 import { inject, injectable, optional } from "@theia/core/shared/inversify";
 import { HostServiceClientDispatcher } from "./host-service-client";
@@ -266,6 +268,36 @@ export class TournamentStore {
 
   async getPublishStatus(): Promise<PublishStatus> {
     return this.hostService.getPublishStatus();
+  }
+
+  async getDevicesStatus(): Promise<DevicesStatus> {
+    return this.hostService.getDevicesStatus();
+  }
+
+  async setDevicesEnabled(enabled: boolean, port?: number): Promise<DevicesStatus> {
+    return this.hostService.setDevicesEnabled(enabled, port);
+  }
+
+  async issuePairingCode(roleId: string): Promise<IssuedPairingCode> {
+    return this.hostService.issuePairingCode(roleId);
+  }
+
+  async cancelPairingCode(code: string): Promise<void> {
+    await this.hostService.cancelPairingCode(code);
+  }
+
+  async approveJoin(joinId: string): Promise<void> {
+    await this.hostService.approveJoin(joinId);
+    await this.refresh();
+  }
+
+  async rejectJoin(joinId: string): Promise<void> {
+    await this.hostService.rejectJoin(joinId);
+  }
+
+  async removeDevice(deviceId: string): Promise<void> {
+    await this.hostService.removeDevice(deviceId);
+    await this.refresh();
   }
 
   async getArchiveStatus(): Promise<ArchiveStatus> {

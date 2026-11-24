@@ -1,3 +1,8 @@
+import type {
+  ConnectedDeviceInfo,
+  IssuedPairingCode,
+  PendingJoin,
+} from "./collab-protocol";
 import type { PublicChainItem } from "@simpletab/core/changelog";
 import type {
   LateSubmissionRecord,
@@ -151,6 +156,39 @@ export interface ArchiveStatus {
   reason?: string;
 }
 
+export interface PairableRole {
+  id: string;
+  name: string;
+}
+
+export interface PairedDeviceInfo {
+  deviceId: string;
+  name: string;
+  roleId: string;
+  roleName: string;
+  approvedAt: string;
+  connected: boolean;
+}
+
+/** The Devices page (design section 4, amendment 7). */
+export interface DevicesStatus {
+  /** "Allow devices to connect" is on and the server is listening. */
+  running: boolean;
+  port?: number;
+  /** This laptop's LAN addresses devices can connect to. */
+  addresses: string[];
+  /** SHA-256 fingerprint of the host certificate (devices pin it). */
+  hostFingerprint?: string;
+  /** Plain-language reason the server could not start. */
+  error?: string;
+  codes: IssuedPairingCode[];
+  pendingJoins: PendingJoin[];
+  connected: ConnectedDeviceInfo[];
+  devices: PairedDeviceInfo[];
+  succession: string[];
+  pairableRoles: PairableRole[];
+}
+
 export interface HostStatus {
   open: boolean;
   slug?: string;
@@ -270,6 +308,14 @@ export interface HostService extends RpcServer<HostServiceClient> {
   pullNow(): Promise<SyncStatus>;
   publishNow(): Promise<PublishStatus>;
   getPublishStatus(): Promise<PublishStatus>;
+  /** Devices page (design section 4). Every call needs `devices.manage`. */
+  getDevicesStatus(): Promise<DevicesStatus>;
+  setDevicesEnabled(enabled: boolean, port?: number): Promise<DevicesStatus>;
+  issuePairingCode(roleId: string): Promise<IssuedPairingCode>;
+  cancelPairingCode(code: string): Promise<void>;
+  approveJoin(joinId: string): Promise<void>;
+  rejectJoin(joinId: string): Promise<void>;
+  removeDevice(deviceId: string): Promise<void>;
   /** "Archive to GitHub" (design section 10.1). */
   archiveNow(): Promise<ArchiveStatus>;
   getArchiveStatus(): Promise<ArchiveStatus>;

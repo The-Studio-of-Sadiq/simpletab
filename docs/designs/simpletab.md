@@ -1,7 +1,7 @@
 # SimpleTab
 
 *   **Author:** Golam Kuadir Khan Prince
-*   **Status:** Approved (revision 3, approved by the author on 2026-11-21; amendment 1 on 2026-11-23 adds the permanent GitHub archive, section 10.1; amendment 2 on 2026-11-23 adds per-round ballot deadlines, section 8.1; amendment 3 on 2026-11-23 makes every online feature optional and non-blocking, section 1.1; amendment 4 on 2026-11-23 adds the 1000-team benchmark level, QR-only ballots and bubble-sheet ballots, sections 8.2 and 8.3; amendment 5 on 2026-11-24 splits the R2 archive into small parts to fit the free plan's 10 ms CPU limit, adds the inbox `scanned` position, and raises the default request share, sections 7, 7.1 and 13; amendment 6 on 2026-11-25 replaces the bundled Wrangler with Cloudflare's Pages upload API, section 10)
+*   **Status:** Approved (revision 3, approved by the author on 2026-11-21; amendment 1 on 2026-11-23 adds the permanent GitHub archive, section 10.1; amendment 2 on 2026-11-23 adds per-round ballot deadlines, section 8.1; amendment 3 on 2026-11-23 makes every online feature optional and non-blocking, section 1.1; amendment 4 on 2026-11-23 adds the 1000-team benchmark level, QR-only ballots and bubble-sheet ballots, sections 8.2 and 8.3; amendment 5 on 2026-11-24 splits the R2 archive into small parts to fit the free plan's 10 ms CPU limit, adds the inbox `scanned` position, and raises the default request share, sections 7, 7.1 and 13; amendment 6 on 2026-11-25 replaces the bundled Wrangler with Cloudflare's Pages upload API, section 10; amendment 7 on 2026-11-25 fixes the collaboration wire protocol and how staff devices run, section 4.1)
 *   **Date:** 2026-11-23
 *   **Predecessors:** [concepts_brief.md](concepts_brief.md), [review_report.md](review_report.md) (concept review), [design_review_report.md](design_review_report.md) (design review)
 
@@ -372,6 +372,27 @@ The database is `better-sqlite3` 13.2.0, rebuilt for Theia's Electron with `@ele
 10. **Handover import** sets the host number to the imported value + 1, generates a new `hostId`, and sets rank 1. Importing the same file on two laptops is a mistake that the service catches: the second laptop is refused, because its number is equal and its `hostId` differs. The import screen warns about this.
 
 **Assistant mode** is a staff device with the Tab assistant role. It shows ballot entry, the QR and code scanner and the check-in screen.
+
+#### 4.1 Wire protocol and staff devices (amendment 7)
+
+**Transport.** The host runs a `wss` server (`ws` 8.23.0 on Node's `https`, default port 47820). Both sides present their self-signed P-256 certificate. The host asks for the client certificate but checks it itself: it compares the certificate's SHA-256 fingerprint (of the DER bytes) with the one stored in the device's `device.approve` record. A paired device refuses any host certificate other than the one it pinned. Messages are JSON text frames with `schema: 1`; the types live in `packages/host/src/common/collab-protocol.ts`.
+
+**Pairing handshake.**
+
+1. The device connects with its certificate and sends `pair_request {code, deviceName}` within 10 s.
+2. A wrong, expired or used code is refused with `BAD_CODE`. After 5 wrong attempts every active code is cancelled (`LOCKED_OUT`).
+3. Otherwise the host sends `pair_pending {words}`. The words come from SHA-256 of the host fingerprint's 32 bytes, the device fingerprint's 32 bytes and the code's UTF-8 bytes. The device computes the same words from the host certificate it sees and shows them.
+4. The host user approves within 2 minutes. The host commits `device.approve` (the device record's `publicKey` holds `sha256:<fingerprint>`) and answers `pair_result {deviceId, role, host}`. The device stores the pinned host fingerprint, its id and role.
+5. Later connections send `hello {deviceId, lastSeq, knownHost?}` and get `welcome` or `refused` (`UNKNOWN_DEVICE`, `REMOVED`, `KEY_MISMATCH`).
+
+**How a staff device runs.** A staff device is the same desktop app opened in device mode. Its backend implements the same `HostService` the tab screens already use, but backed by the connection instead of a local engine: `getState` returns the role projection it holds, `submit` sends the op to the host, and committed changes arrive as events. So every tab screen works on a device unchanged, limited by its role's permissions.
+
+**What a device receives (step b).**
+
+- Tab directors receive the committed op records themselves, apply them to a full local copy (encrypted at rest), and can serve them to a laptop that is catching up before promotion.
+- Every other role receives its projection as a snapshot, then deltas. After each batch of commits (at most every 100 ms) the host computes `project(state, role)` once per role and sends each device of that role the records that changed since its last delta. A release can change what a role may see without writing the records it reveals, which is why the host diffs projections instead of filtering single ops.
+
+**Milestone steps.** M5 is built in steps: (a) certificates, words, pairing codes, the `wss` server and the device client with pairing and reconnects; (b) the projection stream, device mode, submissions with the outbox, presence and locks, and the Devices page; (c) succession, catch-up, promotion, demotion and the divergent export; (d) assistant mode with the webcam scanner; (e) `npm run e2e:collab`.
 
 ### 5. Changelog v2
 

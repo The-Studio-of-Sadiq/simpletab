@@ -102,7 +102,7 @@ describe("HostServiceImpl", () => {
     expect(bpCreated.workspaceDir).toBe(tempDir);
     expect(bpCreated.status.workspaceDir).toBe(tempDir);
     expect(readFileSync(path.join(tempDir, ".gitignore"), "utf8")).toBe(
-      "*.simpletab.db\n*.simpletab.db-*\n*.simpletab\n",
+      "*.simpletab.db\n*.simpletab.db-*\n*.simpletab\ncollab/\n",
     );
     expect(bpCreated.state.tournament.format).toBe("bp");
     expect(bpCreated.state.tournament.preferences.teamsInDebate).toBe(4);
@@ -509,6 +509,7 @@ describe("HostServiceImpl", () => {
       "*.simpletab.db",
       "*.simpletab.db-*",
       "*.simpletab",
+      "collab/",
     ]);
   });
 });

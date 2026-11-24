@@ -36,6 +36,7 @@ import {
   type ArchiveStatus,
   type BallotCollectionMode,
   type CreateDemoResult,
+  type DevicesStatus,
   type CreateTournamentParams,
   type CreateTournamentResult,
   type HostCancelLongResult,
@@ -57,6 +58,8 @@ import { seedDemoTournament } from "./demo-fixture";
 import { HostEngine, type HostApplyResult, type UndoResult } from "./engine/engine";
 import type { DetailedActiveLock } from "./engine/locks";
 import { readHostNumber } from "./handover/format";
+import type { IssuedPairingCode } from "../common/collab-protocol";
+import { HostCollab } from "./devices/host-collab";
 import { Archiver } from "./publish/archiver";
 import { IpcGitHubArchiver } from "./publish/github-archive-client";
 import { IpcPagesDeployer } from "./publish/pages-deploy-client";
@@ -119,6 +122,8 @@ const TOURNAMENT_GITIGNORE_ENTRIES = [
   "*.simpletab.db",
   "*.simpletab.db-*",
   "*.simpletab",
+  // The host certificate's private key for live collaboration (section 4).
+  "collab/",
 ] as const;
 
 export function ensureTournamentGitignore(dir: string): void {
@@ -185,6 +190,7 @@ export class HostServiceImpl
   private publisher: Publisher | null = null;
   private pagesDeployer: IpcPagesDeployer | null = null;
   private archiver: Archiver | null = null;
+  private collab: HostCollab | null = null;
   private githubArchiver: IpcGitHubArchiver | null = null;
   private publishInFlight: Promise<void> | null = null;
   private publishQueued = false;
@@ -732,6 +738,53 @@ export class HostServiceImpl
     return this.publisher.getStatus();
   }
 
+  private requireCollab(): HostCollab {
+    if (this.collab === null) {
+      throw new Error("No tournament is currently open.");
+    }
+    if (!hasPermission(this.localRole, "devices.manage")) {
+      throw new Error("Only the host owner and tab directors can manage devices.");
+    }
+    return this.collab;
+  }
+
+  async getDevicesStatus(): Promise<DevicesStatus> {
+    return this.requireCollab().status();
+  }
+
+  async setDevicesEnabled(enabled: boolean, port?: number): Promise<DevicesStatus> {
+    const collab = this.requireCollab();
+    if (enabled) {
+      if (port !== undefined && (!Number.isInteger(port) || port < 1024 || port > 65535)) {
+        throw new Error("Choose a port between 1024 and 65535.");
+      }
+      await collab.start(port);
+    } else {
+      await collab.stop();
+    }
+    return collab.status();
+  }
+
+  async issuePairingCode(roleId: string): Promise<IssuedPairingCode> {
+    return this.requireCollab().issueCode(roleId);
+  }
+
+  async cancelPairingCode(code: string): Promise<void> {
+    this.requireCollab().cancelCode(code);
+  }
+
+  async approveJoin(joinId: string): Promise<void> {
+    await this.requireCollab().approveJoin(joinId);
+  }
+
+  async rejectJoin(joinId: string): Promise<void> {
+    this.requireCollab().rejectJoin(joinId);
+  }
+
+  async removeDevice(deviceId: string): Promise<void> {
+    await this.requireCollab().removeDevice(deviceId);
+  }
+
   async archiveNow(): Promise<ArchiveStatus> {
     if (this.archiver === null) {
       return { state: "not_configured", reason: "No tournament is currently open." };
@@ -841,6 +894,37 @@ export class HostServiceImpl
         this.emitStateChanged({
           seq: nextEngine.head().seq,
           type: "sync.status_updated",
+          writes: [],
+        });
+      },
+    });
+
+    this.collab = new HostCollab({
+      engine: {
+        getState: () => nextEngine.getState(),
+        submit: (request, actor) => nextEngine.submit(request, actor),
+        readMeta: (key) =>
+          (
+            nextEngine.database
+              .prepare("SELECT value FROM meta WHERE key = ?")
+              .get(key) as { value: string } | undefined
+          )?.value,
+        writeMeta: (key, value) => {
+          nextEngine.database
+            .prepare(
+              "INSERT INTO meta(key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+            )
+            .run(key, value);
+        },
+      },
+      workspaceDir: path.dirname(dbPath),
+      hostOwner: HOST_OWNER_ACTOR,
+      getHostIdentity: () => readHostIdentity(nextEngine.database),
+      ...(this.clock !== undefined ? { now: this.clock } : {}),
+      onChanged: () => {
+        this.emitStateChanged({
+          seq: nextEngine.head().seq,
+          type: "devices.status_updated",
           writes: [],
         });
       },
@@ -981,6 +1065,12 @@ export class HostServiceImpl
     if (this.archiver !== null) {
       this.archiver.dispose();
       this.archiver = null;
+    }
+    if (this.collab !== null) {
+      await this.collab.stop().catch((error: unknown) => {
+        console.warn("SimpleTab: stopping the device server failed", error);
+      });
+      this.collab = null;
     }
     this.publishQueued = false;
     if (this.publishInFlight !== null) {

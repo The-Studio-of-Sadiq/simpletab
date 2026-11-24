@@ -133,6 +133,13 @@ describe("TournamentStore", () => {
       getPublishStatus: vi.fn(async () => ({ state: "idle" as const })),
       archiveNow: vi.fn(async () => ({ state: "idle" as const })),
       getArchiveStatus: vi.fn(async () => ({ state: "idle" as const })),
+      getDevicesStatus: vi.fn(),
+      setDevicesEnabled: vi.fn(),
+      issuePairingCode: vi.fn(),
+      cancelPairingCode: vi.fn(),
+      approveJoin: vi.fn(),
+      rejectJoin: vi.fn(),
+      removeDevice: vi.fn(),
     };
 
     const dispatcher = new HostServiceClientDispatcher();
@@ -225,6 +232,13 @@ describe("TournamentStore", () => {
       getPublishStatus: vi.fn(async () => ({ state: "idle" as const })),
       archiveNow: vi.fn(async () => ({ state: "idle" as const })),
       getArchiveStatus: vi.fn(async () => ({ state: "idle" as const })),
+      getDevicesStatus: vi.fn(),
+      setDevicesEnabled: vi.fn(),
+      issuePairingCode: vi.fn(),
+      cancelPairingCode: vi.fn(),
+      approveJoin: vi.fn(),
+      rejectJoin: vi.fn(),
+      removeDevice: vi.fn(),
     };
 
     const store = new TournamentStore(hostService, undefined, workspaceOpener);
@@ -291,6 +305,13 @@ describe("TournamentStore", () => {
       getPublishStatus: vi.fn(async () => ({ state: "idle" as const })),
       archiveNow: vi.fn(async () => ({ state: "idle" as const })),
       getArchiveStatus: vi.fn(async () => ({ state: "idle" as const })),
+      getDevicesStatus: vi.fn(),
+      setDevicesEnabled: vi.fn(),
+      issuePairingCode: vi.fn(),
+      cancelPairingCode: vi.fn(),
+      approveJoin: vi.fn(),
+      rejectJoin: vi.fn(),
+      removeDevice: vi.fn(),
     };
 
     const dispatcher = new HostServiceClientDispatcher();
