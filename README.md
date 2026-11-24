@@ -2,7 +2,7 @@
 
 SimpleTab is a debate-tournament tabulation system for British Parliamentary and two-team formats. One laptop (the host) runs the whole tournament offline. Participants can optionally submit ballots online, and results can be published as static websites.
 
-This repository is the desktop app and the shared tournament logic (`@simpletab/core`). The ballots service and the public site live in their own repositories (`simpletab-ballots`, `simpletab-public`).
+This repository is the desktop app and the shared tournament logic (`@simpletab/core`). The ballots service and the public site live in their own repositories (`simpletab-ballots`, [`simpletab-public`](https://github.com/The-Studio-of-Sadiq/simpletab-public)).
 
 **Status:** milestone M0 in progress. The design is in [docs/designs/simpletab.md](docs/designs/simpletab.md).
 
