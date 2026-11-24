@@ -60,5 +60,22 @@
   "releases.actionUnrelease": "",
   "releases.actionReveal": "",
   "releases.actionHide": "",
-  "releases.gateUpdated": ""
+  "releases.gateUpdated": "",
+  "releases.publishTitle": "",
+  "releases.publishHint": "",
+  "releases.publishLive": "",
+  "releases.publishStatusLabel": "",
+  "releases.publishStateLoading": "",
+  "releases.publishState.idle": "",
+  "releases.publishState.building": "",
+  "releases.publishState.uploading": "",
+  "releases.publishState.anchoring": "",
+  "releases.publishState.confirming": "",
+  "releases.publishState.done": "",
+  "releases.publishState.failed": "",
+  "releases.publishState.not_configured": "",
+  "releases.publishRetryAt": "",
+  "releases.publishNow": "",
+  "releases.publishRunning": "",
+  "releases.publishOpenSite": ""
 }

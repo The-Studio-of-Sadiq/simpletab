@@ -60,5 +60,22 @@
   "releases.actionUnrelease": "প্রকাশ বাতিল করুন",
   "releases.actionReveal": "TODO: Reveal",
   "releases.actionHide": "লুকান",
-  "releases.gateUpdated": "TODO: Updated {gate}."
+  "releases.gateUpdated": "TODO: Updated {gate}.",
+  "releases.publishTitle": "পাবলিক সাইট",
+  "releases.publishHint": "প্রকাশিত ড্র, ফলাফল ও ট্যাব টুর্নামেন্টের Cloudflare Pages সাইটে আপলোড করে। নিচের রিলিজ সুইচগুলো যা অনুমতি দেয় শুধু তা-ই প্রকাশিত হয়; ফিডব্যাক কখনো নয়। প্রকাশ পেছনে চলে এবং ট্যাবিং কখনো আটকায় না।",
+  "releases.publishLive": "লাইভ পাবলিক সাইট: পরিবর্তনের পর স্বয়ংক্রিয়ভাবে প্রকাশ করুন (সর্বোচ্চ প্রতি ৩০ সেকেন্ডে একবার)",
+  "releases.publishStatusLabel": "অবস্থা",
+  "releases.publishStateLoading": "দেখা হচ্ছে…",
+  "releases.publishState.idle": "এখনো প্রকাশ করা হয়নি",
+  "releases.publishState.building": "সাইট তৈরি হচ্ছে",
+  "releases.publishState.uploading": "Cloudflare Pages-এ আপলোড হচ্ছে",
+  "releases.publishState.anchoring": "সার্ভিসে হেড রেকর্ড করা হচ্ছে",
+  "releases.publishState.confirming": "নতুন সংস্করণ লাইভ কি না দেখা হচ্ছে",
+  "releases.publishState.done": "প্রকাশিত",
+  "releases.publishState.failed": "প্রকাশ ব্যর্থ হয়েছে",
+  "releases.publishState.not_configured": "সেট আপ করা হয়নি",
+  "releases.publishRetryAt": "পরবর্তী স্বয়ংক্রিয় চেষ্টা: {time}।",
+  "releases.publishNow": "এখনই প্রকাশ করুন",
+  "releases.publishRunning": "প্রকাশ হচ্ছে…",
+  "releases.publishOpenSite": "{host} খুলুন"
 }

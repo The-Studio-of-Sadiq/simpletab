@@ -46,6 +46,7 @@ import {
   type OnlineSettings,
   type OpUndoInfo,
   type ProjectedState,
+  type PublishStatus,
   type StateChangedEvent,
   type SubmitResult,
   type SyncStatus,
@@ -55,6 +56,8 @@ import { seedDemoTournament } from "./demo-fixture";
 import { HostEngine, type HostApplyResult, type UndoResult } from "./engine/engine";
 import type { DetailedActiveLock } from "./engine/locks";
 import { readHostNumber } from "./handover/format";
+import { IpcPagesDeployer } from "./publish/pages-deploy-client";
+import { Publisher } from "./publish/publisher";
 import { buildRoundFiles } from "./publish/round-files";
 import { IpcCredentialsFetchClient } from "./sync/credentials-ipc-client";
 import { SyncScheduler } from "./sync/scheduler";
@@ -64,6 +67,20 @@ const DEMO_DB_FILENAME = "bp-demo.simpletab.db";
 const DEFAULT_PRELIM_ROUNDS = 4;
 
 const DNS_LABEL_RE = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
+const CLOUDFLARE_ACCOUNT_ID_RE = /^[0-9a-f]{32}$/;
+const PAGES_PROJECT_RE = /^[a-z0-9-]{1,58}$/;
+
+function resolvePublicSiteAssetsDir(): string {
+  const explicit = process.env.SIMPLETAB_PUBLIC_SITE_ASSETS?.trim();
+  if (explicit !== undefined && explicit.length > 0) {
+    return path.resolve(explicit);
+  }
+  const projectPath = process.env.THEIA_APP_PROJECT_PATH?.trim();
+  if (projectPath !== undefined && projectPath.length > 0) {
+    return path.join(projectPath, "resources", "public-site");
+  }
+  return path.resolve("packages", "app", "resources", "public-site");
+}
 
 function isValidCdnHost(host: string): boolean {
   if (host.length === 0 || host.length > 253 || /[/:?#@\s\\]/.test(host) || host.endsWith(".")) {
@@ -162,6 +179,8 @@ export class HostServiceImpl
   private prewarmWorkers = false;
   private credentialsFetchClient: CredentialsFetchClient = new IpcCredentialsFetchClient();
   private syncScheduler: SyncScheduler | null = null;
+  private publisher: Publisher | null = null;
+  private pagesDeployer: IpcPagesDeployer | null = null;
   private publishInFlight: Promise<void> | null = null;
   private publishQueued = false;
 
@@ -559,6 +578,22 @@ export class HostServiceImpl
         throw new Error("Ballots service URL must use https:.");
       }
     }
+    if (patch.cloudflareAccountId !== undefined) {
+      const trimmed = patch.cloudflareAccountId.trim().toLowerCase();
+      if (trimmed.length > 0 && !CLOUDFLARE_ACCOUNT_ID_RE.test(trimmed)) {
+        throw new Error(
+          `Invalid Cloudflare account ID: "${patch.cloudflareAccountId}". Enter the 32-character hex account id.`,
+        );
+      }
+    }
+    if (patch.pagesProject !== undefined) {
+      const trimmed = patch.pagesProject.trim();
+      if (trimmed.length > 0 && !PAGES_PROJECT_RE.test(trimmed)) {
+        throw new Error(
+          `Invalid Cloudflare Pages project name: "${patch.pagesProject}". Use lowercase letters, digits and hyphens (up to 58 characters).`,
+        );
+      }
+    }
 
     const current = this.readOnlineSettings(this.engine);
     const nextCdnHost =
@@ -569,6 +604,14 @@ export class HostServiceImpl
       patch.ballotsOrigin !== undefined
         ? patch.ballotsOrigin.trim()
         : current.ballotsOrigin;
+    const nextCloudflareAccountId =
+      patch.cloudflareAccountId !== undefined
+        ? patch.cloudflareAccountId.trim().toLowerCase()
+        : current.cloudflareAccountId;
+    const nextPagesProject =
+      patch.pagesProject !== undefined
+        ? patch.pagesProject.trim()
+        : current.pagesProject;
 
     const next: OnlineSettings = {
       ballotPortal: patch.ballotPortal ?? current.ballotPortal,
@@ -589,6 +632,13 @@ export class HostServiceImpl
         : {}),
       ...(nextBallotsOrigin !== undefined && nextBallotsOrigin.length > 0
         ? { ballotsOrigin: nextBallotsOrigin }
+        : {}),
+      ...(nextCloudflareAccountId !== undefined &&
+      nextCloudflareAccountId.length > 0
+        ? { cloudflareAccountId: nextCloudflareAccountId }
+        : {}),
+      ...(nextPagesProject !== undefined && nextPagesProject.length > 0
+        ? { pagesProject: nextPagesProject }
         : {}),
     };
     this.engine.database
@@ -650,6 +700,26 @@ export class HostServiceImpl
     return this.syncScheduler.pullNow();
   }
 
+  async publishNow(): Promise<PublishStatus> {
+    if (this.publisher === null) {
+      return {
+        state: "not_configured",
+        reason: "No tournament is currently open.",
+      };
+    }
+    return this.publisher.publishNow();
+  }
+
+  async getPublishStatus(): Promise<PublishStatus> {
+    if (this.publisher === null) {
+      return {
+        state: "not_configured",
+        reason: "No tournament is currently open.",
+      };
+    }
+    return this.publisher.getStatus();
+  }
+
   async getChangelog(afterSeq?: number, limit?: number): Promise<PublicChainItem[]> {
     if (this.engine === null) {
       return [];
@@ -675,6 +745,10 @@ export class HostServiceImpl
     await this.closeCurrentEngine();
     if (this.credentialsFetchClient instanceof IpcCredentialsFetchClient) {
       this.credentialsFetchClient.dispose();
+    }
+    if (this.pagesDeployer !== null) {
+      this.pagesDeployer.dispose();
+      this.pagesDeployer = null;
     }
     if (this.smokeTempDir !== null) {
       rmSync(this.smokeTempDir, { recursive: true, force: true });
@@ -742,6 +816,18 @@ export class HostServiceImpl
       },
     });
 
+    this.publisher = new Publisher({
+      engine: nextEngine,
+      deployer: {
+        deploy: (request) => this.getPagesDeployer().deploy(request),
+      },
+      serviceClient,
+      getSettings: () => this.readOnlineSettings(nextEngine),
+      publicSiteAssetsDir: resolvePublicSiteAssetsDir(),
+      workspaceDir: path.dirname(dbPath),
+      ...(this.clock !== undefined ? { clock: this.clock } : {}),
+    });
+
     this.unsubscribeCommit = nextEngine.onCommitted((event) => {
       this.emitStateChanged({
         seq: event.seq,
@@ -749,6 +835,7 @@ export class HostServiceImpl
         writes: [...event.writes],
       });
       this.syncScheduler?.handleCommitted(event);
+      this.publisher?.handleCommitted(event);
       if (isPublishRelevantOp(event.type)) {
         this.scheduleRoundFilesBuild();
       }
@@ -804,6 +891,13 @@ export class HostServiceImpl
     this.publishInFlight = promise;
   }
 
+  private getPagesDeployer(): IpcPagesDeployer {
+    if (this.pagesDeployer === null) {
+      this.pagesDeployer = new IpcPagesDeployer();
+    }
+    return this.pagesDeployer;
+  }
+
   private emitStateChanged(event: StateChangedEvent): void {
     if (this.client === undefined) {
       return;
@@ -830,6 +924,10 @@ export class HostServiceImpl
     if (this.syncScheduler !== null) {
       this.syncScheduler.dispose();
       this.syncScheduler = null;
+    }
+    if (this.publisher !== null) {
+      this.publisher.dispose();
+      this.publisher = null;
     }
     this.publishQueued = false;
     if (this.publishInFlight !== null) {
@@ -975,6 +1073,14 @@ export class HostServiceImpl
         ...(typeof parsed.ballotsOrigin === "string" &&
         parsed.ballotsOrigin.length > 0
           ? { ballotsOrigin: parsed.ballotsOrigin }
+          : {}),
+        ...(typeof parsed.cloudflareAccountId === "string" &&
+        parsed.cloudflareAccountId.length > 0
+          ? { cloudflareAccountId: parsed.cloudflareAccountId }
+          : {}),
+        ...(typeof parsed.pagesProject === "string" &&
+        parsed.pagesProject.length > 0
+          ? { pagesProject: parsed.pagesProject }
           : {}),
       };
     } catch {

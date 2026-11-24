@@ -3,8 +3,11 @@ import { Message } from "@theia/core/lib/browser";
 import { ReactWidget } from "@theia/core/lib/browser/widgets/react-widget";
 import { inject, injectable, postConstruct } from "@theia/core/shared/inversify";
 import * as React from "@theia/core/shared/react";
+import { PublishPanel } from "../components/publish-panel";
 import { ReleasesView } from "../components/releases-view";
+import { stateHasPermission } from "../lib/permissions";
 import { onLocaleChange, t } from "../i18n";
+import { DEFAULT_ONLINE_SETTINGS } from "@simpletab/host/lib/common/host-protocol";
 import { TournamentStore } from "../store/tournament-store";
 import { SIMPLETAB_OPEN_SETUP_COMMAND_ID } from "./participants-widget";
 
@@ -49,10 +52,25 @@ export class ReleasesWidget extends ReactWidget {
     this.update();
   }
 
+  private readonly loadPublishStatus = () => this.store.getPublishStatus();
+  private readonly publishNow = () => this.store.publishNow();
+  private readonly setLive = async (on: boolean): Promise<void> => {
+    await this.store.updateOnlineSettings({ livePublicSite: on });
+  };
+
   protected override render(): React.ReactNode {
     const snapshot = this.store.getSnapshot();
     return (
-      <ReleasesView
+      <>
+        <PublishPanel
+          open={snapshot.status.open}
+          canManage={stateHasPermission(snapshot.state, "releases.manage")}
+          onlineSettings={snapshot.status.onlineSettings ?? DEFAULT_ONLINE_SETTINGS}
+          loadStatus={this.loadPublishStatus}
+          onPublishNow={this.publishNow}
+          onSetLive={this.setLive}
+        />
+        <ReleasesView
         state={snapshot.state}
         status={snapshot.status}
         onSubmitOp={(request) => this.store.submit(request)}
@@ -60,7 +78,8 @@ export class ReleasesWidget extends ReactWidget {
         onOpenSetup={() => {
           void this.commandService.executeCommand(SIMPLETAB_OPEN_SETUP_COMMAND_ID);
         }}
-      />
+        />
+      </>
     );
   }
 }

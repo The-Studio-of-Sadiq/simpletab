@@ -86,6 +86,10 @@ export interface OnlineSettings {
   keyRequestedAt?: string;
   cdnHost?: string;
   ballotsOrigin?: string;
+  /** Cloudflare account id for the tournament's Pages project (not secret; M4). */
+  cloudflareAccountId?: string;
+  /** Cloudflare Pages project name, e.g. "wudc2027" for wudc2027.pages.dev (not secret; M4). */
+  pagesProject?: string;
 }
 
 export const DEFAULT_ONLINE_SETTINGS: Readonly<OnlineSettings> = {
@@ -96,6 +100,29 @@ export const DEFAULT_ONLINE_SETTINGS: Readonly<OnlineSettings> = {
   ballotCollection: "online",
   trustSignedBallots: false,
 };
+
+export type PublishState =
+  | "idle"
+  | "building"
+  | "uploading"
+  | "anchoring"
+  | "confirming"
+  | "done"
+  | "failed"
+  | "not_configured";
+
+/** Status of the public results site publisher (design section 10). */
+export interface PublishStatus {
+  state: PublishState;
+  /** When this status was recorded (ISO 8601 UTC). */
+  at?: string;
+  /** Public site URL after a successful publish. */
+  url?: string;
+  /** Plain-language reason for `failed` / `not_configured`; never contains secrets. */
+  reason?: string;
+  /** When a failed publish will be retried automatically. */
+  nextRetryAt?: string;
+}
 
 export interface HostStatus {
   open: boolean;
@@ -214,6 +241,8 @@ export interface HostService extends RpcServer<HostServiceClient> {
   updateOnlineSettings(patch: Partial<OnlineSettings>): Promise<OnlineSettings>;
   getSyncStatus(): Promise<SyncStatus>;
   pullNow(): Promise<SyncStatus>;
+  publishNow(): Promise<PublishStatus>;
+  getPublishStatus(): Promise<PublishStatus>;
   getChangelog(afterSeq?: number, limit?: number): Promise<PublicChainItem[]>;
   getOpUndoInfo(): Promise<OpUndoInfo[]>;
 }

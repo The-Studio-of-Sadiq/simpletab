@@ -13,6 +13,7 @@ import type {
   ProjectedState,
   StateChangedEvent,
   SubmitResult,
+  PublishStatus,
   SyncStatus,
 } from "@simpletab/host/lib/common/host-protocol";
 import { HostService } from "@simpletab/host/lib/common/host-protocol";
@@ -258,6 +259,17 @@ export class TournamentStore {
 
   async pullNow(): Promise<SyncStatus> {
     const result = await this.hostService.pullNow();
+    await this.refresh();
+    return result;
+  }
+
+  async getPublishStatus(): Promise<PublishStatus> {
+    return this.hostService.getPublishStatus();
+  }
+
+  /** Asks the host backend to publish; returns when that publish has finished or failed. */
+  async publishNow(): Promise<PublishStatus> {
+    const result = await this.hostService.publishNow();
     await this.refresh();
     return result;
   }

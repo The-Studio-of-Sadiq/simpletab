@@ -376,6 +376,18 @@ export class CredentialsVault implements CredentialsService {
     }
   }
 
+  /**
+   * Reads a secret for a task that runs inside electron-main itself (uploading the public site
+   * with Wrangler, M4). Never exposed over the backend RPC. Returns undefined when it is not set.
+   */
+  readSecretForElectronMain(name: "cdnToken" | "githubToken"): string | undefined {
+    if (!existsSync(this.blobPath(name))) {
+      return undefined;
+    }
+    const value = this.readDecryptedSecret(name).trim();
+    return value.length > 0 ? value : undefined;
+  }
+
   private readDecryptedSecret(name: CredentialName): string {
     const blobFile = this.blobPath(name);
     if (!existsSync(blobFile)) {

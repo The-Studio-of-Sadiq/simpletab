@@ -90,6 +90,25 @@ export {
   type StateHashTableName,
 } from "./state/state-hash";
 export {
+  buildPublicSiteFiles,
+  fingerprintPublicSiteFiles,
+  type BuildPublicSiteFilesOptions,
+  type BuildPublicSiteFilesResult,
+  type PublicSiteHead,
+} from "./publish/projection-build";
+export {
+  MAX_PUBLISH_BACKOFF_MS,
+  MIN_PUBLISH_INTERVAL_MS,
+  Publisher,
+  SITE_DIR_NAME,
+  type PublishFetch,
+  type PublishFetchResponse,
+  type PublisherDeps,
+  type PublisherEngine,
+  type PublisherServiceClient,
+  type PublisherTimers,
+} from "./publish/publisher";
+export {
   buildRoundFiles,
   mapBallotCollectionMode,
   type BuildRoundFilesOptions,

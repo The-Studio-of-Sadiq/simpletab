@@ -155,6 +155,17 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
     setCdnHostInput(onlineSettings.cdnHost ?? "");
   }, [onlineSettings.cdnHost]);
 
+  const [accountIdInput, setAccountIdInput] = React.useState<string>(
+    onlineSettings.cloudflareAccountId ?? "",
+  );
+  const [pagesProjectInput, setPagesProjectInput] = React.useState<string>(
+    onlineSettings.pagesProject ?? "",
+  );
+  React.useEffect(() => {
+    setAccountIdInput(onlineSettings.cloudflareAccountId ?? "");
+    setPagesProjectInput(onlineSettings.pagesProject ?? "");
+  }, [onlineSettings.cloudflareAccountId, onlineSettings.pagesProject]);
+
   const entryMap = React.useMemo(() => {
     const map = new Map<CredentialName, CredentialStatusEntry>();
     for (const entry of credentialsStatus) {
@@ -321,6 +332,21 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
       return;
     }
     await handleOnlinePatch({ cdnHost: trimmed });
+  };
+
+  const handleSavePages = async (event: React.FormEvent): Promise<void> => {
+    event.preventDefault();
+    const accountId = accountIdInput.trim().toLowerCase();
+    const project = pagesProjectInput.trim().toLowerCase();
+    if (accountId.length > 0 && !/^[0-9a-f]{32}$/.test(accountId)) {
+      setErrorMessage(t("credentials.pagesAccountInvalid"));
+      return;
+    }
+    if (project.length > 0 && !/^[a-z0-9-]{1,58}$/.test(project)) {
+      setErrorMessage(t("credentials.pagesProjectInvalid"));
+      return;
+    }
+    await handleOnlinePatch({ cloudflareAccountId: accountId, pagesProject: project });
   };
 
   const keyEntry = entryMap.get("tournamentKey");
@@ -747,6 +773,54 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
               </button>
             </div>
             <p className="simpletab-hint">{t("credentials.cdnHostHint")}</p>
+          </form>
+
+          <form
+            className="simpletab-field"
+            onSubmit={(e) => {
+              void handleSavePages(e);
+            }}
+          >
+            <label htmlFor={`${baseId}-pages-account`}>
+              {t("credentials.pagesAccountLabel")}
+            </label>
+            <input
+              id={`${baseId}-pages-account`}
+              type="text"
+              autoComplete="off"
+              spellCheck={false}
+              value={accountIdInput}
+              placeholder="0123456789abcdef0123456789abcdef"
+              disabled={!status.open || onlineBusy}
+              onChange={(e) => {
+                setAccountIdInput(e.target.value);
+              }}
+            />
+            <label htmlFor={`${baseId}-pages-project`}>
+              {t("credentials.pagesProjectLabel")}
+            </label>
+            <div className="simpletab-actions">
+              <input
+                id={`${baseId}-pages-project`}
+                type="text"
+                autoComplete="off"
+                spellCheck={false}
+                value={pagesProjectInput}
+                placeholder="wudc2027"
+                disabled={!status.open || onlineBusy}
+                onChange={(e) => {
+                  setPagesProjectInput(e.target.value);
+                }}
+              />
+              <button
+                type="submit"
+                className="theia-button secondary"
+                disabled={!status.open || onlineBusy}
+              >
+                {t("credentials.pagesSave")}
+              </button>
+            </div>
+            <p className="simpletab-hint">{t("credentials.pagesHint")}</p>
           </form>
         </div>
       </section>

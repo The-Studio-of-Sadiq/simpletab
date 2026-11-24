@@ -1,5 +1,7 @@
 import { fork, type ForkOptions } from "node:child_process";
+import { existsSync } from "node:fs";
 import path from "node:path";
+import { CredentialsVault } from "./credentials-store";
 import { FileUri } from "@theia/core/lib/common/file-uri";
 import { ConnectionHandler, RpcConnectionHandler } from "@theia/core/lib/common/messaging";
 import { ElectronSecurityToken } from "@theia/core/lib/electron-common/electron-token";
@@ -22,10 +24,28 @@ import {
 } from "../common/projector-protocol";
 import { ElectronCredentialsService } from "./credentials";
 import { attachCredentialsIpcHandler } from "./credentials-ipc";
+import {
+  attachPagesDeployIpcHandler,
+  isPagesDeployIpcRequest,
+} from "./pages-deploy-ipc";
 import { ElectronProjectorService } from "./projector-window";
 
 const BACKEND_MAX_OLD_SPACE_ARG = "--max-old-space-size=2048";
 const SMOKE_TIMEOUT_MS = 45_000;
+
+/** Finds the app's `resources` directory, preferring whichever candidate has a Wrangler install. */
+function resolveAppResourcesDir(): string {
+  const projectPath = process.env.THEIA_APP_PROJECT_PATH;
+  const candidates = [
+    ...(projectPath !== undefined ? [path.join(projectPath, "resources")] : []),
+    path.join(app.getAppPath(), "resources"),
+  ];
+  return (
+    candidates.find((dir) => existsSync(path.join(dir, "wrangler", "cli.json"))) ??
+    candidates[0] ??
+    path.join(app.getAppPath(), "resources")
+  );
+}
 
 @injectable()
 export class SimpleTabElectronMainApplication extends ElectronMainApplication {
@@ -33,6 +53,20 @@ export class SimpleTabElectronMainApplication extends ElectronMainApplication {
   protected readonly simpleTabCredentials!: ElectronCredentialsService;
 
   private detachCredentialsIpc: (() => void) | null = null;
+  private detachPagesDeployIpc: (() => void) | null = null;
+  private mainVault: CredentialsVault | null = null;
+
+  private mainOnlyVault(): CredentialsVault {
+    if (this.mainVault === null) {
+      this.mainVault = new CredentialsVault({
+        getStorageDir: () => path.join(app.getPath("userData"), "credentials"),
+        isEncryptionAvailable: () => safeStorage.isEncryptionAvailable(),
+        encryptString: (plain: string) => safeStorage.encryptString(plain),
+        decryptString: (encrypted: Buffer) => safeStorage.decryptString(encrypted),
+      });
+    }
+    return this.mainVault;
+  }
 
   protected override async startBackend(): Promise<number> {
     if (process.argv.includes("--no-cluster")) {
@@ -46,17 +80,23 @@ export class SimpleTabElectronMainApplication extends ElectronMainApplication {
       await this.getForkOptions(),
     );
 
-    this.detachCredentialsIpc?.();
+    this.detachIpcHandlers();
     this.detachCredentialsIpc = attachCredentialsIpcHandler(
       backendProcess,
       this.simpleTabCredentials,
     );
+    this.detachPagesDeployIpc = attachPagesDeployIpcHandler(backendProcess, {
+      // A vault of its own, not the RPC-served credentials service: every public method of that
+      // service is callable from the frontend, and the token must never reach it.
+      getToken: async () => this.mainOnlyVault().readSecretForElectronMain("cdnToken"),
+      resourcesDir: resolveAppResourcesDir(),
+    });
 
     return new Promise<number>((resolve, reject) => {
       let portResolved = false;
 
       const onMessage = (raw: unknown): void => {
-        if (isCredentialsFetchIpcRequest(raw)) {
+        if (isCredentialsFetchIpcRequest(raw) || isPagesDeployIpcRequest(raw)) {
           return;
         }
         if (
@@ -80,8 +120,7 @@ export class SimpleTabElectronMainApplication extends ElectronMainApplication {
         }
       });
       backendProcess.on("exit", (code) => {
-        this.detachCredentialsIpc?.();
-        this.detachCredentialsIpc = null;
+        this.detachIpcHandlers();
         if (!portResolved) {
           portResolved = true;
           reject(new Error(`Backend exited before reporting port (code=${String(code)})`));
@@ -89,8 +128,7 @@ export class SimpleTabElectronMainApplication extends ElectronMainApplication {
       });
 
       app.on("quit", () => {
-        this.detachCredentialsIpc?.();
-        this.detachCredentialsIpc = null;
+        this.detachIpcHandlers();
         if (
           backendProcess.exitCode === null &&
           backendProcess.signalCode === null &&
@@ -106,6 +144,13 @@ export class SimpleTabElectronMainApplication extends ElectronMainApplication {
         }
       });
     });
+  }
+
+  private detachIpcHandlers(): void {
+    this.detachCredentialsIpc?.();
+    this.detachCredentialsIpc = null;
+    this.detachPagesDeployIpc?.();
+    this.detachPagesDeployIpc = null;
   }
 
   protected override async getForkOptions(): Promise<ForkOptions> {

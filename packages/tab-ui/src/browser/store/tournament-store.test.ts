@@ -129,6 +129,8 @@ describe("TournamentStore", () => {
       getOpUndoInfo: vi.fn(async () => []),
       getSyncStatus: vi.fn(async () => OFF_SYNC_STATUS),
       pullNow: vi.fn(async () => OFF_SYNC_STATUS),
+      publishNow: vi.fn(async () => ({ state: "idle" as const })),
+      getPublishStatus: vi.fn(async () => ({ state: "idle" as const })),
     };
 
     const dispatcher = new HostServiceClientDispatcher();
@@ -217,6 +219,8 @@ describe("TournamentStore", () => {
       getOpUndoInfo: vi.fn(async () => []),
       getSyncStatus: vi.fn(async () => OFF_SYNC_STATUS),
       pullNow: vi.fn(async () => OFF_SYNC_STATUS),
+      publishNow: vi.fn(async () => ({ state: "idle" as const })),
+      getPublishStatus: vi.fn(async () => ({ state: "idle" as const })),
     };
 
     const store = new TournamentStore(hostService, undefined, workspaceOpener);
@@ -279,6 +283,8 @@ describe("TournamentStore", () => {
       getOpUndoInfo: vi.fn(async () => []),
       getSyncStatus: vi.fn(async () => OFF_SYNC_STATUS),
       pullNow: vi.fn(async () => OFF_SYNC_STATUS),
+      publishNow: vi.fn(async () => ({ state: "idle" as const })),
+      getPublishStatus: vi.fn(async () => ({ state: "idle" as const })),
     };
 
     const dispatcher = new HostServiceClientDispatcher();

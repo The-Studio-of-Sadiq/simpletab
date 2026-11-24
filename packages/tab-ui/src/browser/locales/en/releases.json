@@ -60,5 +60,22 @@
   "releases.actionUnrelease": "Unrelease",
   "releases.actionReveal": "Reveal",
   "releases.actionHide": "Hide",
-  "releases.gateUpdated": "Updated {gate}."
+  "releases.gateUpdated": "Updated {gate}.",
+  "releases.publishTitle": "Public site",
+  "releases.publishHint": "Uploads the released draws, results and tabs to the tournament's Cloudflare Pages site. Only what the release switches below allow is published; feedback never is. Publishing runs in the background and never holds up tabbing.",
+  "releases.publishLive": "Live public site: publish automatically after changes (at most every 30 seconds)",
+  "releases.publishStatusLabel": "Status",
+  "releases.publishStateLoading": "Checking…",
+  "releases.publishState.idle": "Not published yet",
+  "releases.publishState.building": "Building the site",
+  "releases.publishState.uploading": "Uploading to Cloudflare Pages",
+  "releases.publishState.anchoring": "Recording the head with the service",
+  "releases.publishState.confirming": "Checking the new version is live",
+  "releases.publishState.done": "Published",
+  "releases.publishState.failed": "Publish failed",
+  "releases.publishState.not_configured": "Not set up",
+  "releases.publishRetryAt": "Next automatic try: {time}.",
+  "releases.publishNow": "Publish now",
+  "releases.publishRunning": "Publishing…",
+  "releases.publishOpenSite": "Open {host}"
 }

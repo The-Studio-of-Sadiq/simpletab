@@ -5,7 +5,9 @@
   "license": "AGPL-3.0-or-later",
   "main": "lib/backend/electron-main.js",
   "scripts": {
-    "prebuild": "npm run build -w @simpletab/host && npm run build -w @simpletab/tab-ui",
+    "prebuild": "npm run fetch:wrangler && npm run fetch:public-site && npm run build -w @simpletab/host && npm run build -w @simpletab/tab-ui",
+    "fetch:wrangler": "node scripts/fetch-wrangler.mjs",
+    "fetch:public-site": "node scripts/fetch-public-site.mjs",
     "download:plugins": "theia download:plugins --rate-limit 15 --parallel false",
     "build": "node scripts/ensure-plugins.mjs && theia build --mode development",
     "start": "theia start",

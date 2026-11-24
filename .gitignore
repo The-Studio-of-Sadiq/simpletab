@@ -5,6 +5,8 @@ node_modules/
 /packages/app/gen-esbuild.*.mjs
 /packages/app/.browser_modules/
 /packages/app/plugins/
+/packages/app/resources/public-site/
+/packages/app/resources/wrangler/
 coverage/
 *.tsbuildinfo
 .env
