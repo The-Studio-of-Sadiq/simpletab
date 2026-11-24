@@ -1,4 +1,11 @@
-import { existsSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import {
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  rmSync,
+  writeFileSync,
+} from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import type { PublicChainItem } from "@simpletab/core/changelog";
@@ -50,6 +57,41 @@ import { readHostNumber } from "./handover/format";
 const DEMO_DB_FILENAME = "bp-demo.simpletab.db";
 const DEFAULT_PRELIM_ROUNDS = 4;
 
+const TOURNAMENT_GITIGNORE_ENTRIES = [
+  "*.simpletab.db",
+  "*.simpletab.db-*",
+  "*.simpletab",
+] as const;
+
+export function ensureTournamentGitignore(dir: string): void {
+  const gitignorePath = path.join(dir, ".gitignore");
+  if (!existsSync(gitignorePath)) {
+    writeFileSync(
+      gitignorePath,
+      `${TOURNAMENT_GITIGNORE_ENTRIES.join("\n")}\n`,
+      "utf8",
+    );
+    return;
+  }
+  const existing = readFileSync(gitignorePath, "utf8");
+  const existingLines = new Set(
+    existing.split(/\r?\n/).map((line) => line.trim()),
+  );
+  const missing = TOURNAMENT_GITIGNORE_ENTRIES.filter(
+    (entry) => !existingLines.has(entry),
+  );
+  if (missing.length === 0) {
+    return;
+  }
+  const prefix =
+    existing.length > 0 && !existing.endsWith("\n") ? "\n" : "";
+  writeFileSync(
+    gitignorePath,
+    `${existing}${prefix}${missing.join("\n")}\n`,
+    "utf8",
+  );
+}
+
 export const HOST_OWNER_ACTOR: Actor = {
   ref: "host-owner",
   type: "human",
@@ -68,6 +110,7 @@ export class HostServiceImpl
   implements HostServiceContract, BackendApplicationContribution
 {
   private engine: HostEngine | null = null;
+  private openDbPath: string | null = null;
   private unsubscribeCommit: (() => void) | null = null;
   private unsubscribeLocks: (() => void) | null = null;
   private client: HostServiceClient | undefined;
@@ -132,7 +175,7 @@ export class HostServiceImpl
     });
     try {
       await nextEngine.runFastCheck();
-      this.attachEngine(nextEngine);
+      this.attachEngine(nextEngine, resolvedPath);
       this.emitStateChanged({
         seq: nextEngine.head().seq,
         type: "tournament.opened",
@@ -157,7 +200,8 @@ export class HostServiceImpl
     removeDbFiles(dbPath);
 
     const nextEngine = await seedDemoTournament(dbPath);
-    this.attachEngine(nextEngine);
+    ensureTournamentGitignore(targetDir);
+    this.attachEngine(nextEngine, dbPath);
     this.emitStateChanged({
       seq: nextEngine.head().seq,
       type: "tournament.created",
@@ -165,6 +209,7 @@ export class HostServiceImpl
     });
     return {
       dbPath,
+      workspaceDir: targetDir,
       status: this.buildStatus(),
     };
   }
@@ -307,8 +352,9 @@ export class HostServiceImpl
       throw error;
     }
 
+    ensureTournamentGitignore(targetDir);
     await this.closeCurrentEngine();
-    this.attachEngine(nextEngine);
+    this.attachEngine(nextEngine, dbPath);
     this.emitStateChanged({
       seq: nextEngine.head().seq,
       type: "tournament.created",
@@ -322,6 +368,7 @@ export class HostServiceImpl
 
     return {
       dbPath,
+      workspaceDir: targetDir,
       status: this.buildStatus(),
       state,
     };
@@ -532,8 +579,9 @@ export class HostServiceImpl
     console.log(`SIMPLETAB_SMOKE_OK seq=${seq} integrity=${integrity}`);
   }
 
-  private attachEngine(nextEngine: HostEngine): void {
+  private attachEngine(nextEngine: HostEngine, dbPath: string): void {
     this.engine = nextEngine;
+    this.openDbPath = dbPath;
     this.unsubscribeCommit = nextEngine.onCommitted((event) => {
       this.emitStateChanged({
         seq: event.seq,
@@ -580,6 +628,7 @@ export class HostServiceImpl
     this.lastFullCheck = undefined;
     const current = this.engine;
     this.engine = null;
+    this.openDbPath = null;
     if (current !== null) {
       await current.close();
       this.emitLocksChanged([]);
@@ -723,6 +772,9 @@ export class HostServiceImpl
     return {
       open: true,
       ...(state !== null ? { slug: state.tournament.slug } : {}),
+      ...(this.openDbPath !== null
+        ? { workspaceDir: path.dirname(this.openDbPath) }
+        : {}),
       headSeq: head.seq,
       integrityOk: this.engine.integrity.ok,
       canSync: this.engine.canSync(),

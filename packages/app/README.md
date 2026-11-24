@@ -7,6 +7,9 @@ SimpleTab desktop application shell built on **Eclipse Theia 1.77.0** (Electron 
 Run from the repository root:
 
 ```powershell
+# 0. Download VS Code's built-in Git plugins into packages/app/plugins/ (also run automatically by build if missing)
+npm run download:plugins -w packages/app
+
 # 1. Build @simpletab/host, @simpletab/tab-ui, and the Theia Electron app
 npm run build -w packages/app
 
@@ -23,6 +26,12 @@ $env:SIMPLETAB_SMOKE="1"; npm run start -w packages/app; Remove-Item Env:SIMPLET
 npm run rebuild:node -w packages/app
 npm test
 ```
+
+## Git Panel (Source Control) & Plugins
+
+- **What it is for:** The Source Control panel in the left activity bar runs VS Code's built-in Git extensions (`vscode.git` and `vscode.git-base` 1.95.3 from Open VSX) inside Theia's plugin host. It is for versioning plain-text files alongside a tournament—CSV imports, exported reports, and helper scripts. Tournament state itself lives in SQLite + the hash-chained changelog, never in git; creating a tournament folder automatically writes a `.gitignore` excluding `*.simpletab.db`, `*.simpletab.db-*`, and `*.simpletab`, and opening or creating a tournament opens its folder as the Theia workspace so Git sees it.
+- **Downloading plugins:** `npm run download:plugins -w packages/app` downloads `vscode.git` and `vscode.git-base` into `packages/app/plugins/` (gitignored). `npm run build -w packages/app` runs `scripts/ensure-plugins.mjs` first so plugins are fetched automatically when `packages/app/plugins/` is missing. At runtime, `SimpleTabElectronMainApplication` (`packages/host/src/electron-main/host-main-module.ts`) sets `THEIA_DEFAULT_PLUGINS` to `local-dir` for `packages/app/plugins`.
+- **Focused shell UI:** `@theia/vsx-registry` is not included (extension marketplace UI is deferred to M9). Because `@theia/plugin-ext` transitively pulls in additional Theia modules (Plugins view, Navigator/Explorer, Terminal, Search, Debug, Testing), `SimpleTabShellFilterContribution` (`packages/tab-ui/src/browser/shell-view-filter.ts`) filters out those views via Theia's `FilterContribution` and closes any restored hidden widgets on layout init so only SimpleTab and Source Control appear in the activity bar (Terminal arrives in M6, File Explorer in M7, Plugins UI in M9).
 
 ## Module Resolution (`@/` and `@simpletab/core/*`)
 

@@ -1345,6 +1345,8 @@ row = { room, side?, teammates?: [name], panel?: [{name, role}], forms: [formId]
 > - Two tests were dropped or skipped: `serverOnlyRules.test.ts` (Firebase rules), and one case in `presets.test.ts` that reads Next.js routes.
 > - `passcode.ts` (WebCrypto-free constant-time compare) and `privateUrls.ts` (origin passed in) were edited so that core uses no Node or DOM APIs.
 > - Tests: 1,267 pass, 1 skipped. `tsc` is clean, and `port-check` and ESLint pass.
+>
+> **As built (M2, 2026-11-24).** `packages/app` pins `vscode.git` and `vscode.git-base` to `1.95.3` instead of `1.108.2` because Open VSX publishes standalone built-ins only up to `1.95.3` (Theia 1.77's `1.108.2` built-ins exist only inside the all-built-ins bundle).
 
 The list was computed with an import-closure script on 2026-11-19: 108 seed modules and 59 dependencies. `tools/port-check.mjs` repeats the check in CI. Paths below are CrabbyTab's.
 

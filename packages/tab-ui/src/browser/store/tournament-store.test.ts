@@ -8,7 +8,10 @@ import {
   type SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import { HostServiceClientDispatcher } from "./host-service-client";
-import { TournamentStore } from "./tournament-store";
+import {
+  TournamentStore,
+  type TournamentWorkspaceOpener,
+} from "./tournament-store";
 
 function makeProjectedState(seq: number, slug = "demo"): ProjectedState {
   return {
@@ -99,6 +102,7 @@ describe("TournamentStore", () => {
       createTournament: vi.fn(
         async (): Promise<CreateTournamentResult> => ({
           dbPath: "/tmp/demo.simpletab.db",
+          workspaceDir: "/tmp",
           status: currentStatus,
           state: makeProjectedState(1),
         }),
@@ -161,19 +165,31 @@ describe("TournamentStore", () => {
     const createdStatus: HostStatus = {
       open: true,
       slug: "new-tourney",
+      workspaceDir: "/tmp/new-tourney",
       headSeq: 4,
       integrityOk: true,
       canSync: true,
       locks: [],
     };
+    const openWorkspaceFolders: string[] = [];
+    const workspaceOpener: TournamentWorkspaceOpener = {
+      openTournamentFolder: vi.fn(async (folderPath: string) => {
+        openWorkspaceFolders.push(folderPath);
+      }),
+    };
     const hostService: HostService = {
       setClient: vi.fn(),
       dispose: vi.fn(),
       status: vi.fn(async () => ({ open: false, locks: [] })),
-      openTournament: vi.fn(),
-      createDemoTournament: vi.fn(),
+      openTournament: vi.fn(async () => createdStatus),
+      createDemoTournament: vi.fn(async () => ({
+        dbPath: "/tmp/demo/bp-demo.simpletab.db",
+        workspaceDir: "/tmp/demo",
+        status: { ...createdStatus, slug: "bp-demo", workspaceDir: "/tmp/demo" },
+      })),
       createTournament: vi.fn(async () => ({
-        dbPath: "/tmp/new-tourney.simpletab.db",
+        dbPath: "/tmp/new-tourney/new-tourney.simpletab.db",
+        workspaceDir: "/tmp/new-tourney",
         status: createdStatus,
         state: createdState,
       })),
@@ -190,18 +206,29 @@ describe("TournamentStore", () => {
       getOpUndoInfo: vi.fn(async () => []),
     };
 
-    const store = new TournamentStore(hostService);
+    const store = new TournamentStore(hostService, undefined, workspaceOpener);
     await store.createTournament({
       name: "New Tourney",
       slug: "new-tourney",
       format: "bp",
       presetId: "bp",
       prelimRounds: 4,
-      directory: "/tmp",
+      directory: "/tmp/new-tourney",
     });
 
     expect(store.getStatus().slug).toBe("new-tourney");
     expect(store.getState()?.seq).toBe(4);
+    expect(openWorkspaceFolders).toEqual(["/tmp/new-tourney"]);
+
+    await store.openTournament("/tmp/new-tourney/new-tourney.simpletab.db");
+    expect(openWorkspaceFolders).toEqual(["/tmp/new-tourney", "/tmp/new-tourney"]);
+
+    await store.createDemoTournament("/tmp/demo");
+    expect(openWorkspaceFolders).toEqual([
+      "/tmp/new-tourney",
+      "/tmp/new-tourney",
+      "/tmp/demo",
+    ]);
     store.dispose();
   });
 

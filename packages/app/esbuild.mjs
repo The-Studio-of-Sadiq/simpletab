@@ -72,6 +72,36 @@ const customBrowserOptions = {
     ],
 };
 
+/**
+ * `@vscode/windows-ca-certs` is an optional dependency of `@vscode/proxy-agent`
+ * that may be absent on Windows (for example when its native addon is skipped on Node 24).
+ * When missing, mark it external before `@theia/bundle-plugin` tries to resolve its `.node` binary;
+ * `@vscode/proxy-agent` falls back to Node's built-in root certificates at runtime.
+ * @type {import('esbuild').Plugin}
+ */
+const optionalWindowsCaCertsPlugin = {
+    name: 'simpletab-optional-windows-ca-certs',
+    setup(build) {
+        build.onResolve({ filter: /^@vscode\/windows-ca-certs$/ }, () => {
+            const candidate = path.resolve(
+                __dirname,
+                '..',
+                '..',
+                'node_modules',
+                '@vscode',
+                'windows-ca-certs',
+                'build',
+                'Release',
+                'crypt32.node',
+            );
+            if (!fs.existsSync(candidate)) {
+                return { path: '@vscode/windows-ca-certs', external: true };
+            }
+            return undefined;
+        });
+    },
+};
+
 const customNodeOptions = {
     ...nodeOptions,
     external: [
@@ -80,6 +110,7 @@ const customNodeOptions = {
     ],
     plugins: [
         simpletabCoreAliasPlugin,
+        optionalWindowsCaCertsPlugin,
         ...(nodeOptions.plugins ?? []),
         copy({
             assets: [

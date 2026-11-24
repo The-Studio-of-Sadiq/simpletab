@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { BUILT_IN_ROLES } from "@simpletab/core/permissions";
@@ -66,15 +66,23 @@ describe("HostServiceImpl", () => {
 
     const created = await service.createDemoTournament(tempDir);
     expect(created.dbPath).toBe(path.join(tempDir, "bp-demo.simpletab.db"));
+    expect(created.workspaceDir).toBe(tempDir);
     expect(created.status.open).toBe(true);
     expect(created.status.slug).toBe("bp-demo");
+    expect(created.status.workspaceDir).toBe(tempDir);
     expect(created.status.headSeq).toBe(5);
     expect(created.status.integrityOk).toBe(true);
     expect(created.status.canSync).toBe(true);
     expect(created.status.locks).toEqual([]);
 
+    const gitignore = readFileSync(path.join(tempDir, ".gitignore"), "utf8");
+    expect(gitignore).toContain("*.simpletab.db");
+    expect(gitignore).toContain("*.simpletab.db-*");
+    expect(gitignore).toContain("*.simpletab");
+
     const reopened = await service.openTournament(created.dbPath);
     expect(reopened).toEqual(created.status);
+    expect(reopened.workspaceDir).toBe(tempDir);
   });
 
   it("creates tournaments from BP and two-team presets and rejects unsupported presets", async () => {
@@ -91,6 +99,11 @@ describe("HostServiceImpl", () => {
       directory: tempDir,
     });
     expect(bpCreated.dbPath).toBe(path.join(tempDir, "winter-bp-2026.simpletab.db"));
+    expect(bpCreated.workspaceDir).toBe(tempDir);
+    expect(bpCreated.status.workspaceDir).toBe(tempDir);
+    expect(readFileSync(path.join(tempDir, ".gitignore"), "utf8")).toBe(
+      "*.simpletab.db\n*.simpletab.db-*\n*.simpletab\n",
+    );
     expect(bpCreated.state.tournament.format).toBe("bp");
     expect(bpCreated.state.tournament.preferences.teamsInDebate).toBe(4);
     expect(bpCreated.state.rounds.filter((r) => r.stage === "preliminary")).toHaveLength(3);
@@ -470,5 +483,32 @@ describe("HostServiceImpl", () => {
     expect(displayState?.motions).toEqual([]);
     expect(displayState?.adjudicators.find((a) => a.id === "adj-secret")?.email).toBeUndefined();
     expect(displayState?.adjudicators.find((a) => a.id === "adj-secret")?.baseScore).toBe(0);
+  });
+
+  it("preserves existing .gitignore entries and appends missing SimpleTab rules once", async () => {
+    const service = createService();
+    const tempDir = mkdtempSync(path.join(os.tmpdir(), "simpletab-host-gitignore-"));
+    tempDirs.push(tempDir);
+
+    const gitignorePath = path.join(tempDir, ".gitignore");
+    writeFileSync(gitignorePath, "node_modules/\n*.simpletab.db", "utf8");
+
+    await service.createTournament({
+      name: "Gitignore Preservation",
+      slug: "gitignore-test",
+      format: "bp",
+      presetId: "bp",
+      prelimRounds: 1,
+      directory: tempDir,
+    });
+
+    const content = readFileSync(gitignorePath, "utf8");
+    const lines = content.trim().split("\n");
+    expect(lines).toEqual([
+      "node_modules/",
+      "*.simpletab.db",
+      "*.simpletab.db-*",
+      "*.simpletab",
+    ]);
   });
 });

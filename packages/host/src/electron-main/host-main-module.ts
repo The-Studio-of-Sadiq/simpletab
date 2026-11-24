@@ -1,4 +1,6 @@
 import type { ForkOptions } from "node:child_process";
+import path from "node:path";
+import { FileUri } from "@theia/core/lib/common/file-uri";
 import { ConnectionHandler, RpcConnectionHandler } from "@theia/core/lib/common/messaging";
 import {
   ElectronMainApplication,
@@ -29,8 +31,18 @@ export class SimpleTabElectronMainApplication extends ElectronMainApplication {
     const filteredExecArgv = (baseOptions.execArgv ?? process.execArgv).filter(
       (arg) => !arg.startsWith("--max-old-space-size"),
     );
+    const env: NodeJS.ProcessEnv = { ...(baseOptions.env ?? process.env) };
+    const appProjectPath =
+      env.THEIA_APP_PROJECT_PATH ?? process.env.THEIA_APP_PROJECT_PATH;
+    if (!env.THEIA_DEFAULT_PLUGINS && appProjectPath) {
+      const pluginsDir = path.join(appProjectPath, "plugins");
+      env.THEIA_DEFAULT_PLUGINS = FileUri.create(pluginsDir)
+        .withScheme("local-dir")
+        .toString();
+    }
     return {
       ...baseOptions,
+      env,
       execArgv: [...filteredExecArgv, BACKEND_MAX_OLD_SPACE_ARG],
     };
   }

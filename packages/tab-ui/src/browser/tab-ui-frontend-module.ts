@@ -25,8 +25,10 @@ import {
   ElectronIpcConnectionProvider,
   ElectronMainConnectionProvider,
 } from "@theia/core/lib/electron-browser/messaging/electron-ipc-connection-source";
+import { FilterContribution } from "@theia/core/lib/common";
 import { ContainerModule } from "@theia/core/shared/inversify";
 import { t } from "./i18n";
+import { SimpleTabShellFilterContribution } from "./shell-view-filter";
 import {
   AllocationViewContribution,
   BreakViewContribution,
@@ -49,7 +51,11 @@ import {
 import { SimpleTabStatusWidget } from "./simpletab-status-widget";
 import { HostServiceClientDispatcher } from "./store/host-service-client";
 import { ProjectorServiceClientDispatcher } from "./store/projector-service-client";
-import { TournamentStore } from "./store/tournament-store";
+import {
+  TournamentStore,
+  TournamentWorkspaceOpener,
+} from "./store/tournament-store";
+import { TheiaTournamentWorkspaceOpener } from "./workspace-sync";
 import "./style/simpletab-status.css";
 import "./style/simpletab.css";
 import { AllocationWidget } from "./views/allocation-widget";
@@ -83,7 +89,15 @@ export default new ContainerModule((bind) => {
     })
     .inSingletonScope();
 
+  bind(TheiaTournamentWorkspaceOpener).toSelf().inSingletonScope();
+  bind(TournamentWorkspaceOpener).toService(TheiaTournamentWorkspaceOpener);
   bind(TournamentStore).toSelf().inSingletonScope();
+
+  bind(SimpleTabShellFilterContribution).toSelf().inSingletonScope();
+  bind(FilterContribution).toService(SimpleTabShellFilterContribution);
+  bind(FrontendApplicationContribution).toService(
+    SimpleTabShellFilterContribution,
+  );
 
   bind(CredentialsService)
     .toDynamicValue((ctx) => {

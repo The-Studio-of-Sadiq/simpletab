@@ -21,6 +21,12 @@ import { HostServiceClientDispatcher } from "./host-service-client";
 
 export type TrackedRoundOpType = "draw.generate" | "allocation.auto";
 
+export const TournamentWorkspaceOpener = Symbol("TournamentWorkspaceOpener");
+
+export interface TournamentWorkspaceOpener {
+  openTournamentFolder(folderPath: string): Promise<void>;
+}
+
 export interface TournamentStoreSnapshot {
   status: HostStatus;
   state: ProjectedState | null;
@@ -53,6 +59,9 @@ export class TournamentStore {
     @inject(HostServiceClientDispatcher)
     @optional()
     clientDispatcher?: HostServiceClientDispatcher,
+    @inject(TournamentWorkspaceOpener)
+    @optional()
+    private readonly workspaceOpener?: TournamentWorkspaceOpener,
   ) {
     if (clientDispatcher !== undefined) {
       this.clientSubscriptions.push(
@@ -260,19 +269,43 @@ export class TournamentStore {
       error: null,
     };
     this.notify();
+    await this.openTournamentWorkspace(
+      result.workspaceDir ?? result.status.workspaceDir,
+    );
     return result;
   }
 
   async createDemoTournament(dir = ""): Promise<CreateDemoResult> {
     const result = await this.hostService.createDemoTournament(dir);
     await this.refresh();
+    await this.openTournamentWorkspace(
+      result.workspaceDir ?? result.status.workspaceDir,
+    );
     return result;
   }
 
   async openTournament(dbPath: string): Promise<HostStatus> {
     const status = await this.hostService.openTournament(dbPath);
     await this.refresh();
+    await this.openTournamentWorkspace(status.workspaceDir);
     return status;
+  }
+
+  private async openTournamentWorkspace(
+    folderPath: string | undefined,
+  ): Promise<void> {
+    if (
+      this.workspaceOpener === undefined ||
+      folderPath === undefined ||
+      folderPath.trim().length === 0
+    ) {
+      return;
+    }
+    try {
+      await this.workspaceOpener.openTournamentFolder(folderPath);
+    } catch {
+      // Opening the workspace folder must never block tournament operations.
+    }
   }
 
   dispose(): void {

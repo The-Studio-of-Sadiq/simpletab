@@ -69,6 +69,7 @@ export const DEFAULT_ONLINE_SETTINGS: Readonly<OnlineSettings> = {
 export interface HostStatus {
   open: boolean;
   slug?: string;
+  workspaceDir?: string;
   headSeq?: number;
   integrityOk?: boolean;
   canSync?: boolean;
@@ -82,6 +83,7 @@ export interface HostStatus {
 
 export interface CreateDemoResult {
   dbPath: string;
+  workspaceDir: string;
   status: HostStatus;
 }
 
@@ -110,6 +112,7 @@ export interface ProjectedState extends ProjectableState {
 
 export interface CreateTournamentResult {
   dbPath: string;
+  workspaceDir: string;
   status: HostStatus;
   state: ProjectedState;
 }
