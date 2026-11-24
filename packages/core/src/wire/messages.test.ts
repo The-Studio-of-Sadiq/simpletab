@@ -100,6 +100,16 @@ describe("wire message parsers", () => {
     expect(parsed.ok).toBe(true);
   });
 
+  it("accepts an optional non-negative scanned watermark on InboxPage and rejects bad ones", () => {
+    expect(parseInboxPage({ schema: 1, items: [], next: null, scanned: 40 })).toEqual({
+      ok: true,
+      value: { schema: 1, items: [], next: null, scanned: 40 },
+    });
+    expect(parseInboxPage({ schema: 1, items: [], next: null, scanned: 0 }).ok).toBe(true);
+    expect(parseInboxPage({ schema: 1, items: [], next: null, scanned: -1 }).ok).toBe(false);
+    expect(parseInboxPage({ schema: 1, items: [], next: null, scanned: 2.5 }).ok).toBe(false);
+  });
+
   it("parses valid InboxPage with items and null or positive integer next", () => {
     const withNext = parseInboxPage({
       schema: 1,

@@ -61,6 +61,13 @@ export type InboxPage = {
   schema: number;
   items: InboxItem[];
   next: number | null;
+  /**
+   * Highest submission rowid the service examined for this page, across all tournaments.
+   * Every row of this tournament up to it is in `items` (or an earlier page), so the host may
+   * start its next pull here instead of re-reading other tournaments' rows (D1 rows-read budget).
+   * Absent from services older than this field.
+   */
+  scanned?: number;
 };
 
 export type Ack = {
@@ -298,6 +305,9 @@ export function parseInboxPage(input: unknown): Result<InboxPage> {
   if (input.next !== null && !isPositiveInt(input.next)) {
     errors.push("next: must be a positive integer or null");
   }
+  if (input.scanned !== undefined && !isNonNegativeInt(input.scanned)) {
+    errors.push("scanned: must be a non-negative integer");
+  }
 
   if (errors.length > 0) {
     return err(errors);
@@ -307,6 +317,7 @@ export function parseInboxPage(input: unknown): Result<InboxPage> {
     schema: input.schema as number,
     items,
     next: input.next as number | null,
+    ...(input.scanned !== undefined ? { scanned: input.scanned as number } : {}),
   });
 }
 

@@ -16,6 +16,12 @@ export const IDLE_POLL_MS = 300_000;
 export const CLOCK_SKEW_WARNING_MS = 120_000;
 
 const META_ACKED_THROUGH = "sync_acked_through";
+/**
+ * Where the next inbox pull starts. It can run ahead of the acked position: it also skips other
+ * tournaments' rows the service has already scanned, so quiet pulls stop re-reading them.
+ * Kept only on the host, so moving it costs no service writes.
+ */
+const META_PULL_CURSOR = "sync_pull_cursor";
 const META_PROCESSED_SUBMISSIONS = "sync_processed_submissions";
 const META_PERMIT_VERSIONS = "sync_permit_versions";
 const MAX_PROCESSED_SUBMISSIONS = 10_000;
@@ -109,6 +115,7 @@ export class SyncScheduler {
   private settings: OnlineSettings;
   private hostNumber: number;
   private ackedThrough: number;
+  private pullCursor: number;
   private readonly processedIds: Set<string>;
   private readonly permitVersions: Record<string, number>;
 
@@ -142,6 +149,7 @@ export class SyncScheduler {
 
     const db = this.engine.database;
     this.ackedThrough = readMetaNumber(db, META_ACKED_THROUGH, 0);
+    this.pullCursor = readMetaNumber(db, META_PULL_CURSOR, 0);
     this.processedIds = new Set(readMetaStringArray(db, META_PROCESSED_SUBMISSIONS));
     this.permitVersions = readMetaNumberMap(db, META_PERMIT_VERSIONS);
 
@@ -509,9 +517,11 @@ export class SyncScheduler {
         await this.flushPendingPermits();
       }
 
-      let cursor = this.ackedThrough;
+      let cursor = Math.max(this.ackedThrough, this.pullCursor);
       let highestAckCandidate = this.ackedThrough;
       let stoppedEarly = false;
+      // Highest rowid this cycle has fully dealt with; committed only after a clean pass and ack.
+      let scannedThrough = cursor;
 
       while (!this.disposed && (isManual || this.isPortalEnabled())) {
         const pageRes = await this.client.fetchInbox(cursor, INBOX_PAGE_LIMIT);
@@ -523,6 +533,9 @@ export class SyncScheduler {
 
         const page = pageRes.data;
         if (page.items.length === 0) {
+          if (page.scanned !== undefined && page.scanned > scannedThrough) {
+            scannedThrough = page.scanned;
+          }
           break;
         }
 
@@ -542,6 +555,14 @@ export class SyncScheduler {
         if (applied.stoppedOnError !== undefined) {
           stoppedEarly = true;
           break;
+        }
+
+        const pageEnd = Math.max(
+          page.scanned ?? 0,
+          applied.highestProcessedRowId ?? 0,
+        );
+        if (pageEnd > scannedThrough) {
+          scannedThrough = pageEnd;
         }
 
         if (page.next === null || page.next <= cursor) {
@@ -570,6 +591,16 @@ export class SyncScheduler {
           String(this.ackedThrough),
         );
         this.lastAckAt = this.clock().toISOString();
+      }
+
+      // A stop on error must re-pull the failed item, so the pull position only moves on a clean pass.
+      if (!stoppedEarly && scannedThrough > this.pullCursor) {
+        this.pullCursor = scannedThrough;
+        writeMetaValue(
+          this.engine.database,
+          META_PULL_CURSOR,
+          String(this.pullCursor),
+        );
       }
 
       const state = this.engine.getState();
@@ -611,7 +642,10 @@ export class SyncScheduler {
     if (this.disposed || !this.engine.canSync()) {
       return;
     }
-    const pageRes = await this.client.fetchInbox(this.ackedThrough, INBOX_PAGE_LIMIT);
+    const pageRes = await this.client.fetchInbox(
+      Math.max(this.ackedThrough, this.pullCursor),
+      INBOX_PAGE_LIMIT,
+    );
     if (!pageRes.ok || pageRes.data.items.length === 0) {
       return;
     }

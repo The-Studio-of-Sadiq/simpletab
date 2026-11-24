@@ -1,7 +1,7 @@
 # SimpleTab
 
 *   **Author:** Golam Kuadir Khan Prince
-*   **Status:** Approved (revision 3, approved by the author on 2026-11-21; amendment 1 on 2026-11-23 adds the permanent GitHub archive, section 10.1; amendment 2 on 2026-11-23 adds per-round ballot deadlines, section 8.1; amendment 3 on 2026-11-23 makes every online feature optional and non-blocking, section 1.1; amendment 4 on 2026-11-23 adds the 1000-team benchmark level, QR-only ballots and bubble-sheet ballots, sections 8.2 and 8.3)
+*   **Status:** Approved (revision 3, approved by the author on 2026-11-21; amendment 1 on 2026-11-23 adds the permanent GitHub archive, section 10.1; amendment 2 on 2026-11-23 adds per-round ballot deadlines, section 8.1; amendment 3 on 2026-11-23 makes every online feature optional and non-blocking, section 1.1; amendment 4 on 2026-11-23 adds the 1000-team benchmark level, QR-only ballots and bubble-sheet ballots, sections 8.2 and 8.3; amendment 5 on 2026-11-24 splits the R2 archive into small parts to fit the free plan's 10 ms CPU limit, adds the inbox `scanned` position, and raises the default request share, sections 7, 7.1 and 13)
 *   **Date:** 2026-11-23
 *   **Predecessors:** [concepts_brief.md](concepts_brief.md), [review_report.md](review_report.md) (concept review), [design_review_report.md](design_review_report.md) (design review)
 
@@ -471,15 +471,18 @@ The shared service is an inbox and a validator. It never decides outcomes.
 **7.1 Closing and archiving (AD1, decision D).**
 
 1. `POST /v1/host/close` sets `status = closed`, so its links stop working.
-2. A daily cron Worker archives each closed tournament as a state machine that can resume after a crash at any step:
-   1. **`closed` → `archiving`.** It exports every row of the tournament from `submissions`, `permits`, `heads` and `usage` into one gzip NDJSON object, `archive/<slug>.v1.ndjson.gz`. Line 1 of the object is a manifest with each table's row count and the SHA-256 of the rest of the object. The object is written to **R2** only if it does not already exist.
-   2. **Verify.** It reads the object back, checks the counts and the hash, and records the result in `archives`.
-   3. **`archiving` → `archived`.** It deletes the tournament's rows from D1 in batches of 500. Rerunning this step is harmless, because it deletes only rows of an archived slug.
+2. A cron Worker archives each closed tournament as a state machine that can resume after a crash at any step (amendment 5). On the free plan each cron run gets only **10 ms of CPU**; waiting on D1 and R2 does not count, but building JSON, gzip and hashing do. A WUDC-size tournament is about 20 MB, so one object per tournament cannot be made in one run. Instead the cron runs **every 10 minutes** and each run does one small step for one tournament:
+   1. **`closed` → `archiving`**, once `closed_at` is at least 1 hour old (in-memory usage counters flush within a minute).
+   2. **Export, one part per run.** Up to 200 rows and 128 KB of NDJSON from one table (permits, heads, usage, then submissions, in key order), gzipped and written as `archive/<slug>/part-NNNNN.ndjson.gz` with R2's SHA-256 check, so R2 itself rejects a damaged upload. An existing part is never overwritten; after a crash it is accepted only if its stored SHA-256 matches. Each part is listed in `archive_parts`.
+   3. **Manifest and verify.** `archive/<slug>.v1.manifest.json` lists each table's row count and each part's size and SHA-256. Verify checks that every part exists in R2 with a matching checksum (without reading the parts back) and that the D1 counts equal the manifest, then records the result in `archives` and sets **`archived`**.
+   4. **Delete.** One batch of at most 500 rows per run and at most 5,000 rows a day across the service. permits, heads and usage go first; submissions are then walked by a rowid cursor up to the highest exported rowid, so each row is read about once. A count above the manifest, or a submission newer than the archive, stops the job with an error on the admin page and is never deleted. The newest row of the whole submissions table is never deleted either: SQLite would reuse its rowid for the next submission, behind hosts' pull positions (section 7).
 3. Nothing is deleted from storage, and the `tournaments` row stays. D1 holds only active tournaments, so a single D1 database is enough and there is no sharding.
 4. **Storage limits:**
    - At 70% of D1's 500 MB or R2's 10 GB, the admin page warns.
    - At 90%, it refuses new key approvals. Tournaments already active carry on, and nothing is lost or deleted.
    - Going beyond the limit needs the author to act; a paid tier is still never used.
+
+**Inbox position (amendment 5).** Each inbox page carries `scanned`, the highest submission rowid the service examined. The host starts its next pull there, so a quiet host does not re-read other tournaments' rows on every pull (without it, 15 tournaments whose rounds start 6 minutes apart would read about 10.6 million rows a day, twice the free limit). The position is kept only on the host, so moving it costs no service writes, and it moves only after a pull that applied cleanly. The service finds a host by key through an index on `key_hash`, written only when a key is approved, reissued or revoked.
 
 **Admin page** (`/admin`, protected by Cloudflare Access): approve, revoke or reissue keys; set shares; view usage and storage; add a second admin.
 
@@ -750,7 +753,7 @@ The live site stays on the tournament's Cloudflare Pages project. The archive is
 | `head` | 1 |
 | `register` | 2 |
 | usage flush | 1 per tournament per isolate-minute |
-| archive delete | outside the day budget (the cron runs at 03:00 UTC on closed tournaments; batches are capped at 5,000 rows a night) |
+| archive delete | at most 5,000 rows a day across the service, in batches of 500 (amendment 5) |
 
 **The budget.** Of D1's 100,000 writes a day:
 
@@ -766,14 +769,14 @@ The live site stays on the tournament's Cloudflare Pages project. The archive is
 
 **Default share** for a tournament with P participants (teams + adjudicators). It is sized to cover one full tournament-day:
 
-- `requests = 1,000 + 12 × P`;
+- `requests = 2,000 + 12 × P` (amendment 5: host polling every 30 s does not shrink with tournament size, and a measured 100-team day uses about 4,100 requests);
 - `writes = 1,000 + 18 × P`.
 
-For WUDC, P = 900, which gives 11,800 requests and 17,200 writes, against a need of 10,850 and 16,750. For a 100-team tournament, P = 225, which gives 3,700 and 5,050; fifteen of those total 75,750 writes, which fits under 80,000. The author can change any share from the admin page.
+For WUDC, P = 900, which gives 12,800 requests and 17,200 writes, against a measured 11,350 and 15,890. For a 100-team tournament, P = 225, which gives 4,700 and 5,050, against a measured 4,090 and 4,774; fifteen of those total 75,750 writes, which fits under 80,000. The author can change any share from the admin page.
 
 **Registration** has its own default limits per tournament: a cap of 1.5 × expected participants, and 5,000 writes in total. All tournaments together share the global 10,000 registration writes a day.
 
-`scripts/budget.mjs` replays this traffic against the final SQL schema and counts rows, indexes included.
+`scripts/budget.mjs` replays this traffic against the final SQL schema and counts rows, indexes included. Measured results and assumptions are in `simpletab-ballots/docs/free-tier-budget.md`.
 
 **A 1000-team BP tournament** (≈250 rooms, ≈1,250 adjudicators, P ≈ 2,250) needs about 27,000 requests and 42,000 writes a day. That fits **only on a day it has to itself**, with its share raised to about 42,000 writes (the default formula gives 41,500). Running it in QR-only mode (section 8.2) uses no service traffic at all.
 
@@ -1036,7 +1039,7 @@ TypeScript keeps CrabbyTab's settings: `strict` on and `noUncheckedIndexedAccess
 
 | # | File(s) | M | What and why |
 |---|---|---|---|
-| 43 | `package.json`, `wrangler.toml`, `tsconfig.json`, `LICENSE`, `README.md`, `AGENTS.md` | M3 | Bindings: `DB` (D1, one database), `ARCHIVE` (R2), `RL_LINK` and `RL_IP` (rate-limiting bindings: 10 requests / 60 s per link; 20 failed requests / 60 s per IP), `TURNSTILE_SECRET` (secret), and a daily cron `0 3 * * *`. Pages project for `app/`. |
+| 43 | `package.json`, `wrangler.toml`, `tsconfig.json`, `LICENSE`, `README.md`, `AGENTS.md` | M3 | Bindings: `DB` (D1, one database), `ARCHIVE` (R2), `RL_LINK` and `RL_IP` (rate-limiting bindings: 10 requests / 60 s per link; 20 failed requests / 60 s per IP), `TURNSTILE_SECRET` (secret), and a cron every 10 minutes, `*/10 * * * *` (amendment 5). Pages project for `app/`. |
 | 44 | `migrations/0001_init.sql` | M3 | Appendix D (service tables). |
 | 45 | `src/worker.ts`, `src/routes/{host,submit,status,register,admin}.ts` | M3 (register: M10) | Section 7 routes and Appendix E error codes. |
 | 46 | `src/lib/{auth,permits,usage,shares,archive}.ts` + tests | M3 | Key and host-number checks; permit cache per isolate (keyed by slug, round and permit version); in-memory usage with flushes once a minute; the share formula from section 13; the R2 archive cron with a row-count check. |

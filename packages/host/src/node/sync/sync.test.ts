@@ -1098,4 +1098,83 @@ describe("M3 step c sync and portal integration", { timeout: 30_000 }, () => {
     expect(savedQrBallot?.confirmed).toBe(true);
     expect(hostClientEvents.length).toBeGreaterThan(0);
   });
+
+  it("starts the next pull after rows the service already scanned, but re-pulls an item that failed", async () => {
+    const tmp = mkdtempSync(path.join(os.tmpdir(), "simpletab-pull-cursor-"));
+    tempDirs.push(tmp);
+    const { engine, ids } = await createSeededEngine(tmp);
+    cleanups.push(() => engine.close());
+
+    const inboxAfter: number[] = [];
+    let nextPage: InboxPage = { schema: SCHEMA_VERSION, items: [], next: null, scanned: 500 };
+    const fetchClient: CredentialsFetchClient = {
+      async fetch(_name, req: CredentialsFetchRequest): Promise<CredentialsFetchResponse> {
+        if (req.path.startsWith("/v1/host/inbox")) {
+          inboxAfter.push(Number(new URL(req.path, "https://x").searchParams.get("after")));
+          return { status: 200, headers: {}, body: JSON.stringify(nextPage) };
+        }
+        if (req.path.startsWith("/v1/host/ack")) {
+          const body = JSON.parse(req.body ?? "{}") as { ackedThrough?: number };
+          return {
+            status: 200,
+            headers: {},
+            body: JSON.stringify({ schema: SCHEMA_VERSION, ackedThrough: body.ackedThrough ?? 0 }),
+          };
+        }
+        return { status: 200, headers: {}, body: JSON.stringify({ schema: SCHEMA_VERSION, items: [] }) };
+      },
+    };
+    const client = new ServiceClient({
+      fetchClient,
+      getHostIdentity: () => ({ hostNumber: 1, hostId: "h-1", hostRank: 1 }),
+    });
+    const scheduler = new SyncScheduler({
+      engine,
+      client,
+      initialSettings: { ...DEFAULT_ONLINE_SETTINGS, ballotPortal: true },
+      hostNumber: 1,
+    });
+    cleanups.push(() => scheduler.dispose());
+
+    // A quiet pull: nothing for this tournament, but the service scanned up to rowid 500.
+    await scheduler.pullNow();
+    await scheduler.pullNow();
+    expect(inboxAfter.at(-1)).toBe(500);
+
+    // An item that cannot be applied stops the pass; the position must not move past it.
+    nextPage = {
+      schema: SCHEMA_VERSION,
+      items: [
+        {
+          rowid: 700,
+          submissionId: "sub-bad-1",
+          roundId: ids.roundId,
+          lookupId: ids.chairLookupId,
+          type: "ballot",
+          payload: { debateId: ids.debateId, speakerScores: {}, teamScores: {} },
+          receivedAt: "2026-11-24T11:30:00.000Z",
+        },
+      ],
+      next: null,
+      scanned: 900,
+    };
+    await scheduler.pullNow();
+    await scheduler.pullNow();
+    expect(inboxAfter.at(-1)).toBe(500);
+
+    // The position survives a restart (kept in the host database, not on the service).
+    scheduler.dispose();
+    nextPage = { schema: SCHEMA_VERSION, items: [], next: null, scanned: 1200 };
+    const restarted = new SyncScheduler({
+      engine,
+      client,
+      initialSettings: { ...DEFAULT_ONLINE_SETTINGS, ballotPortal: true },
+      hostNumber: 1,
+    });
+    cleanups.push(() => restarted.dispose());
+    await restarted.pullNow();
+    expect(inboxAfter.at(-1)).toBe(500);
+    await restarted.pullNow();
+    expect(inboxAfter.at(-1)).toBe(1200);
+  });
 });
