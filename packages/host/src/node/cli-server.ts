@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { OpRegistryLookup, OpRequest } from "@simpletab/core/ops";
+import type { OpRegistryLookup, OpRequest, RecordKey } from "@simpletab/core/ops";
 import type { Role } from "@simpletab/core/permissions";
 
 /**
@@ -45,7 +45,14 @@ export function wrapAsProposal(
     if (op === undefined || op === null || typeof op.type !== "string" || !("payload" in op)) {
       return { ok: false, errors: ["A proposal must contain the change it proposes."] };
     }
-    inner = { type: op.type, payload: op.payload };
+    const expected = (op as { expectedVersions?: unknown }).expectedVersions;
+    inner = {
+      type: op.type,
+      payload: op.payload,
+      ...(expected !== null && typeof expected === "object" && !Array.isArray(expected)
+        ? { expectedVersions: expected as Record<RecordKey, number> }
+        : {}),
+    };
     if (typeof payload?.id === "string" && payload.id.trim() !== "") id = payload.id;
   } else if (request.type.startsWith("proposal.")) {
     return { ok: false, errors: ["Only a person can accept or reject proposals."] };
@@ -62,8 +69,21 @@ export function wrapAsProposal(
       ],
     };
   }
+  // Expected versions travel inside the proposal: they are checked when a person accepts it, so a
+  // proposal made against a record that has changed since is refused instead of applied blindly.
+  const expectedVersions = inner.expectedVersions ?? request.expectedVersions;
   return {
     ok: true,
-    request: { type: "proposal.create", payload: { id, op: { type: inner.type, payload: inner.payload } } },
+    request: {
+      type: "proposal.create",
+      payload: {
+        id,
+        op: {
+          type: inner.type,
+          payload: inner.payload,
+          ...(expectedVersions !== undefined && Object.keys(expectedVersions).length > 0 ? { expectedVersions } : {}),
+        },
+      },
+    },
   };
 }

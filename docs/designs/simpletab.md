@@ -475,6 +475,13 @@ Credentials are never part of the state.
 - Deviation: the `proposal.accept` entry is recorded as the person who accepted it (`actorType: "human"`), not as the AI. Its payload keeps `proposedBy` with `actorType: "ai"`, so the changelog shows both who suggested and who approved the change.
 - The Proposals page lists pending proposals (oldest first) with Accept, Reject and an optional reason, then decided ones. The nav button shows the pending count.
 
+**As built (M6 step b).**
+- `packages/cli` (`@simpletab/cli`, command `simpletab`) is a staff device like any other: `pair <address> <code>` uses the same pairing (code, six words, approval on the host) and stores its own pairing in `~/.simpletab/cli` (or `SIMPLETAB_CLI_DIR` / `--dir`), separate from the app's device pairing, so the host laptop can run the CLI too. Each command connects, waits for the first snapshot, does one thing, prints JSON on stdout (messages on stderr) and exits. It reuses the host's device client (`RemoteHost`, `CollabClient`) but none of the SQLite code, and is bundled with esbuild to `lib/simpletab.js`.
+- Commands: `pair`, `leave`, `status`, `show <area> [--round]`, `op <type> --json|--file [--expect key=version]`, `proposals list [--all] | accept <id> | reject <id> [--reason]`. Exit codes: 0 done, 1 refused, 2 usage, 3 not paired / host unreachable / not sent / removed. A change the host could not receive is never queued by the CLI (it exits right after), so it is reported as not sent.
+- Accept and reject are refused locally when the CLI is paired with the AI role; with a human role they are ordinary submits.
+- Expected versions sent with an AI change are kept inside the proposal and checked when a person accepts it, so a proposal made against a record that has changed since is refused (`VERSION_CONFLICT`) rather than applied.
+- `packages/cli/README.md` is the guide for AI agents.
+
 ### 7. Host ↔ shared service
 
 The shared service is an inbox and a validator. It never decides outcomes.

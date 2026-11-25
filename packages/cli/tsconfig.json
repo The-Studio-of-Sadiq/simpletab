@@ -1,0 +1,16 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "lib": ["ES2023", "DOM"],
+    "types": ["node", "vitest/globals"],
+    "experimentalDecorators": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["../core/src/*"],
+      "@simpletab/core/*": ["../core/src/*"],
+      "@simpletab/host/lib/common": ["../host/src/common"],
+      "@simpletab/host/lib/common/*": ["../host/src/common/*"]
+    }
+  },
+  "include": ["src/**/*.ts"]
+}

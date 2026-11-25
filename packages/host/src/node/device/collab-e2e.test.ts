@@ -142,6 +142,22 @@ describe("live collaboration end to end", () => {
     const acceptEntry = (await host.getChangelog()).at(-1)!.entry;
     expect(acceptEntry).toMatchObject({ opType: "proposal.accept", actorType: "human" });
 
+    // A proposal made against a version that has changed since is refused when a person accepts it.
+    const tournamentKey = `tournament:${(await host.getState())!.tournament.id}` as const;
+    const stale = await ai.service.submit({
+      type: "release.set_gate",
+      payload: { gate: "tab_team", released: false },
+      expectedVersions: { [tournamentKey]: ((await host.getState())!.versions[tournamentKey] ?? 0) - 1 },
+    });
+    const staleId = (stale.ok ? (stale.committedPayload as { id: string }).id : "") as string;
+    expect(staleId).toMatch(/^proposal-/);
+    const staleAccept = await host.submit({ type: "proposal.accept", payload: { proposalId: staleId } });
+    expect(staleAccept).toMatchObject({ ok: false, code: "VERSION_CONFLICT" });
+    expect((await host.getState())?.proposals?.find((p) => p.id === staleId)?.status).toBe("pending");
+    expect(await host.submit({ type: "proposal.reject", payload: { proposalId: staleId, reason: "Out of date" } })).toMatchObject({
+      ok: true,
+    });
+
     // A second proposal is rejected with a reason, and nothing changes.
     const second = await ai.service.submit({ type: "release.set_gate", payload: { gate: "tab_team", released: false } });
     const secondId = (second.ok ? (second.committedPayload as { id: string }).id : "") as string;

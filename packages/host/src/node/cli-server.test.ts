@@ -32,6 +32,18 @@ describe("wrapAsProposal", () => {
     expect(wrapAsProposal({ type: "proposal.create", payload: { id: "x" } }, registry)).toMatchObject({ ok: false });
   });
 
+  it("keeps expected versions inside the proposal, to be checked when it is accepted", () => {
+    const op = {
+      type: "release.set_gate",
+      payload: { gate: "tab_team", released: true },
+      expectedVersions: { "tournament:t-1": 4 },
+    };
+    expect(wrapAsProposal(op, registry, fixedId)).toEqual({
+      ok: true,
+      request: { type: "proposal.create", payload: { id: "proposal-1", op } },
+    });
+  });
+
   it("never lets the AI accept or reject, and refuses unknown changes", () => {
     expect(wrapAsProposal({ type: "proposal.accept", payload: { proposalId: "p" } }, registry)).toMatchObject({
       ok: false,

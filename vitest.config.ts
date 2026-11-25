@@ -33,6 +33,22 @@ export default defineConfig({
       },
       {
         test: {
+          name: "cli",
+          root: "packages/cli",
+          include: ["src/**/*.test.ts"],
+          globals: true,
+          environment: "node",
+          testTimeout: 60_000,
+        },
+        resolve: {
+          alias: {
+            "@": path.resolve(__dirname, "packages/core/src"),
+            "@simpletab/core": path.resolve(__dirname, "packages/core/src"),
+          },
+        },
+      },
+      {
+        test: {
           name: "tabbycat-diff",
           root: "tools/tabbycat-diff",
           include: ["**/*.test.ts"],

@@ -12,8 +12,8 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
-    "test": "vitest run --project core --project tabbycat-diff --project host --project tab-ui --project e2e",
-    "typecheck": "tsc -p packages/core/tsconfig.json --noEmit && tsc -p packages/host/tsconfig.json --noEmit && tsc -p packages/tab-ui/tsconfig.json --noEmit",
+    "test": "vitest run --project core --project tabbycat-diff --project host --project cli --project tab-ui --project e2e",
+    "typecheck": "tsc -p packages/core/tsconfig.json --noEmit && tsc -p packages/host/tsconfig.json --noEmit && tsc -p packages/cli/tsconfig.json --noEmit && tsc -p packages/tab-ui/tsconfig.json --noEmit",
     "lint": "eslint . && npm run typecheck",
     "port-check": "node tools/port-check.mjs",
     "i18n:check": "node packages/tab-ui/scripts/i18n-check.mjs",
