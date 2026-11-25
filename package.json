@@ -22,6 +22,7 @@
     "bench": "vitest run --project bench tools/bench/bench.test.ts -t wudc",
     "bench:xl": "vitest run --project bench tools/bench/bench.test.ts -t xl",
     "e2e:demo": "vitest run --project e2e tools/e2e/demo.test.ts",
+    "e2e:collab": "vitest run --project e2e tools/e2e/collab.test.ts",
     "determinism": "vitest run --project core packages/core/test/determinism",
     "determinism:update": "node tools/update-draw-hashes.mjs",
     "convert-locales": "node tools/convert-locales.mjs"

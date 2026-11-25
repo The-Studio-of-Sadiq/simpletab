@@ -416,6 +416,8 @@ The database is `better-sqlite3` 13.2.0, rebuilt for Theia's Electron with `@ele
 - **QR ballots are checked on the host only.** Checking needs the participants' link secrets and passcodes, which most roles never receive. Scans (and codes pasted into the Results page) go to the host as `receiveQrBallot`; on a device this runs as the device's actor, so the normal ballot permissions and rules apply. A device that cannot reach the host refuses to take a scan and says to keep the paper, since an unchecked code cannot be queued safely. A ballot whose id is already on record is refused as a repeat scan.
 - Nothing from the camera is kept: frames are read, decoded and dropped, and the camera stops when the page closes.
 
+**As built (step e).** `npm run e2e:collab` (`tools/e2e/collab.test.ts`) runs the M5 checkpoint on a WUDC-size tournament with 15 devices over real TLS. On the reference laptop the time from a save until all 15 devices hold the change was p50 377 ms and p95 451 ms (limit 1 s); Equity devices held no feedback; promotion kept all 55 broadcast ops; and the old host stepped down. Results: `docs/checks/M5-collab-2026-11-25.md`.
+
 **Milestone steps.** M5 is built in steps: (a) certificates, words, pairing codes, the `wss` server and the device client with pairing and reconnects; (b) the projection stream, device mode, submissions with the outbox, presence and locks, and the Devices page; (c) succession, catch-up, promotion, demotion and the divergent export; (d) assistant mode with the webcam scanner; (e) `npm run e2e:collab`.
 
 ### 5. Changelog v2

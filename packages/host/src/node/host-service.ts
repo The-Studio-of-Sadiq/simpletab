@@ -1603,6 +1603,17 @@ export class HostServiceImpl
    * read-only, and write every op committed after the fork point to `<slug>.divergent.simpletab`.
    */
   private async demote(engine: HostEngine, winner: HostIdentity): Promise<void> {
+    try {
+      await this.demoteOpen(engine, winner);
+    } catch (error) {
+      // A report that arrives while the tournament is closing has nothing left to step down.
+      if (this.engine === engine) {
+        console.warn("SimpleTab: stepping down after being replaced failed", error);
+      }
+    }
+  }
+
+  private async demoteOpen(engine: HostEngine, winner: HostIdentity): Promise<void> {
     if (this.engine !== engine || this.replacedBy !== undefined) return;
     const forkSeq = Math.min(winner.promotedFromSeq ?? 0, engine.head().seq);
     const info: ReplacedInfo = {
