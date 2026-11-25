@@ -23,6 +23,7 @@
     "bench:xl": "vitest run --project bench tools/bench/bench.test.ts -t xl",
     "e2e:demo": "vitest run --project e2e tools/e2e/demo.test.ts",
     "e2e:collab": "vitest run --project e2e tools/e2e/collab.test.ts",
+    "e2e:cli": "npm run build -w @simpletab/cli && vitest run --project e2e --silent=false tools/e2e/cli.test.ts",
     "determinism": "vitest run --project core packages/core/test/determinism",
     "determinism:update": "node tools/update-draw-hashes.mjs",
     "convert-locales": "node tools/convert-locales.mjs"

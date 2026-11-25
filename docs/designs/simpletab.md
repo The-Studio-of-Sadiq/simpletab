@@ -487,6 +487,8 @@ Credentials are never part of the state.
 - `packages/tab-ui/src/browser/terminal-host-warning.ts` shows a warning notification each time a terminal is opened on the host: programs run there, AI agents included, work on the tournament files directly and skip proposals, roles and the changelog, so AI agents and the CLI belong on a staff laptop. It is a notification, not a modal, so it does not block the terminal.
 - "The host" means any laptop that is not a staff device of another host, even before a tournament is opened, because it keeps tournament files and can open one at any time. A staff device gets no warning: its terminal cannot reach the host's files.
 
+**As built (M6 step d).** `npm run e2e:cli` (`tools/e2e/cli.test.ts`) runs the M6 checkpoint on a WUDC-size tournament, with every CLI command run as a separate process of the built bundle. The AI proposes one change in each of its five areas, a person accepts them, and each accept keeps the AI as proposer. The AI cannot resolve proposals or change other areas. A stale `--expect` proposal is refused with `VERSION_CONFLICT` and rejected by a Tab director CLI. The CLI never loads SQLite. Commands took p50 354 ms and p95 487 ms. Results: `docs/checks/M6-cli-2026-11-25.md`. The organiser's guide is `docs/cli-and-ai.md`.
+
 ### 7. Host ↔ shared service
 
 The shared service is an inbox and a validator. It never decides outcomes.
