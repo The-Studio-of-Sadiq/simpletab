@@ -115,5 +115,9 @@
   "results.saveDraftButton": "Save ballot",
   "results.saveAndConfirmButton": "Save and confirm",
   "results.replyBoundsHint": "Reply score range: {min}–{max} (step {step}).",
-  "results.qrDuplicate": "This ballot was already received; the same code was scanned again."
+  "results.qrDuplicate": "This ballot was already received; the same code was scanned again.",
+  "results.validationRankBp": "Give each team a different rank from 1st to 4th.",
+  "results.validationRankCount": "Give each team a different rank from 1 to {count}.",
+  "results.validationLowPoint": "{higher} is ranked above {lower} with a lower total ({higherTotal} vs {lowerTotal}). Low-point wins are not allowed.",
+  "results.validationTie": "{higher} and {lower} have the same total ({total}); team totals cannot tie."
 }

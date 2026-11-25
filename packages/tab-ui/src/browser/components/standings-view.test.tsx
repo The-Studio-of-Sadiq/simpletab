@@ -7,6 +7,7 @@ import type {
   ProjectedState,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "react";
+import { runnerFor } from "../actions/test-context";
 import { StandingsView } from "./standings-view";
 
 const EMPTY_STATUS: HostStatus = {
@@ -17,6 +18,13 @@ const EMPTY_STATUS: HostStatus = {
   canSync: true,
   locks: [],
 };
+
+function runner(state: ProjectedState) {
+  return runnerFor({
+    state,
+    submit: async () => ({ ok: true, seq: 11, writes: [], committedPayload: null }),
+  });
+}
 
 function makeTeam(id: string, name: string, speakers: string[]): Team {
   return {
@@ -261,10 +269,12 @@ function makeBpStandingsState(
 
 describe("StandingsView", () => {
   it("renders shared ties as '=n', follows precedence column order, supports as-of round, and displays liveness labels as text", () => {
+    const state = makeBpStandingsState(["points", "speaks_sum", "firsts"]);
     render(
       <StandingsView
-        state={makeBpStandingsState(["points", "speaks_sum", "firsts"])}
+        state={state}
         status={EMPTY_STATUS}
+        run={runner(state)}
       />,
     );
 
@@ -389,7 +399,9 @@ describe("StandingsView", () => {
       breakCategories: [],
     };
 
-    render(<StandingsView state={twoTeamState} status={EMPTY_STATUS} />);
+    render(
+      <StandingsView state={twoTeamState} status={EMPTY_STATUS} run={runner(twoTeamState)} />,
+    );
     const repliesTab = screen.getByRole("tab", { name: "Replies" });
     fireEvent.click(repliesTab);
     expect(screen.getByText("Reply speaker standings")).toBeTruthy();

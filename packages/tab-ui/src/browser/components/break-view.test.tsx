@@ -8,6 +8,7 @@ import type {
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "react";
+import { runnerFor } from "../actions/test-context";
 import { BreakView } from "./break-view";
 
 const EMPTY_STATUS: HostStatus = {
@@ -261,11 +262,12 @@ describe("BreakView", () => {
       return { ok: true, seq: 13, writes: [], committedPayload: req.payload };
     });
 
+    const state = makeTwoTeamBreakState();
     render(
       <BreakView
-        state={makeTwoTeamBreakState()}
+        state={state}
         status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
+        run={runnerFor({ state, submit: onSubmitOp })}
         nowIso="2026-10-01T10:00:00.000Z"
       />,
     );
@@ -350,8 +352,11 @@ describe("BreakView", () => {
       <BreakView
         state={state}
         status={statusWithLock}
-        onSubmitOp={onSubmitOp}
-        onCancelLock={onCancelLock}
+        run={runnerFor({
+          state,
+          submit: onSubmitOp,
+          cancelLong: onCancelLock,
+        })}
         nowIso="2026-10-01T10:00:00.000Z"
       />,
     );

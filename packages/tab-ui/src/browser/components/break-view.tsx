@@ -16,7 +16,6 @@ import { teamsInDebateFor } from "@simpletab/core/lib/debateSides";
 import { drawStageOf } from "@simpletab/core/lib/draw/drawStatus";
 import { calculateStandings } from "@simpletab/core/lib/standings/calculator";
 import { resolveTeamPrecedence } from "@simpletab/core/lib/standings/precedence";
-import { recordKey, type OpRequest, type RecordKey } from "@simpletab/core/ops";
 import type {
   BreakCategory,
   BreakQualificationRule,
@@ -24,14 +23,26 @@ import type {
   TournamentFormat,
 } from "@simpletab/core/types";
 import type {
-  HostCancelLongResult,
   HostStatus,
   ProjectedState,
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner, SimpleTabAction } from "../actions/action";
+import {
+  advanceRoundAction,
+  clearBreakAction,
+  computeBreakAction,
+  saveBreakCategoriesAction,
+  setTeamOverrideAction,
+  type AdvanceRoundArgs,
+  type ClearBreakArgs,
+  type ComputeBreakArgs,
+  type SaveCategoriesArgs,
+  type SetTeamOverrideArgs,
+} from "../actions/break-actions";
+import { openSetupAction } from "../actions/releases-actions";
 import { t } from "../i18n";
-import { withFreshVersions } from "../lib/op-versions";
 import { stateHasPermission } from "../lib/permissions";
 import { InlineOpError, type InlineOpErrorData } from "./inline-op-error";
 import { LockBanner } from "./lock-banner";
@@ -39,11 +50,21 @@ import { LockBanner } from "./lock-banner";
 export interface BreakViewProps {
   state: ProjectedState | null;
   status: HostStatus;
-  onSubmitOp: (request: OpRequest) => Promise<SubmitResult>;
-  onCancelLock?: (lockId: string) => Promise<HostCancelLongResult | void>;
-  onOpenSetup?: () => void;
+  /** Break actions are the only way this page changes tournament data. */
+  run: ActionRunner;
   nowIso?: string;
 }
+
+interface ErrorEntry {
+  error: InlineOpErrorData;
+  retry?: () => void;
+}
+
+type CategoryActionArgs =
+  | SaveCategoriesArgs
+  | SetTeamOverrideArgs
+  | ComputeBreakArgs
+  | ClearBreakArgs;
 
 const ALL_OVERRIDE_OPTIONS: readonly BreakTeamOverride[] = [
   "include",
@@ -115,9 +136,7 @@ function formatBreakRank(rank: number | undefined, ranks: readonly (number | und
 export const BreakView: React.FC<BreakViewProps> = ({
   state,
   status,
-  onSubmitOp,
-  onCancelLock,
-  onOpenSetup,
+  run,
   nowIso,
 }) => {
   const baseId = React.useId();
@@ -125,16 +144,15 @@ export const BreakView: React.FC<BreakViewProps> = ({
   const [draft, setDraft] = React.useState<BreakCategoryDraft>(() =>
     defaultDraft(state ? teamsInDebateFor(state.tournament) : 4),
   );
-  const [categoriesError, setCategoriesError] = React.useState<InlineOpErrorData | null>(null);
+  const [categoriesError, setCategoriesError] = React.useState<ErrorEntry | null>(null);
   const [categoriesSuccess, setCategoriesSuccess] = React.useState<string | null>(null);
-  const [lastCategoriesRequest, setLastCategoriesRequest] = React.useState<OpRequest | null>(null);
 
   const [overrideReasonByCategory, setOverrideReasonByCategory] = React.useState<
     Record<string, string>
   >({});
-  const [categoryErrors, setCategoryErrors] = React.useState<
-    Record<string, { error: InlineOpErrorData; retryRequest: OpRequest }>
-  >({});
+  const [categoryErrors, setCategoryErrors] = React.useState<Record<string, ErrorEntry>>(
+    {},
+  );
   const [categorySuccess, setCategorySuccess] = React.useState<Record<string, string>>({});
   const [computingCategoryId, setComputingCategoryId] = React.useState<string | null>(null);
 
@@ -145,9 +163,8 @@ export const BreakView: React.FC<BreakViewProps> = ({
     Record<string, BreakTeamOverride>
   >({});
 
-  const [elimError, setElimError] = React.useState<InlineOpErrorData | null>(null);
+  const [elimError, setElimError] = React.useState<ErrorEntry | null>(null);
   const [elimSuccess, setElimSuccess] = React.useState<string | null>(null);
-  const [lastElimRequest, setLastElimRequest] = React.useState<OpRequest | null>(null);
 
   React.useEffect(() => {
     if (state === null) {
@@ -166,11 +183,16 @@ export const BreakView: React.FC<BreakViewProps> = ({
         </div>
         <div className="simpletab-alert">
           <p>{t("common.noTournamentPrompt")}</p>
-          {onOpenSetup !== undefined ? (
-            <button type="button" className="theia-button" onClick={onOpenSetup}>
-              {t("common.openSetupButton")}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="theia-button"
+            data-action={openSetupAction.id}
+            onClick={() => {
+              void run(openSetupAction, {});
+            }}
+          >
+            {t("common.openSetupButton")}
+          </button>
         </div>
       </div>
     );
@@ -217,41 +239,16 @@ export const BreakView: React.FC<BreakViewProps> = ({
     calculationError = error instanceof Error ? error.message : String(error);
   }
 
-  const buildCategoriesVersions = (
-    categories: readonly BreakCategory[],
-  ): Record<RecordKey, number> => {
-    const versions: Record<RecordKey, number> = {};
-    for (const cat of state.breakCategories) {
-      const key = recordKey("breakCategory", cat.id);
-      versions[key] = state.versions[key] ?? 0;
-    }
-    for (const cat of categories) {
-      const key = recordKey("breakCategory", cat.id);
-      if (!(key in versions) && state.versions[key] !== undefined) {
-        versions[key] = state.versions[key];
-      }
-    }
-    return versions;
-  };
-
-  const submitCategoriesSave = async (
-    nextCategories: BreakCategory[],
-    overrideRequest?: OpRequest,
-  ): Promise<boolean> => {
+  const submitCategoriesSave = async (categories: BreakCategory[]): Promise<boolean> => {
     setCategoriesError(null);
     setCategoriesSuccess(null);
-    const request: OpRequest = overrideRequest ?? {
-      type: "break.categories_save",
-      expectedVersions: buildCategoriesVersions(nextCategories),
-      payload: { categories: nextCategories },
-    };
-    setLastCategoriesRequest(request);
-    const res = await onSubmitOp(request);
+    const res = await run(saveBreakCategoriesAction, { categories });
     if (!res.ok) {
       setCategoriesError({
-        code: res.code,
-        errors: res.errors,
-        current: res.current,
+        error: { code: res.code, errors: res.errors, current: res.current },
+        retry: () => {
+          void submitCategoriesSave(categories);
+        },
       });
       return false;
     }
@@ -271,7 +268,7 @@ export const BreakView: React.FC<BreakViewProps> = ({
       editingCategoryId ?? undefined,
     );
     if (validationError.length > 0) {
-      setCategoriesError({ code: "INVALID", errors: [validationError] });
+      setCategoriesError({ error: { code: "INVALID", errors: [validationError] } });
       return;
     }
 
@@ -314,9 +311,10 @@ export const BreakView: React.FC<BreakViewProps> = ({
     }
   };
 
-  const submitCategoryOp = async (
+  const submitCategoryOp = async <A extends CategoryActionArgs>(
+    action: SimpleTabAction<A, SubmitResult>,
+    args: A,
     categoryId: string,
-    request: OpRequest,
     successMessage: string,
   ): Promise<void> => {
     setCategoryErrors((prev) => {
@@ -330,17 +328,15 @@ export const BreakView: React.FC<BreakViewProps> = ({
       return next;
     });
 
-    const res = await onSubmitOp(request);
+    const res = await run(action, args);
     if (!res.ok) {
       setCategoryErrors((prev) => ({
         ...prev,
         [categoryId]: {
-          error: {
-            code: res.code,
-            errors: res.errors,
-            current: res.current,
+          error: { code: res.code, errors: res.errors, current: res.current },
+          retry: () => {
+            void submitCategoryOp(action, args, categoryId, successMessage);
           },
-          retryRequest: request,
         },
       }));
       return;
@@ -353,48 +349,27 @@ export const BreakView: React.FC<BreakViewProps> = ({
     teamId: string,
     override: BreakTeamOverride | null,
   ): Promise<void> => {
-    const catKey = recordKey("breakCategory", category.id);
-    const teamKey = recordKey("team", teamId);
-    const request: OpRequest = {
-      type: "break.team_override",
-      expectedVersions: {
-        [catKey]: state.versions[catKey] ?? 0,
-        [teamKey]: state.versions[teamKey] ?? 0,
-      },
-      payload: {
-        categoryId: category.id,
-        teamId,
-        override,
-      },
-    };
     await submitCategoryOp(
+      setTeamOverrideAction,
+      { categoryId: category.id, teamId, override },
       category.id,
-      request,
       t("break.overrideSuccess", { category: category.name }),
     );
   };
 
   const handleComputeBreak = async (category: BreakCategory): Promise<void> => {
     const reason = (overrideReasonByCategory[category.id] ?? "").trim();
-    const tournamentKey = recordKey("tournament", state.tournament.id);
-    const catKey = recordKey("breakCategory", category.id);
-    const request: OpRequest = {
-      type: "break.compute",
-      expectedVersions: {
-        [tournamentKey]: state.versions[tournamentKey] ?? 0,
-        [catKey]: state.versions[catKey] ?? 0,
-      },
-      payload: {
-        categoryId: category.id,
-        generatedAt: nowIso ?? new Date().toISOString(),
-        ...(reason.length > 0 ? { override: { reason } } : {}),
-      },
+    const args: ComputeBreakArgs = {
+      categoryId: category.id,
+      generatedAt: nowIso ?? new Date().toISOString(),
+      ...(reason.length > 0 ? { reason } : {}),
     };
     setComputingCategoryId(category.id);
     try {
       await submitCategoryOp(
+        computeBreakAction,
+        args,
         category.id,
-        request,
         t("break.computeSuccess", { category: category.name }),
       );
     } finally {
@@ -403,45 +378,26 @@ export const BreakView: React.FC<BreakViewProps> = ({
   };
 
   const handleClearBreak = async (category: BreakCategory): Promise<void> => {
-    const catKey = recordKey("breakCategory", category.id);
-    const request: OpRequest = {
-      type: "break.clear",
-      expectedVersions: {
-        [catKey]: state.versions[catKey] ?? 0,
-      },
-      payload: {
-        categoryId: category.id,
-      },
-    };
+    const args: ClearBreakArgs = { categoryId: category.id };
     await submitCategoryOp(
+      clearBreakAction,
+      args,
       category.id,
-      request,
       t("break.clearSuccess", { category: category.name }),
     );
   };
 
-  const handleAdvanceRound = async (
-    roundId: string,
-    roundName: string,
-    overrideRequest?: OpRequest,
-  ): Promise<void> => {
+  const handleAdvanceRound = async (roundId: string, roundName: string): Promise<void> => {
     setElimError(null);
     setElimSuccess(null);
-    const roundKey = recordKey("round", roundId);
-    const request: OpRequest = overrideRequest ?? {
-      type: "elimination.advance",
-      expectedVersions: {
-        [roundKey]: state.versions[roundKey] ?? 0,
-      },
-      payload: { roundId },
-    };
-    setLastElimRequest(request);
-    const res = await onSubmitOp(request);
+    const args: AdvanceRoundArgs = { roundId };
+    const res = await run(advanceRoundAction, args);
     if (!res.ok) {
       setElimError({
-        code: res.code,
-        errors: res.errors,
-        current: res.current,
+        error: { code: res.code, errors: res.errors, current: res.current },
+        retry: () => {
+          void handleAdvanceRound(roundId, roundName);
+        },
       });
       return;
     }
@@ -464,7 +420,7 @@ export const BreakView: React.FC<BreakViewProps> = ({
         locks={status.locks}
         rounds={state.rounds}
         isHostOwner={isHostOwner}
-        onCancelLock={onCancelLock}
+        run={run}
       />
 
       {calculationError !== null ? (
@@ -553,6 +509,7 @@ export const BreakView: React.FC<BreakViewProps> = ({
                             <button
                               type="button"
                               className="theia-button secondary simpletab-compact-btn"
+                              data-view-only
                               onClick={() => handleStartEditCategory(cat)}
                             >
                               {t("common.edit")}
@@ -560,6 +517,7 @@ export const BreakView: React.FC<BreakViewProps> = ({
                             <button
                               type="button"
                               className="theia-button secondary simpletab-compact-btn"
+                              data-action={saveBreakCategoriesAction.id}
                               disabled={blocker.length > 0}
                               title={blocker || undefined}
                               onClick={() => {
@@ -719,7 +677,11 @@ export const BreakView: React.FC<BreakViewProps> = ({
             </div>
 
             <div className="simpletab-actions">
-              <button type="submit" className="theia-button">
+              <button
+                type="submit"
+                className="theia-button"
+                data-action={saveBreakCategoriesAction.id}
+              >
                 {editingCategoryId !== null
                   ? t("break.updateCategoryButton")
                   : t("break.addCategoryButton")}
@@ -728,6 +690,7 @@ export const BreakView: React.FC<BreakViewProps> = ({
                 <button
                   type="button"
                   className="theia-button secondary"
+                  data-view-only
                   onClick={() => {
                     setEditingCategoryId(null);
                     setDraft(defaultDraft(teamsInDebate));
@@ -747,17 +710,8 @@ export const BreakView: React.FC<BreakViewProps> = ({
         ) : null}
         {categoriesError !== null ? (
           <InlineOpError
-            error={categoriesError}
-            onRetry={
-              lastCategoriesRequest !== null
-                ? () => {
-                    void submitCategoriesSave(
-                      state.breakCategories,
-                      withFreshVersions(lastCategoriesRequest, state.versions),
-                    );
-                  }
-                : undefined
-            }
+            error={categoriesError.error}
+            onRetry={categoriesError.retry}
             onDismiss={() => setCategoriesError(null)}
           />
         ) : null}
@@ -815,6 +769,7 @@ export const BreakView: React.FC<BreakViewProps> = ({
                   <button
                     type="button"
                     className="theia-button"
+                    data-action={computeBreakAction.id}
                     disabled={computingCategoryId === cat.id}
                     onClick={() => {
                       void handleComputeBreak(cat);
@@ -828,6 +783,7 @@ export const BreakView: React.FC<BreakViewProps> = ({
                     <button
                       type="button"
                       className="theia-button secondary"
+                      data-action={clearBreakAction.id}
                       onClick={() => {
                         void handleClearBreak(cat);
                       }}
@@ -900,6 +856,7 @@ export const BreakView: React.FC<BreakViewProps> = ({
                               <button
                                 type="button"
                                 className="theia-button secondary simpletab-compact-btn"
+                                data-action={setTeamOverrideAction.id}
                                 onClick={() => {
                                   void handleTeamOverride(cat, entry.team.id, "include");
                                 }}
@@ -909,6 +866,7 @@ export const BreakView: React.FC<BreakViewProps> = ({
                               <button
                                 type="button"
                                 className="theia-button secondary simpletab-compact-btn"
+                                data-action={setTeamOverrideAction.id}
                                 onClick={() => {
                                   void handleTeamOverride(
                                     cat,
@@ -1188,6 +1146,7 @@ export const BreakView: React.FC<BreakViewProps> = ({
                 <button
                   type="button"
                   className="theia-button secondary"
+                  data-action={setTeamOverrideAction.id}
                   onClick={() => {
                     if (selectedManualTeamId.length > 0) {
                       void handleTeamOverride(
@@ -1211,13 +1170,7 @@ export const BreakView: React.FC<BreakViewProps> = ({
             {catError !== undefined ? (
               <InlineOpError
                 error={catError.error}
-                onRetry={() => {
-                  void submitCategoryOp(
-                    cat.id,
-                    withFreshVersions(catError.retryRequest, state.versions),
-                    t("break.computeSuccess", { category: cat.name }),
-                  );
-                }}
+                onRetry={catError.retry}
                 onDismiss={() => {
                   setCategoryErrors((prev) => {
                     const next = { ...prev };
@@ -1283,6 +1236,7 @@ export const BreakView: React.FC<BreakViewProps> = ({
                           <button
                             type="button"
                             className="theia-button"
+                            data-action={advanceRoundAction.id}
                             disabled={advanced}
                             onClick={() => {
                               void handleAdvanceRound(round.id, round.name);
@@ -1307,18 +1261,8 @@ export const BreakView: React.FC<BreakViewProps> = ({
         ) : null}
         {elimError !== null ? (
           <InlineOpError
-            error={elimError}
-            onRetry={
-              lastElimRequest !== null
-                ? () => {
-                    void handleAdvanceRound(
-                      "",
-                      "",
-                      withFreshVersions(lastElimRequest, state.versions),
-                    );
-                  }
-                : undefined
-            }
+            error={elimError.error}
+            onRetry={elimError.retry}
             onDismiss={() => setElimError(null)}
           />
         ) : null}

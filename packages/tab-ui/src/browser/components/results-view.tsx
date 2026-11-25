@@ -1,10 +1,4 @@
 import {
-  blankEntry,
-  entryFromBallot,
-  nextBallotVersion,
-  resolveCheckState,
-} from "@simpletab/core/features/tournament/application/ballotEntry";
-import {
   roundIntakeRows,
   summarizeIntake,
   usesPerAdjudicatorSheets,
@@ -13,29 +7,25 @@ import {
 import {
   debateBallotRules,
   diffBallots,
-  rulesSides,
   type BallotDifference,
-  type BallotEntry,
-  type BallotResult,
 } from "@simpletab/core/lib/ballots/result";
 import { isTwoTeamFormat } from "@simpletab/core/lib/debateSides";
 import { sideLabel } from "@simpletab/core/lib/sideNames";
-import {
-  recordKey,
-  type LateSubmissionRecord,
-  type OpBallotSubmission,
-  type OpRequest,
-  type RecordKey,
-} from "@simpletab/core/ops";
-import type { Debate, DebateSide, Speaker } from "@simpletab/core/types";
-import type {
-  HostCancelLongResult,
-  HostStatus,
-  ProjectedState,
-  QrReceiveResult,
-  SubmitResult,
-} from "@simpletab/host/lib/common/host-protocol";
+import type { LateSubmissionRecord, OpBallotSubmission } from "@simpletab/core/ops";
+import type { Debate, DebateSide } from "@simpletab/core/types";
+import type { HostStatus, ProjectedState } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import {
+  acceptLateBallotAction,
+  confirmBallotAction,
+  discardBallotAction,
+  importQrBallotAction,
+  initialFormEntry,
+  recordBallotIntakeAction,
+  resolveResultsCheckState,
+} from "../actions/results-actions";
+import { openSetupAction } from "../actions/releases-actions";
 import { t } from "../i18n";
 import {
   defaultTournamentTimeZone,
@@ -44,8 +34,8 @@ import {
   isDeadlinePassed,
 } from "../lib/deadline";
 import { stateHasPermission } from "../lib/permissions";
-import { qrFailureMessage, splitQrCodes } from "../lib/qr-messages";
-import { BallotForm } from "./ballot-form";
+import { splitQrCodes } from "../lib/qr-messages";
+import { BallotForm, type BallotSubmitOutcome } from "./ballot-form";
 import { InlineOpError, type InlineOpErrorData } from "./inline-op-error";
 import { LockBanner } from "./lock-banner";
 import { getDefaultRoundId, RoundPicker } from "./round-picker";
@@ -55,45 +45,15 @@ export interface ResultsViewProps {
   status: HostStatus;
   selectedRoundId?: string;
   onSelectRound?: (roundId: string) => void;
-  onSubmitOp: (request: OpRequest) => Promise<SubmitResult>;
-  /** Sends a pasted or scanned QR ballot to the host, which checks it with its link secrets. */
-  onReceiveQrBallot?: (codes: string[]) => Promise<QrReceiveResult>;
-  onCancelLock?: (lockId: string) => Promise<HostCancelLongResult | void>;
-  onOpenSetup?: () => void;
+  /** Results actions are the only way this page changes tournament data. */
+  run: ActionRunner;
   currentActorId?: string;
   nowIso?: string;
 }
 
 interface ItemErrorEntry {
   error: InlineOpErrorData;
-  retryRequest: OpRequest;
-}
-
-function withFreshVersions(
-  request: OpRequest,
-  versions: Record<RecordKey, number>,
-): OpRequest {
-  if (request.expectedVersions === undefined) {
-    return request;
-  }
-  const next: Record<RecordKey, number> = {};
-  for (const key of Object.keys(request.expectedVersions) as RecordKey[]) {
-    next[key] = versions[key] ?? 0;
-  }
-  return {
-    ...request,
-    expectedVersions: next,
-  };
-}
-
-function createBallotId(debateId: string, version: number): string {
-  if (
-    typeof globalThis.crypto !== "undefined" &&
-    typeof globalThis.crypto.randomUUID === "function"
-  ) {
-    return `ballot-${debateId}-v${version}-${globalThis.crypto.randomUUID().slice(0, 8)}`;
-  }
-  return `ballot-${debateId}-v${version}-${Date.now()}`;
+  retry: () => void;
 }
 
 function statusBadgeText(statusValue: DebateIntakeStatus): string {
@@ -166,20 +126,13 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
   status,
   selectedRoundId: controlledRoundId,
   onSelectRound,
-  onSubmitOp,
-  onReceiveQrBallot,
-  onCancelLock,
-  onOpenSetup,
+  run,
   currentActorId,
   nowIso,
 }) => {
   const baseId = React.useId();
   const [uncontrolledRoundId, setUncontrolledRoundId] = React.useState("");
   const [selectedDebateId, setSelectedDebateId] = React.useState("");
-  const [submittingBallot, setSubmittingBallot] = React.useState(false);
-  const [formError, setFormError] = React.useState<InlineOpErrorData | null>(
-    null,
-  );
   const [formSuccess, setFormSuccess] = React.useState<string | null>(null);
   const [blindMismatchByDebate, setBlindMismatchByDebate] = React.useState<
     Record<string, BallotDifference[]>
@@ -276,11 +229,16 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
         </div>
         <div className="simpletab-alert">
           <p>{t("common.noTournamentPrompt")}</p>
-          {onOpenSetup !== undefined ? (
-            <button type="button" className="theia-button" onClick={onOpenSetup}>
-              {t("common.openSetupButton")}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="theia-button"
+            data-action={openSetupAction.id}
+            onClick={() => {
+              void run(openSetupAction, {});
+            }}
+          >
+            {t("common.openSetupButton")}
+          </button>
         </div>
       </div>
     );
@@ -296,7 +254,6 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
   const twoTeam = isTwoTeamFormat(state.tournament.format);
 
   const handleSelectRound = (roundId: string): void => {
-    setFormError(null);
     setFormSuccess(null);
     setBallotActionErrors({});
     setLateErrors({});
@@ -351,13 +308,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
 
   const checkState =
     selectedDebate !== undefined
-      ? resolveCheckState({
-          ballots: state.ballots,
-          debateId: selectedDebate.id,
-          userId: currentActorId,
-          doubleEntry,
-          checkMode,
-        })
+      ? resolveResultsCheckState(state, selectedDebate.id, currentActorId)
       : ({ kind: "single" } as const);
 
   const debateBallots =
@@ -386,206 +337,55 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
 
   const hideFirstEntryInView = checkState.kind === "blind-check";
 
-  const initialFormEntry = (() => {
-    if (selectedDebate === undefined || selectedRound === undefined) {
-      return undefined;
-    }
-    if (checkState.kind === "blind-check") {
-      return undefined;
-    }
-    const targetBallot =
-      checkState.kind === "review"
-        ? checkState.pending
-        : debateBallots.find((b) => !b.discarded);
-    if (targetBallot === undefined) {
-      return undefined;
-    }
-    const rules = debateBallotRules(
-      state.tournament,
-      selectedRound,
-      selectedDebate,
-      state.rounds,
-    );
-    const teamById = new Map(state.teams.map((tm) => [tm.id, tm]));
-    const rosters: Partial<Record<DebateSide, Speaker[]>> = {};
-    for (const [side, slot] of Object.entries(selectedDebate.teams)) {
-      if (slot?.teamId) {
-        rosters[side as DebateSide] = teamById.get(slot.teamId)?.speakers ?? [];
-      }
-    }
-    const blank = blankEntry(
-      selectedDebate,
-      rosters,
-      state.adjudicators,
-      rules,
-    );
-    return entryFromBallot(targetBallot, blank, rules);
-  })();
+  const initialFormEntryValue =
+    selectedDebate !== undefined && selectedRound !== undefined
+      ? initialFormEntry(state, selectedRound, selectedDebate, currentActorId)
+      : undefined;
 
-  const handleSubmitEntry = async (
-    entry: BallotEntry,
-    result: BallotResult,
-    confirmNow: boolean,
-  ): Promise<void> => {
-    if (selectedRound === undefined || selectedDebate === undefined) {
+  const handleSubmitOutcome = (outcome: BallotSubmitOutcome): void => {
+    if (selectedDebate === undefined) {
       return;
     }
-    setFormError(null);
     setFormSuccess(null);
-    setSubmittingBallot(true);
-
-    try {
-      const version = nextBallotVersion(state.ballots, selectedDebate.id);
-      const timestamp = nowIso ?? new Date().toISOString();
-      const motion = entry.motionId
-        ? state.motions.find((m) => m.id === entry.motionId)
-        : undefined;
-      const vetoes = Object.fromEntries(
-        Object.entries(entry.vetoes ?? {}).filter(
-          ([, motionId]) => typeof motionId === "string" && motionId.length > 0,
-        ),
-      ) as Partial<Record<DebateSide, string>>;
-
-      const baseBallot: OpBallotSubmission = {
-        id: createBallotId(selectedDebate.id, version),
-        tournamentId: state.tournament.id,
-        roundId: selectedRound.id,
-        debateId: selectedDebate.id,
-        version,
-        confirmed: false,
-        discarded: false,
-        submitterType: "tabroom",
-        ...(currentActorId ? { submitterId: currentActorId } : {}),
-        ...(entry.motionId ? { motionId: entry.motionId } : {}),
-        ...(motion?.text ? { motionText: motion.text } : {}),
-        speakerScores: result.speakerScores,
-        teamScores: result.teamScores,
-        ...(result.sheets ? { sheets: result.sheets } : {}),
-        ...(Object.keys(vetoes).length > 0 ? { vetoes } : {}),
-        ...(entry.forfeitSide ? { forfeitSide: entry.forfeitSide } : {}),
-        ...(result.noSpeakerScores ? { noSpeakerScores: true } : {}),
-        ...(result.selfSplit ? { selfSplit: true } : {}),
-        ...(selectedDebate.adjudicators.chairId
-          ? { chairId: selectedDebate.adjudicators.chairId }
-          : {}),
-        timestamp,
-        ...(deadlinePassed ? { late: true } : {}),
-      };
-
-      let finalBallot: OpBallotSubmission = baseBallot;
-      let blindMatched = false;
-
-      if (checkState.kind === "blind-check") {
-        const diffs = diffBallots(
-          checkState.pending,
-          baseBallot,
-          state.tournament.format,
-        );
-        if (diffs.length === 0) {
-          blindMatched = true;
-          finalBallot = {
-            ...baseBallot,
-            confirmed: true,
-            checksVersion: checkState.pending.version,
-            confirmedBy: currentActorId ?? "tabroom",
-            confirmedTimestamp: timestamp,
-          };
-          setBlindMismatchByDebate((prev) => {
-            const next = { ...prev };
-            delete next[selectedDebate.id];
-            return next;
-          });
-        } else {
-          setBlindMismatchByDebate((prev) => ({
-            ...prev,
-            [selectedDebate.id]: diffs,
-          }));
-          finalBallot = {
-            ...baseBallot,
-            confirmed: false,
-            checksVersion: checkState.pending.version,
-          };
-        }
-      } else if (confirmNow && checkState.kind === "single") {
-        finalBallot = {
-          ...baseBallot,
-          confirmed: true,
-          confirmedBy: currentActorId ?? "tabroom",
-          confirmedTimestamp: timestamp,
-        };
-      }
-
-      const debateKey = recordKey("debate", selectedDebate.id);
-      const submitRes = await onSubmitOp({
-        type: "ballot.enter",
-        expectedVersions: {
-          [debateKey]: state.versions[debateKey] ?? 0,
-        },
-        payload: {
-          ballot: finalBallot,
-        },
-      });
-
-      if (!submitRes.ok) {
-        setFormError({
-          code: submitRes.code,
-          errors: submitRes.errors,
-          current: submitRes.current,
+    if (outcome.checkStateKind === "blind-check") {
+      if (outcome.blindDiffs.length === 0) {
+        setBlindMismatchByDebate((prev) => {
+          const next = { ...prev };
+          delete next[selectedDebate.id];
+          return next;
         });
-        return;
-      }
-
-      if (checkState.kind === "blind-check") {
-        setFormSuccess(
-          blindMatched
-            ? t("results.blindMatchConfirmed")
-            : t("results.blindMismatchSaved"),
-        );
+        setFormSuccess(t("results.blindMatchConfirmed"));
       } else {
-        setFormSuccess(
-          finalBallot.confirmed
-            ? t("results.savedAndConfirmed")
-            : t("results.savedDraft"),
-        );
+        setBlindMismatchByDebate((prev) => ({
+          ...prev,
+          [selectedDebate.id]: [...outcome.blindDiffs],
+        }));
+        setFormSuccess(t("results.blindMismatchSaved"));
       }
-    } finally {
-      setSubmittingBallot(false);
+      return;
     }
+    setFormSuccess(
+      outcome.confirmed ? t("results.savedAndConfirmed") : t("results.savedDraft"),
+    );
   };
 
-  const submitBallotAction = async (
-    ballot: OpBallotSubmission,
-    opType: "ballot.confirm" | "ballot.discard",
-    overrideRequest?: OpRequest,
-  ): Promise<void> => {
+  const clearBallotError = (ballotId: string): void => {
     setBallotActionErrors((prev) => {
-      if (!(ballot.id in prev)) {
+      if (!(ballotId in prev)) {
         return prev;
       }
       const next = { ...prev };
-      delete next[ballot.id];
+      delete next[ballotId];
       return next;
     });
-    const ballotKey = recordKey("ballot", ballot.id);
-    const debateKey = recordKey("debate", ballot.debateId);
-    const request: OpRequest = overrideRequest ?? {
-      type: opType,
-      expectedVersions: {
-        [ballotKey]: state.versions[ballotKey] ?? 0,
-        [debateKey]: state.versions[debateKey] ?? 0,
-      },
-      payload:
-        opType === "ballot.confirm"
-          ? {
-              ballotId: ballot.id,
-              confirmedAt: nowIso ?? new Date().toISOString(),
-            }
-          : {
-              ballotId: ballot.id,
-              discardedAt: nowIso ?? new Date().toISOString(),
-            },
-    };
-    const res = await onSubmitOp(request);
+  };
+
+  const submitConfirm = async (ballot: OpBallotSubmission): Promise<void> => {
+    clearBallotError(ballot.id);
+    const res = await run(confirmBallotAction, {
+      ballotId: ballot.id,
+      confirmedAt: nowIso ?? new Date().toISOString(),
+    });
     if (!res.ok) {
       setBallotActionErrors((prev) => ({
         ...prev,
@@ -595,16 +395,38 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
             errors: res.errors,
             current: res.current,
           },
-          retryRequest: request,
+          retry: () => {
+            void submitConfirm(ballot);
+          },
         },
       }));
     }
   };
 
-  const submitAcceptLate = async (
-    item: LateSubmissionRecord,
-    overrideRequest?: OpRequest,
-  ): Promise<void> => {
+  const submitDiscard = async (ballot: OpBallotSubmission): Promise<void> => {
+    clearBallotError(ballot.id);
+    const res = await run(discardBallotAction, {
+      ballotId: ballot.id,
+      discardedAt: nowIso ?? new Date().toISOString(),
+    });
+    if (!res.ok) {
+      setBallotActionErrors((prev) => ({
+        ...prev,
+        [ballot.id]: {
+          error: {
+            code: res.code,
+            errors: res.errors,
+            current: res.current,
+          },
+          retry: () => {
+            void submitDiscard(ballot);
+          },
+        },
+      }));
+    }
+  };
+
+  const submitAcceptLate = async (item: LateSubmissionRecord): Promise<void> => {
     setLateErrors((prev) => {
       if (!(item.id in prev)) {
         return prev;
@@ -615,29 +437,11 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
     });
     setLateSuccess(null);
 
-    const nextVersion = nextBallotVersion(state.ballots, item.debateId);
-    const debateKey = recordKey("debate", item.debateId);
-    const acceptedBallot: OpBallotSubmission = {
-      ...item.ballot,
-      id: createBallotId(item.debateId, nextVersion),
-      version: nextVersion,
-      confirmed: false,
-      discarded: false,
-      late: true,
-      ...(currentActorId ? { enteredBy: currentActorId } : {}),
-      timestamp: nowIso ?? new Date().toISOString(),
-    };
-
-    const request: OpRequest = overrideRequest ?? {
-      type: "ballot.enter",
-      expectedVersions: {
-        [debateKey]: state.versions[debateKey] ?? 0,
-      },
-      payload: {
-        ballot: acceptedBallot,
-      },
-    };
-    const res = await onSubmitOp(request);
+    const res = await run(acceptLateBallotAction, {
+      lateItemId: item.id,
+      now: nowIso ?? new Date().toISOString(),
+      actorId: currentActorId,
+    });
     if (!res.ok) {
       setLateErrors((prev) => ({
         ...prev,
@@ -647,15 +451,15 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
             errors: res.errors,
             current: res.current,
           },
-          retryRequest: request,
+          retry: () => {
+            void submitAcceptLate(item);
+          },
         },
       }));
       return;
     }
     const debate = state.debates.find((d) => d.id === item.debateId);
-    setLateSuccess(
-      t("results.lateAcceptedSuccess", { room: roomTitle(debate) }),
-    );
+    setLateSuccess(t("results.lateAcceptedSuccess", { room: roomTitle(debate) }));
   };
 
   const handleQrImport = async (event: React.FormEvent): Promise<void> => {
@@ -667,13 +471,9 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
       setQrError({ code: "INVALID", errors: [t("results.qrEmptyError")] });
       return;
     }
-    if (onReceiveQrBallot === undefined) {
-      setQrError({ code: "INVALID", errors: [t("results.qrDecodeFailed")] });
-      return;
-    }
-    const res = await onReceiveQrBallot(codes);
+    const res = await run(importQrBallotAction, { codes });
     if (!res.ok) {
-      setQrError({ code: "INVALID", errors: [qrFailureMessage(res)] });
+      setQrError({ code: "INVALID", errors: res.errors });
       return;
     }
     setQrInput("");
@@ -695,13 +495,10 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
       });
       return;
     }
-    const res = await onSubmitOp({
-      type: "ballot.intake_record",
-      payload: {
-        sheetCode: trimmed,
-        roundId: selectedRound.id,
-        receivedAt: nowIso ?? new Date().toISOString(),
-      },
+    const res = await run(recordBallotIntakeAction, {
+      sheetCode: trimmed,
+      roundId: selectedRound.id,
+      receivedAt: nowIso ?? new Date().toISOString(),
     });
     if (!res.ok) {
       setIntakeError({
@@ -730,7 +527,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
         locks={status.locks}
         rounds={state.rounds}
         isHostOwner={isHostOwner}
-        onCancelLock={onCancelLock}
+        run={run}
       />
 
       {selectedRound === undefined ? (
@@ -916,9 +713,9 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                                   ? "theia-button"
                                   : "theia-button secondary"
                               }
+                              data-view-only
                               onClick={() => {
                                 setSelectedDebateId(debate.id);
-                                setFormError(null);
                                 setFormSuccess(null);
                               }}
                             >
@@ -1041,24 +838,8 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                                 {errEntry !== undefined ? (
                                   <InlineOpError
                                     error={errEntry.error}
-                                    onRetry={() => {
-                                      void submitBallotAction(
-                                        ballot,
-                                        errEntry.retryRequest
-                                          .type as "ballot.confirm" | "ballot.discard",
-                                        withFreshVersions(
-                                          errEntry.retryRequest,
-                                          state.versions,
-                                        ),
-                                      );
-                                    }}
-                                    onDismiss={() => {
-                                      setBallotActionErrors((prev) => {
-                                        const next = { ...prev };
-                                        delete next[ballot.id];
-                                        return next;
-                                      });
-                                    }}
+                                    onRetry={errEntry.retry}
+                                    onDismiss={() => clearBallotError(ballot.id)}
                                   />
                                 ) : null}
                               </td>
@@ -1069,11 +850,9 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                                       <button
                                         type="button"
                                         className="theia-button"
+                                        data-action={confirmBallotAction.id}
                                         onClick={() => {
-                                          void submitBallotAction(
-                                            ballot,
-                                            "ballot.confirm",
-                                          );
+                                          void submitConfirm(ballot);
                                         }}
                                       >
                                         {t("results.confirmButton")}
@@ -1083,11 +862,9 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                                       <button
                                         type="button"
                                         className="theia-button secondary"
+                                        data-action={discardBallotAction.id}
                                         onClick={() => {
-                                          void submitBallotAction(
-                                            ballot,
-                                            "ballot.discard",
-                                          );
+                                          void submitDiscard(ballot);
                                         }}
                                       >
                                         {t("results.discardButton")}
@@ -1116,12 +893,12 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                 state={state}
                 round={selectedRound}
                 debate={selectedDebate}
-                initialEntry={initialFormEntry}
+                initialEntry={initialFormEntryValue}
                 checkState={checkState}
-                submitting={submittingBallot}
-                submitError={formError}
-                onDismissError={() => setFormError(null)}
-                onSubmitEntry={handleSubmitEntry}
+                actorId={currentActorId}
+                nowIso={nowIso}
+                run={run}
+                onComplete={handleSubmitOutcome}
               />
             </section>
           ) : null}
@@ -1188,15 +965,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                               {errEntry !== undefined ? (
                                 <InlineOpError
                                   error={errEntry.error}
-                                  onRetry={() => {
-                                    void submitAcceptLate(
-                                      item,
-                                      withFreshVersions(
-                                        errEntry.retryRequest,
-                                        state.versions,
-                                      ),
-                                    );
-                                  }}
+                                  onRetry={errEntry.retry}
                                   onDismiss={() => {
                                     setLateErrors((prev) => {
                                       const next = { ...prev };
@@ -1211,6 +980,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                               <button
                                 type="button"
                                 className="theia-button"
+                                data-action={acceptLateBallotAction.id}
                                 onClick={() => {
                                   void submitAcceptLate(item);
                                 }}
@@ -1267,7 +1037,11 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                   />
                 ) : null}
                 <div className="simpletab-actions">
-                  <button type="submit" className="theia-button secondary">
+                  <button
+                    type="submit"
+                    className="theia-button secondary"
+                    data-action={importQrBallotAction.id}
+                  >
                     {t("results.qrImportButton")}
                   </button>
                 </div>
@@ -1313,7 +1087,11 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
                     />
                   ) : null}
                   <div className="simpletab-actions">
-                    <button type="submit" className="theia-button secondary">
+                    <button
+                      type="submit"
+                      className="theia-button secondary"
+                      data-action={recordBallotIntakeAction.id}
+                    >
                       {t("results.intakeButton")}
                     </button>
                   </div>

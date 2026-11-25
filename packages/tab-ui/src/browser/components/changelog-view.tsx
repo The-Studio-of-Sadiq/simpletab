@@ -6,13 +6,15 @@ import {
   type VerifyChainResult,
 } from "@simpletab/core/changelog";
 import type {
-  HostCancelLongResult,
   HostStatus,
   OpUndoInfo,
   ProjectedState,
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import { undoChangelogOpAction } from "../actions/changelog-actions";
+import { openSetupAction } from "../actions/releases-actions";
 import { t } from "../i18n";
 import { InlineOpError, type InlineOpErrorData } from "./inline-op-error";
 import { LockBanner } from "./lock-banner";
@@ -22,9 +24,8 @@ export interface ChangelogViewProps {
   status: HostStatus;
   onGetChangelog: () => Promise<PublicChainItem[]>;
   onGetOpUndoInfo?: () => Promise<OpUndoInfo[]>;
-  onUndoOp: (seq: number) => Promise<SubmitResult>;
-  onCancelLock?: (lockId: string) => Promise<HostCancelLongResult | void>;
-  onOpenSetup?: () => void;
+  /** Changelog's only mutating action is Undo, which this runner supplies. */
+  run: ActionRunner;
 }
 
 function actorTypeLabel(actorType: ActorType): string {
@@ -45,9 +46,7 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
   status,
   onGetChangelog,
   onGetOpUndoInfo,
-  onUndoOp,
-  onCancelLock,
-  onOpenSetup,
+  run,
 }) => {
   const baseId = React.useId();
   const [items, setItems] = React.useState<PublicChainItem[]>([]);
@@ -101,11 +100,16 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
         </div>
         <div className="simpletab-alert">
           <p>{t("common.noTournamentPrompt")}</p>
-          {onOpenSetup !== undefined ? (
-            <button type="button" className="theia-button" onClick={onOpenSetup}>
-              {t("common.openSetupButton")}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="theia-button"
+            data-action={openSetupAction.id}
+            onClick={() => {
+              void run(openSetupAction, {});
+            }}
+          >
+            {t("common.openSetupButton")}
+          </button>
         </div>
       </div>
     );
@@ -157,7 +161,7 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
     });
     setUndoingSeq(seq);
     try {
-      const res = await onUndoOp(seq);
+      const res: SubmitResult = await run(undoChangelogOpAction, { seq });
       if (!res.ok) {
         setUndoErrors((prev) => ({
           ...prev,
@@ -185,6 +189,7 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
           <button
             type="button"
             className="theia-button"
+            data-view-only
             disabled={verifying}
             onClick={() => {
               void handleVerifyChain();
@@ -195,6 +200,7 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
           <button
             type="button"
             className="theia-button secondary"
+            data-view-only
             disabled={loading}
             onClick={() => {
               void loadData();
@@ -209,7 +215,7 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
         locks={status.locks}
         rounds={state.rounds}
         isHostOwner={isHostOwner}
-        onCancelLock={onCancelLock}
+        run={run}
       />
 
       <section className="simpletab-section">
@@ -378,6 +384,7 @@ export const ChangelogView: React.FC<ChangelogViewProps> = ({
                             <button
                               type="button"
                               className="theia-button secondary simpletab-compact-btn"
+                              data-action={undoChangelogOpAction.id}
                               disabled={undoingSeq === entry.seq}
                               aria-label={`${t("changelog.undoButton")} #${entry.seq}`}
                               onClick={() => {

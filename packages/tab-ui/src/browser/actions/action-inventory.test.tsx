@@ -1,3 +1,4 @@
+import type { PublicChainItem } from "@simpletab/core/changelog";
 import type { ProposalRecord } from "@simpletab/core/ops";
 import type {
   DevicesStatus,
@@ -11,13 +12,19 @@ import * as React from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { ActionResult, ActionRunner } from "./action";
 import { ALL_ACTION_IDS } from "./all-actions";
+import { runnerFor } from "./test-context";
 import { AllocationView } from "../components/allocation-view";
+import { BreakView } from "../components/break-view";
+import { ChangelogView } from "../components/changelog-view";
 import { CheckinView } from "../components/checkin-view";
 import { DevicesView } from "../components/devices-view";
 import { DrawView } from "../components/draw-view";
+import { FeedbackView } from "../components/feedback-view";
 import { MotionsView } from "../components/motions-view";
 import { ProposalsView } from "../components/proposals-view";
 import { ReleasesView } from "../components/releases-view";
+import { ResultsView } from "../components/results-view";
+import { StandingsView } from "../components/standings-view";
 
 /**
  * M8 inventory: every button on a SimpleTab page is either an action, which is also a command
@@ -27,22 +34,16 @@ import { ReleasesView } from "../components/releases-view";
  */
 const PENDING_COMPONENTS: ReadonlySet<string> = new Set([
   "assistant-view.tsx",
-  "ballot-form.tsx",
-  "break-view.tsx",
-  "changelog-view.tsx",
   "credentials-view.tsx",
   "csv-import-panel.tsx",
   "device-banner.tsx",
-  "feedback-view.tsx",
   "join-host-panel.tsx",
   "links-view.tsx",
   "participants-view.tsx",
   "projector-control-view.tsx",
   "projector-view.tsx",
   "qr-scanner.tsx",
-  "results-view.tsx",
   "setup-view.tsx",
-  "standings-view.tsx",
   "status-view.tsx",
 ]);
 
@@ -81,7 +82,7 @@ function expectRegisteredButtons(container: HTMLElement): void {
   }
 }
 
-/** Minimal state that renders action buttons on all four newly converted pages. */
+/** Minimal state that renders action buttons on the converted pages. */
 function inventoryState(): ProjectedState {
   return {
     seq: 1,
@@ -120,6 +121,13 @@ function inventoryState(): ProjectedState {
     institutions: [],
     breakCategories: [],
   } as unknown as ProjectedState;
+}
+
+function inventoryRunner(state: ProjectedState): ActionRunner {
+  return runnerFor({
+    state,
+    submit: async () => ({ ok: true, seq: 2, writes: [], committedPayload: null }),
+  });
 }
 
 describe("M8 action inventory", () => {
@@ -280,5 +288,181 @@ describe("M8 action inventory", () => {
       />,
     );
     await waitFor(() => expectRegisteredButtons(container));
+  });
+
+  it("points every rendered action button of the Results page at a registered command", () => {
+    const state = inventoryState();
+    const { container } = render(
+      <ResultsView state={state} status={{ open: true, locks: [] }} run={inventoryRunner(state)} />,
+    );
+    expectRegisteredButtons(container);
+  });
+
+  it("points every rendered action button of the Feedback page at a registered command", () => {
+    const base = inventoryState();
+    const state = {
+      ...base,
+      permissions: [...(base.permissions ?? []), "feedback.view", "feedback.enter"],
+      rounds: [
+        {
+          ...base.rounds[0],
+          stage: "preliminary",
+          drawStatus: "released",
+          motionsReleased: true,
+        },
+      ],
+      debates: [
+        {
+          id: "d1",
+          tournamentId: base.tournament.id,
+          roundId: "r1",
+          roundSeq: 1,
+          bracket: 0,
+          roomRank: 1,
+          importance: 10,
+          resultStatus: "none",
+          sidesConfirmed: true,
+          flags: [],
+          teams: {
+            OG: { teamId: "t1", teamName: "Team One", side: "OG" },
+          },
+          adjudicators: {
+            chairId: "a1",
+            chairName: "Judge One",
+            panellistIds: [],
+            panellistNames: [],
+            traineeIds: [],
+            traineeNames: [],
+          },
+        },
+      ],
+      feedback: [
+        {
+          id: "fb-1",
+          tournamentId: base.tournament.id,
+          roundId: "r1",
+          debateId: "d1",
+          sourceType: "team",
+          sourceId: "t1",
+          sourceName: "Team One",
+          targetType: "adjudicator",
+          targetAdjudicatorId: "a1",
+          targetAdjudicatorName: "Judge One",
+          score: 5,
+          confirmed: false,
+          timestamp: "2026-11-25T09:00:00.000Z",
+        },
+      ],
+      tournament: {
+        ...base.tournament,
+        preferences: {
+          ...base.tournament.preferences,
+          feedbackEnabled: true,
+          feedbackMinScore: 1,
+          feedbackMaxScore: 5,
+          feedbackPath: "two_way",
+          feedbackQuestions: [],
+        },
+      },
+    } as unknown as ProjectedState;
+    const { container } = render(
+      <FeedbackView state={state} status={{ open: true, locks: [] }} run={inventoryRunner(state)} />,
+    );
+    expectRegisteredButtons(container);
+  });
+
+  it("points every rendered action button of the Break page at a registered command", () => {
+    const base = inventoryState();
+    const state = {
+      ...base,
+      permissions: [...(base.permissions ?? []), "break.manage"],
+      versions: {
+        "breakCategory:bc-open": 1,
+        "round:ef1": 1,
+      },
+      breakCategories: [
+        {
+          id: "bc-open",
+          tournamentId: base.tournament.id,
+          name: "Open",
+          slug: "open",
+          seq: 1,
+          breakSize: 4,
+          reserveSize: 0,
+          priority: 1,
+          isGeneral: true,
+        },
+      ],
+      rounds: [
+        ...base.rounds,
+        {
+          id: "ef1",
+          tournamentId: base.tournament.id,
+          seq: 2,
+          name: "Final",
+          stage: "elimination",
+          drawStatus: "none",
+          breakCategoryIds: ["bc-open"],
+        },
+      ],
+    } as unknown as ProjectedState;
+    const { container } = render(
+      <BreakView
+        state={state}
+        status={{ open: true, locks: [] }}
+        run={inventoryRunner(state)}
+        nowIso="2026-11-25T09:00:00.000Z"
+      />,
+    );
+    expectRegisteredButtons(container);
+  });
+
+  it("points every rendered action button of the Changelog page at a registered command", async () => {
+    const state = inventoryState();
+    const chain = [
+      {
+        entry: {
+          seq: 1,
+          ts: "2026-11-25T09:00:00.000Z",
+          actorType: "human",
+          actorRef: "host-owner",
+          opType: "tournament.create",
+          category: "setup",
+          summary: "Created the tournament",
+          visibility: "private",
+          payload: {},
+        },
+        entryHash: "hash-1",
+      },
+    ] as unknown as PublicChainItem[];
+    const { container } = render(
+      <ChangelogView
+        state={state}
+        status={{ open: true, locks: [] }}
+        onGetChangelog={async () => chain}
+        onGetOpUndoInfo={async () => []}
+        run={inventoryRunner(state)}
+      />,
+    );
+    await waitFor(() => expectRegisteredButtons(container));
+  });
+
+  it("points every rendered action button of the Standings page at a registered command", () => {
+    const state = inventoryState();
+    const status: HostStatus = {
+      open: true,
+      locks: [
+        {
+          lockId: "lock-1",
+          opType: "draw.generate",
+          actorRef: "device:host-1",
+          startedAt: "2026-11-25T09:00:00Z",
+        },
+      ],
+    };
+    const { container } = render(
+      <StandingsView state={state} status={status} run={inventoryRunner(state)} />,
+    );
+    expectRegisteredButtons(container);
   });
 });

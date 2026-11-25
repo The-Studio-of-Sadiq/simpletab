@@ -1,3 +1,4 @@
+import type { PublicChainItem } from "@simpletab/core/changelog";
 import type { OpRequest } from "@simpletab/core/ops";
 import type {
   ArchiveStatus,
@@ -5,9 +6,11 @@ import type {
   HostCancelLongResult,
   HostStatus,
   OnlineSettings,
+  OpUndoInfo,
   ProjectedState,
   PromoteParams,
   PublishStatus,
+  QrReceiveResult,
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import { DEFAULT_ONLINE_SETTINGS } from "@simpletab/host/lib/common/host-protocol";
@@ -51,8 +54,13 @@ export interface FakeStoreOptions {
   exportCopyFile?: string;
   /** Result returned by `undo`; defaults to the result passed to `fakeStore`. */
   undoResult?: SubmitResult;
+  /** Result returned by `receiveQrBallot`; defaults to `ok: true`. */
+  receiveQrBallot?: (codes: string[]) => Promise<QrReceiveResult>;
   /** Live state for action `run` methods; defaults to the state passed to `fakeStore`. */
   getState?: () => ProjectedState | null;
+  /** Changelog and undo info for the Changelog undo prompt; default empty. */
+  changelog?: PublicChainItem[];
+  opUndoInfo?: OpUndoInfo[];
 }
 
 export interface FakeStoreCalls {
@@ -75,6 +83,7 @@ export interface FakeStoreCalls {
   promoteParams: PromoteParams[];
   exportDirectories: string[];
   undoneSeqs: number[];
+  qrCodes: string[][];
 }
 
 export interface FakeStore {
@@ -85,6 +94,12 @@ export interface FakeStore {
 }
 
 const OK = { ok: true, seq: 1, writes: [] } as unknown as SubmitResult;
+const OK_QR: QrReceiveResult = {
+  ok: true,
+  seq: 1,
+  roundId: "",
+  debateId: "",
+};
 
 const EMPTY_DEVICES_STATUS: DevicesStatus = {
   running: false,
@@ -123,6 +138,7 @@ export function fakeStore(
     promoteParams: [],
     exportDirectories: [],
     undoneSeqs: [],
+    qrCodes: [],
   };
   const status: HostStatus = {
     open: state !== null,
@@ -221,6 +237,12 @@ export function fakeStore(
       calls.exportDirectories.push(directory);
       return options.exportCopyFile ?? "";
     },
+    getChangelog: async (): Promise<PublicChainItem[]> => options.changelog ?? [],
+    getOpUndoInfo: async (): Promise<OpUndoInfo[]> => options.opUndoInfo ?? [],
+    receiveQrBallot: async (codes: string[]): Promise<QrReceiveResult> => {
+      calls.qrCodes.push(codes);
+      return options.receiveQrBallot?.(codes) ?? OK_QR;
+    },
   } as unknown as TournamentStore;
   return { submitted: calls.submitted, calls, store, undoneSeqs: calls.undoneSeqs };
 }
@@ -252,6 +274,7 @@ export interface RunnerOptions {
   submit: (request: OpRequest) => Promise<SubmitResult>;
   undo?: (seq: number) => Promise<SubmitResult>;
   cancelLong?: (lockId: string) => Promise<HostCancelLongResult | void>;
+  receiveQrBallot?: (codes: string[]) => Promise<QrReceiveResult>;
 }
 
 /** Adapts a page's old op callbacks to the action runner it now receives. */
@@ -265,6 +288,7 @@ export function runnerFor(options: RunnerOptions): ActionRunner {
     cancelLong:
       options.cancelLong ??
       (async (lockId: string) => ({ ok: true, lockId })),
+    receiveQrBallot: options.receiveQrBallot ?? (async () => OK_QR),
   } as unknown as TournamentStore;
   return directRunner(store);
 }

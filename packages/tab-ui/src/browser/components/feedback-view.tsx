@@ -13,7 +13,6 @@ import {
   feedbackScoreStep,
   validateFeedbackScore,
 } from "@simpletab/core/lib/scoring/validator";
-import { recordKey, type OpRequest, type RecordKey } from "@simpletab/core/ops";
 import type {
   Debate,
   FeedbackAnswer,
@@ -21,12 +20,18 @@ import type {
   FeedbackSubmission,
 } from "@simpletab/core/types";
 import type {
-  HostCancelLongResult,
   HostStatus,
   ProjectedState,
-  SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import {
+  enterFeedbackAction,
+  FEEDBACK_REVIEW_PATCHES,
+  reviewFeedbackAction,
+  type ReviewFeedbackPatch,
+} from "../actions/feedback-actions";
+import { openSetupAction } from "../actions/releases-actions";
 import { t } from "../i18n";
 import { stateHasPermission } from "../lib/permissions";
 import { InlineOpError, type InlineOpErrorData } from "./inline-op-error";
@@ -38,32 +43,14 @@ export interface FeedbackViewProps {
   status: HostStatus;
   selectedRoundId?: string;
   onSelectRound?: (roundId: string) => void;
-  onSubmitOp: (request: OpRequest) => Promise<SubmitResult>;
-  onCancelLock?: (lockId: string) => Promise<HostCancelLongResult | void>;
-  onOpenSetup?: () => void;
+  /** Feedback actions are the only way this page changes tournament data. */
+  run: ActionRunner;
   nowIso?: string;
 }
 
 interface RowErrorEntry {
   error: InlineOpErrorData;
-  retryRequest: OpRequest;
-}
-
-function withFreshVersions(
-  request: OpRequest,
-  versions: Record<RecordKey, number>,
-): OpRequest {
-  if (request.expectedVersions === undefined) {
-    return request;
-  }
-  const next: Record<RecordKey, number> = {};
-  for (const key of Object.keys(request.expectedVersions) as RecordKey[]) {
-    next[key] = versions[key] ?? 0;
-  }
-  return {
-    ...request,
-    expectedVersions: next,
-  };
+  retry: () => void;
 }
 
 function createFeedbackId(): string {
@@ -97,9 +84,7 @@ export const FeedbackView: React.FC<FeedbackViewProps> = ({
   status,
   selectedRoundId: controlledRoundId,
   onSelectRound,
-  onSubmitOp,
-  onCancelLock,
-  onOpenSetup,
+  run,
   nowIso,
 }) => {
   const baseId = React.useId();
@@ -241,11 +226,16 @@ export const FeedbackView: React.FC<FeedbackViewProps> = ({
         </div>
         <div className="simpletab-alert">
           <p>{t("common.noTournamentPrompt")}</p>
-          {onOpenSetup !== undefined ? (
-            <button type="button" className="theia-button" onClick={onOpenSetup}>
-              {t("common.openSetupButton")}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="theia-button"
+            data-action={openSetupAction.id}
+            onClick={() => {
+              void run(openSetupAction, {});
+            }}
+          >
+            {t("common.openSetupButton")}
+          </button>
         </div>
       </div>
     );
@@ -603,10 +593,7 @@ export const FeedbackView: React.FC<FeedbackViewProps> = ({
       }
     }
 
-    const result = await onSubmitOp({
-      type: "feedback.enter",
-      payload: { feedback },
-    });
+    const result = await run(enterFeedbackAction, { feedback });
     if (!result.ok) {
       setEntryError({
         code: result.code,
@@ -628,8 +615,7 @@ export const FeedbackView: React.FC<FeedbackViewProps> = ({
 
   const submitReview = async (
     item: FeedbackSubmission,
-    patch: { confirmed?: boolean; ignored?: boolean },
-    overrideRequest?: OpRequest,
+    patch: ReviewFeedbackPatch,
   ): Promise<void> => {
     setReviewErrors((prev) => {
       if (!(item.id in prev)) {
@@ -639,18 +625,7 @@ export const FeedbackView: React.FC<FeedbackViewProps> = ({
       delete next[item.id];
       return next;
     });
-    const fbKey = recordKey("feedback", item.id);
-    const request: OpRequest = overrideRequest ?? {
-      type: "feedback.review",
-      expectedVersions: {
-        [fbKey]: state.versions[fbKey] ?? 0,
-      },
-      payload: {
-        feedbackId: item.id,
-        ...patch,
-      },
-    };
-    const result = await onSubmitOp(request);
+    const result = await run(reviewFeedbackAction, { feedbackId: item.id, patch });
     if (!result.ok) {
       setReviewErrors((prev) => ({
         ...prev,
@@ -660,7 +635,9 @@ export const FeedbackView: React.FC<FeedbackViewProps> = ({
             errors: result.errors,
             current: result.current,
           },
-          retryRequest: request,
+          retry: () => {
+            void submitReview(item, patch);
+          },
         },
       }));
     }
@@ -681,7 +658,7 @@ export const FeedbackView: React.FC<FeedbackViewProps> = ({
         locks={status.locks}
         rounds={state.rounds}
         isHostOwner={isHostOwner}
-        onCancelLock={onCancelLock}
+        run={run}
       />
 
       {selectedRound === undefined ? (
@@ -761,6 +738,7 @@ export const FeedbackView: React.FC<FeedbackViewProps> = ({
                               <button
                                 type="button"
                                 className="theia-button secondary"
+                                data-view-only
                                 onClick={() => {
                                   setSelectedDebateId(item.debateId);
                                   setSourceType(item.sourceType);
@@ -984,6 +962,7 @@ export const FeedbackView: React.FC<FeedbackViewProps> = ({
                   <button
                     type="submit"
                     className="theia-button"
+                    data-action={enterFeedbackAction.id}
                     disabled={!sourceId || !targetId}
                   >
                     {t("feedback.submitButton")}
@@ -1078,16 +1057,7 @@ export const FeedbackView: React.FC<FeedbackViewProps> = ({
                             {errEntry !== undefined ? (
                               <InlineOpError
                                 error={errEntry.error}
-                                onRetry={() => {
-                                  void submitReview(
-                                    item,
-                                    {},
-                                    withFreshVersions(
-                                      errEntry.retryRequest,
-                                      state.versions,
-                                    ),
-                                  );
-                                }}
+                                onRetry={errEntry.retry}
                                 onDismiss={() => {
                                   setReviewErrors((prev) => {
                                     const next = { ...prev };
@@ -1109,11 +1079,12 @@ export const FeedbackView: React.FC<FeedbackViewProps> = ({
                                 <button
                                   type="button"
                                   className="theia-button"
+                                  data-action={reviewFeedbackAction.id}
                                   onClick={() => {
-                                    void submitReview(item, {
-                                      confirmed: true,
-                                      ignored: false,
-                                    });
+                                    void submitReview(
+                                      item,
+                                      FEEDBACK_REVIEW_PATCHES.confirm,
+                                    );
                                   }}
                                 >
                                   {t("feedback.confirmButton")}
@@ -1122,10 +1093,12 @@ export const FeedbackView: React.FC<FeedbackViewProps> = ({
                                 <button
                                   type="button"
                                   className="theia-button secondary"
+                                  data-action={reviewFeedbackAction.id}
                                   onClick={() => {
-                                    void submitReview(item, {
-                                      confirmed: false,
-                                    });
+                                    void submitReview(
+                                      item,
+                                      FEEDBACK_REVIEW_PATCHES.unconfirm,
+                                    );
                                   }}
                                 >
                                   {t("feedback.unconfirmButton")}
@@ -1135,11 +1108,12 @@ export const FeedbackView: React.FC<FeedbackViewProps> = ({
                                 <button
                                   type="button"
                                   className="theia-button secondary"
+                                  data-action={reviewFeedbackAction.id}
                                   onClick={() => {
-                                    void submitReview(item, {
-                                      ignored: true,
-                                      confirmed: false,
-                                    });
+                                    void submitReview(
+                                      item,
+                                      FEEDBACK_REVIEW_PATCHES.ignore,
+                                    );
                                   }}
                                 >
                                   {t("feedback.ignoreButton")}
@@ -1148,10 +1122,12 @@ export const FeedbackView: React.FC<FeedbackViewProps> = ({
                                 <button
                                   type="button"
                                   className="theia-button secondary"
+                                  data-action={reviewFeedbackAction.id}
                                   onClick={() => {
-                                    void submitReview(item, {
-                                      ignored: false,
-                                    });
+                                    void submitReview(
+                                      item,
+                                      FEEDBACK_REVIEW_PATCHES.restore,
+                                    );
                                   }}
                                 >
                                   {t("feedback.restoreButton")}

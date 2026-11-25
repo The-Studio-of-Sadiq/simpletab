@@ -115,5 +115,9 @@
   "results.saveDraftButton": "",
   "results.saveAndConfirmButton": "",
   "results.replyBoundsHint": "",
-  "results.qrDuplicate": ""
+  "results.qrDuplicate": "",
+  "results.validationRankBp": "",
+  "results.validationRankCount": "",
+  "results.validationLowPoint": "",
+  "results.validationTie": ""
 }

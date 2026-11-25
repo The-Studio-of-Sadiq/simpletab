@@ -12,6 +12,7 @@ import type {
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "react";
+import { runnerFor } from "../actions/test-context";
 import { ChangelogView } from "./changelog-view";
 
 const BASE_STATE: ProjectedState = {
@@ -175,7 +176,11 @@ describe("ChangelogView", () => {
         status={BASE_STATUS}
         onGetChangelog={onGetChangelog}
         onGetOpUndoInfo={onGetOpUndoInfo}
-        onUndoOp={onUndoOp}
+        run={runnerFor({
+          state: BASE_STATE,
+          submit: async () => ({ ok: true, seq: 4, writes: [], committedPayload: null }),
+          undo: onUndoOp,
+        })}
       />,
     );
 

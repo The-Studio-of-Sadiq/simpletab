@@ -28,12 +28,10 @@ import type {
   TeamMetricId,
   TeamStandingRow,
 } from "@simpletab/core/types";
-import type {
-  HostCancelLongResult,
-  HostStatus,
-  ProjectedState,
-} from "@simpletab/host/lib/common/host-protocol";
+import type { HostStatus, ProjectedState } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import { openSetupAction } from "../actions/releases-actions";
 import { t } from "../i18n";
 import { stateHasPermission } from "../lib/permissions";
 import { LockBanner } from "./lock-banner";
@@ -41,8 +39,8 @@ import { LockBanner } from "./lock-banner";
 export interface StandingsViewProps {
   state: ProjectedState | null;
   status: HostStatus;
-  onCancelLock?: (lockId: string) => Promise<HostCancelLongResult | void>;
-  onOpenSetup?: () => void;
+  /** Standings has no mutating actions; this only runs the shared cancel-lock and Setup commands. */
+  run: ActionRunner;
 }
 
 type StandingsTabId =
@@ -162,8 +160,7 @@ function buildSpeakerColumns(
 export const StandingsView: React.FC<StandingsViewProps> = ({
   state,
   status,
-  onCancelLock,
-  onOpenSetup,
+  run,
 }) => {
   const baseId = React.useId();
   const [asOfRoundId, setAsOfRoundId] = React.useState("");
@@ -287,11 +284,16 @@ export const StandingsView: React.FC<StandingsViewProps> = ({
         </div>
         <div className="simpletab-alert">
           <p>{t("common.noTournamentPrompt")}</p>
-          {onOpenSetup !== undefined ? (
-            <button type="button" className="theia-button" onClick={onOpenSetup}>
-              {t("common.openSetupButton")}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="theia-button"
+            data-action={openSetupAction.id}
+            onClick={() => {
+              void run(openSetupAction, {});
+            }}
+          >
+            {t("common.openSetupButton")}
+          </button>
         </div>
       </div>
     );
@@ -560,7 +562,7 @@ export const StandingsView: React.FC<StandingsViewProps> = ({
         locks={status.locks}
         rounds={state.rounds}
         isHostOwner={isHostOwner}
-        onCancelLock={onCancelLock}
+        run={run}
       />
 
       {!canView ? (
@@ -583,6 +585,7 @@ export const StandingsView: React.FC<StandingsViewProps> = ({
                 aria-selected={activeTab === tab.id}
                 aria-controls={`${baseId}-tabpanel`}
                 className="simpletab-tab"
+                data-view-only
                 onClick={() => setActiveTab(tab.id)}
               >
                 {tab.label}

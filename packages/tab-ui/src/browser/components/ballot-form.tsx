@@ -29,17 +29,14 @@ import {
   teamSpeakerTotal,
   usesSpeakerScores,
   usesVotingBallots,
-  validateBallotEntry,
+  type BallotDifference,
   type BallotEntry,
   type BallotResult,
   type SideRecord,
 } from "@simpletab/core/lib/ballots/result";
 import { isTwoTeamFormat } from "@simpletab/core/lib/debateSides";
 import { sidesChosenOnBallot } from "@simpletab/core/lib/draw/manualSides";
-import {
-  assignTwoTeamRank,
-  hasUniqueTeamRanks,
-} from "@simpletab/core/lib/scoring/validator";
+import { assignTwoTeamRank } from "@simpletab/core/lib/scoring/validator";
 import { sideLabel } from "@simpletab/core/lib/sideNames";
 import type { OpRound } from "@simpletab/core/ops";
 import type {
@@ -49,10 +46,29 @@ import type {
   Speaker,
   SpeakerScoreEntry,
 } from "@simpletab/core/types";
-import type { ProjectedState } from "@simpletab/host/lib/common/host-protocol";
+import type {
+  ProjectedState,
+  SubmitResult,
+} from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import {
+  ballotValidationErrors,
+  buildBallotSubmission,
+  enterBallotAction,
+} from "../actions/results-actions";
 import { t } from "../i18n";
 import { InlineOpError, type InlineOpErrorData } from "./inline-op-error";
+
+export interface BallotSubmitOutcome {
+  entry: BallotEntry;
+  result: BallotResult;
+  confirmNow: boolean;
+  submit: SubmitResult;
+  blindDiffs: readonly BallotDifference[];
+  checkStateKind: BallotCheckState["kind"];
+  confirmed: boolean;
+}
 
 export interface BallotFormProps {
   state: ProjectedState;
@@ -60,14 +76,10 @@ export interface BallotFormProps {
   debate: Debate;
   initialEntry?: BallotEntry;
   checkState: BallotCheckState;
-  submitting: boolean;
-  submitError: InlineOpErrorData | null;
-  onDismissError?: () => void;
-  onSubmitEntry: (
-    entry: BallotEntry,
-    result: BallotResult,
-    confirmNow: boolean,
-  ) => Promise<void>;
+  actorId?: string;
+  nowIso?: string;
+  run: ActionRunner;
+  onComplete?: (outcome: BallotSubmitOutcome) => void;
 }
 
 function buildRosters(
@@ -96,90 +108,20 @@ function teamIdsOf(
   return result;
 }
 
-function computeExtraConsensusRankErrors(
-  entry: BallotEntry,
-  sides: readonly DebateSide[],
-  rules: ReturnType<typeof debateBallotRules>,
-): string[] {
-  if (entry.forfeitSide || usesVotingBallots(rules) || isTwoTeamFormat(rules.format)) {
-    return [];
-  }
-  const ranks = entry.ranks ?? {};
-  const rankValues = sides.map((side) => ranks[side]);
-  if (
-    rankValues.some(
-      (rank) =>
-        typeof rank !== "number" ||
-        !Number.isInteger(rank) ||
-        rank < 1 ||
-        rank > sides.length,
-    ) ||
-    !hasUniqueTeamRanks(ranks as Record<string, number>, [...sides])
-  ) {
-    return [
-      rules.format === "bp"
-        ? "Give each team a different rank from 1st to 4th."
-        : `Give each team a different rank from 1 to ${sides.length}.`,
-    ];
-  }
-
-  const scored = usesSpeakerScores(rules);
-  const mode = winnerDeclarationFor(rules.preferences);
-  if (!scored || mode !== "none") {
-    return [];
-  }
-
-  const allScoresFinite = sides.every((side) =>
-    (entry.speakerScores[side] ?? []).every((speech) =>
-      Number.isFinite(speech.score),
-    ),
-  );
-  if (!allScoresFinite) {
-    return [];
-  }
-
-  const totals = Object.fromEntries(
-    sides.map((side) => [
-      side,
-      teamSpeakerTotal(
-        applyScoreCriteria(entry.speakerScores[side] ?? [], rules),
-        rules,
-      ),
-    ]),
-  ) as Record<DebateSide, number>;
-
-  const errors: string[] = [];
-  const name = (side: DebateSide): string => sideLabel(side, rules.preferences);
-  for (const higher of sides) {
-    for (const lower of sides) {
-      if ((ranks[higher] as number) < (ranks[lower] as number)) {
-        if (totals[higher] < totals[lower]) {
-          errors.push(
-            `${name(higher)} is ranked above ${name(lower)} with a lower total (${cleanScore(totals[higher])} vs ${cleanScore(totals[lower])}). Low-point wins are not allowed.`,
-          );
-        } else if (totals[higher] === totals[lower]) {
-          errors.push(
-            `${name(higher)} and ${name(lower)} have the same total (${cleanScore(totals[higher])}); team totals cannot tie.`,
-          );
-        }
-      }
-    }
-  }
-  return errors;
-}
-
 export const BallotForm: React.FC<BallotFormProps> = ({
   state,
   round,
   debate,
   initialEntry,
   checkState,
-  submitting,
-  submitError,
-  onDismissError,
-  onSubmitEntry,
+  actorId,
+  nowIso,
+  run,
+  onComplete,
 }) => {
   const baseId = React.useId();
+  const [submitting, setSubmitting] = React.useState(false);
+  const [submitError, setSubmitError] = React.useState<InlineOpErrorData | null>(null);
   const rules = React.useMemo(
     () => debateBallotRules(state.tournament, round, debate, state.rounds),
     [state.tournament, round, debate, state.rounds],
@@ -212,13 +154,6 @@ export const BallotForm: React.FC<BallotFormProps> = ({
     () => roundMotions(state.motions, round.id),
     [state.motions, round.id],
   );
-  const roundMotionIds = React.useMemo(
-    () =>
-      state.motions
-        .filter((motion) => motion.rounds.includes(round.id))
-        .map((motion) => motion.id),
-    [state.motions, round.id],
-  );
   const votingAdjIds = React.useMemo(() => votingAdjudicatorIds(debate), [debate]);
   const selfSplitOk = selfSplitAllowed(rules, votingAdjIds.length);
 
@@ -229,16 +164,10 @@ export const BallotForm: React.FC<BallotFormProps> = ({
     return sheetsFromPortalBallots(entry.sheets, state.ballots, debate.id);
   }, [voting, entry.sheets, state.ballots, debate.id]);
 
-  const validationErrors = React.useMemo(() => {
-    const coreErrors = validateBallotEntry(entry, {
-      ...rules,
-      rosters,
-      ...(roundMotionIds.length > 0 ? { roundMotionIds } : {}),
-      votingAdjudicatorCount: votingAdjIds.length,
-    });
-    const extraErrors = computeExtraConsensusRankErrors(entry, sides, rules);
-    return [...new Set([...coreErrors, ...extraErrors])];
-  }, [entry, rules, rosters, roundMotionIds, votingAdjIds.length, sides]);
+  const validationErrors = React.useMemo(
+    () => ballotValidationErrors(state, round, debate, entry),
+    [state, round, debate, entry],
+  );
 
   const updateSideSpeeches = (
     side: DebateSide,
@@ -515,6 +444,7 @@ export const BallotForm: React.FC<BallotFormProps> = ({
     confirmNow: boolean,
   ): Promise<void> => {
     event.preventDefault();
+    setSubmitError(null);
     if (validationErrors.length > 0 || submitting) {
       return;
     }
@@ -524,7 +454,45 @@ export const BallotForm: React.FC<BallotFormProps> = ({
       debate.adjudicators.chairId,
       rules,
     );
-    await onSubmitEntry(entry, result, confirmNow);
+    const { ballot, blindDiffs } = buildBallotSubmission(
+      state,
+      round,
+      debate,
+      entry,
+      result,
+      { now: nowIso ?? new Date().toISOString(), actorId, confirmNow },
+    );
+    setSubmitting(true);
+    try {
+      const submit = await run(enterBallotAction, {
+        roundId: round.id,
+        debateId: debate.id,
+        entry,
+        result,
+        now: ballot.timestamp,
+        actorId,
+        confirmNow,
+      });
+      if (!submit.ok) {
+        setSubmitError({
+          code: submit.code,
+          errors: submit.errors,
+          current: submit.current,
+        });
+        return;
+      }
+      onComplete?.({
+        entry,
+        result,
+        confirmNow,
+        submit,
+        blindDiffs,
+        checkStateKind: checkState.kind,
+        confirmed: ballot.confirmed,
+      });
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   const canConfirmOnSubmit = checkState.kind === "single";
@@ -650,6 +618,7 @@ export const BallotForm: React.FC<BallotFormProps> = ({
               <button
                 type="button"
                 className="theia-button secondary"
+                data-view-only
                 onClick={() => {
                   setEntry((prev) => ({
                     ...prev,
@@ -886,13 +855,14 @@ export const BallotForm: React.FC<BallotFormProps> = ({
       ) : null}
 
       {submitError !== null ? (
-        <InlineOpError error={submitError} onDismiss={onDismissError} />
+        <InlineOpError error={submitError} onDismiss={() => setSubmitError(null)} />
       ) : null}
 
       <div className="simpletab-actions">
         <button
           type="submit"
           className="theia-button"
+          data-action={enterBallotAction.id}
           disabled={validationErrors.length > 0 || submitting}
         >
           {submitting
@@ -906,6 +876,7 @@ export const BallotForm: React.FC<BallotFormProps> = ({
           <button
             type="button"
             className="theia-button secondary"
+            data-action={enterBallotAction.id}
             disabled={validationErrors.length > 0 || submitting}
             onClick={(e) => {
               void handleSubmit(e, true);

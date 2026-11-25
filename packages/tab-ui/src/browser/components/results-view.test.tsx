@@ -14,9 +14,11 @@ import type { Debate, TournamentFormat } from "@simpletab/core/types";
 import type {
   HostStatus,
   ProjectedState,
+  QrReceiveResult,
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "react";
+import { runnerFor } from "../actions/test-context";
 import { ResultsView } from "./results-view";
 
 function makeResultsState(
@@ -248,6 +250,14 @@ const EMPTY_STATUS: HostStatus = {
   locks: [],
 };
 
+function runForState(
+  state: ProjectedState,
+  submit: (request: OpRequest) => Promise<SubmitResult>,
+  receiveQrBallot?: (codes: string[]) => Promise<QrReceiveResult>,
+) {
+  return runnerFor({ state, submit, receiveQrBallot });
+}
+
 describe("ResultsView", () => {
   it("renders BP 4x2 ballot form, blocks submit on duplicate ranks and out-of-range scores, and submits valid ballot", async () => {
     const submitted: OpRequest[] = [];
@@ -261,11 +271,12 @@ describe("ResultsView", () => {
       };
     });
 
+    const state = makeResultsState("bp");
     render(
       <ResultsView
-        state={makeResultsState("bp")}
+        state={state}
         status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
+        run={runForState(state, onSubmitOp)}
       />,
     );
 
@@ -332,11 +343,12 @@ describe("ResultsView", () => {
       };
     });
 
+    const state = makeResultsState("uadc");
     render(
       <ResultsView
-        state={makeResultsState("uadc")}
+        state={state}
         status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
+        run={runForState(state, onSubmitOp)}
       />,
     );
 
@@ -423,7 +435,7 @@ describe("ResultsView", () => {
         state={blindState}
         status={EMPTY_STATUS}
         currentActorId="assistant-2"
-        onSubmitOp={onSubmitOp}
+        run={runForState(blindState, onSubmitOp)}
       />,
     );
 
@@ -555,7 +567,7 @@ describe("ResultsView", () => {
         state={assistantProjected}
         status={EMPTY_STATUS}
         nowIso="2026-10-01T08:05:00.000Z"
-        onSubmitOp={onAssistantSubmit}
+        run={runForState(assistantProjected, onAssistantSubmit)}
       />,
     );
 
@@ -623,7 +635,7 @@ describe("ResultsView", () => {
         state={directorProjected}
         status={EMPTY_STATUS}
         nowIso="2026-10-01T08:05:00.000Z"
-        onSubmitOp={onDirectorSubmit}
+        run={runForState(directorProjected, onDirectorSubmit)}
       />,
     );
 
@@ -660,7 +672,7 @@ describe("ResultsView", () => {
       <ResultsView
         state={stateNoLinks}
         status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
+        run={runForState(stateNoLinks, onSubmitOp)}
       />,
     );
 
@@ -685,8 +697,7 @@ describe("ResultsView", () => {
       <ResultsView
         state={stateNoLinks}
         status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
-        onReceiveQrBallot={onReceiveQrBallot}
+        run={runForState(stateNoLinks, onSubmitOp, onReceiveQrBallot)}
       />,
     );
     const qrBox = screen.getByLabelText("Paste QR ballot code (ST1… or ST1F… fragments)");

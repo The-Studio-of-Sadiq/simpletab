@@ -8,6 +8,7 @@ import type {
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "react";
+import { runnerFor } from "../actions/test-context";
 import { FeedbackView } from "./feedback-view";
 
 function makeFeedbackState(
@@ -221,7 +222,10 @@ describe("FeedbackView", () => {
       <FeedbackView
         state={state}
         status={EMPTY_STATUS}
-        onSubmitOp={vi.fn()}
+        run={runnerFor({
+          state,
+          submit: async () => ({ ok: true, seq: 5, writes: [], committedPayload: null }),
+        })}
       />,
     );
 
@@ -245,11 +249,12 @@ describe("FeedbackView", () => {
       };
     });
 
+    const state = makeFeedbackState();
     render(
       <FeedbackView
-        state={makeFeedbackState()}
+        state={state}
         status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
+        run={runnerFor({ state, submit: onSubmitOp })}
       />,
     );
 
