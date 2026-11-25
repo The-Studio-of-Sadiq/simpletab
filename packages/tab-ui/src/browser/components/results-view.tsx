@@ -32,6 +32,7 @@ import type {
   HostCancelLongResult,
   HostStatus,
   ProjectedState,
+  QrReceiveResult,
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
@@ -43,7 +44,7 @@ import {
   isDeadlinePassed,
 } from "../lib/deadline";
 import { stateHasPermission } from "../lib/permissions";
-import { importQrBallotText } from "../lib/qr-import";
+import { qrFailureMessage, splitQrCodes } from "../lib/qr-messages";
 import { BallotForm } from "./ballot-form";
 import { InlineOpError, type InlineOpErrorData } from "./inline-op-error";
 import { LockBanner } from "./lock-banner";
@@ -55,6 +56,8 @@ export interface ResultsViewProps {
   selectedRoundId?: string;
   onSelectRound?: (roundId: string) => void;
   onSubmitOp: (request: OpRequest) => Promise<SubmitResult>;
+  /** Sends a pasted or scanned QR ballot to the host, which checks it with its link secrets. */
+  onReceiveQrBallot?: (codes: string[]) => Promise<QrReceiveResult>;
   onCancelLock?: (lockId: string) => Promise<HostCancelLongResult | void>;
   onOpenSetup?: () => void;
   currentActorId?: string;
@@ -164,6 +167,7 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
   selectedRoundId: controlledRoundId,
   onSelectRound,
   onSubmitOp,
+  onReceiveQrBallot,
   onCancelLock,
   onOpenSetup,
   currentActorId,
@@ -658,30 +662,18 @@ export const ResultsView: React.FC<ResultsViewProps> = ({
     event.preventDefault();
     setQrMessage(null);
     setQrError(null);
-    const imported = await importQrBallotText(qrInput, state);
-    if (!imported.ok) {
-      setQrError({
-        code: "INVALID",
-        errors: [imported.message],
-      });
+    const codes = splitQrCodes(qrInput);
+    if (codes.length === 0) {
+      setQrError({ code: "INVALID", errors: [t("results.qrEmptyError")] });
       return;
     }
-
-    const res = await onSubmitOp({
-      type: "ballot.receive_online",
-      payload: {
-        source: "qr",
-        ballot: imported.ballot,
-        submissionId: imported.submissionId,
-        receivedAt: nowIso ?? new Date().toISOString(),
-      },
-    });
+    if (onReceiveQrBallot === undefined) {
+      setQrError({ code: "INVALID", errors: [t("results.qrDecodeFailed")] });
+      return;
+    }
+    const res = await onReceiveQrBallot(codes);
     if (!res.ok) {
-      setQrError({
-        code: res.code,
-        errors: res.errors,
-        current: res.current,
-      });
+      setQrError({ code: "INVALID", errors: [qrFailureMessage(res)] });
       return;
     }
     setQrInput("");

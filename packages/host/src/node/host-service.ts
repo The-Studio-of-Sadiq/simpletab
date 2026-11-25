@@ -38,6 +38,7 @@ import {
   type CreateDemoResult,
   type DevicesStatus,
   type PromoteParams,
+  type QrReceiveResult,
   type ReplacedInfo,
   type JoinHostParams,
   type JoinProgress,
@@ -75,6 +76,7 @@ import { ProjectionStream } from "./collab/projection-stream";
 import { ReplicaFeed } from "./collab/replica-feed";
 import { exportDivergent } from "./handover/divergent";
 import { restoreHiddenFields } from "./collab/hidden-fields";
+import { verifyQrBallot } from "./collab/qr-intake";
 import { buildProjectedStateFor } from "./state/projected-state";
 import { Archiver } from "./publish/archiver";
 import { IpcGitHubArchiver } from "./publish/github-archive-client";
@@ -338,6 +340,60 @@ export class HostServiceImpl
   async leaveHost(): Promise<void> {
     this.deviceMode?.leave();
     this.emitStateChanged({ seq: 0, type: "device.left", writes: [] });
+  }
+
+  async receiveQrBallot(codes: string[]): Promise<QrReceiveResult> {
+    const remote = this.remote();
+    if (remote !== null) {
+      return remote.receiveQrBallot(codes);
+    }
+    const replaced = this.replacedFailure();
+    if (replaced !== null && !replaced.ok) {
+      return { ok: false, kind: "rejected", errors: replaced.errors };
+    }
+    if (this.engine === null) {
+      return { ok: false, kind: "rejected", errors: ["No tournament is currently open."] };
+    }
+    return this.receiveQrOnEngine(this.engine, codes, HOST_OWNER_ACTOR);
+  }
+
+  /** Checks a scanned QR ballot with the host's link secrets, then records it as `actor`. */
+  private async receiveQrOnEngine(engine: HostEngine, codes: string[], actor: Actor): Promise<QrReceiveResult> {
+    const state = engine.getState();
+    if (state === null) {
+      return { ok: false, kind: "rejected", errors: ["No tournament is currently open."] };
+    }
+    const verified = await verifyQrBallot(codes, state, this.clock ?? (() => new Date()));
+    if (!verified.ok) {
+      return {
+        ok: false,
+        kind: verified.kind,
+        errors: [],
+        ...(verified.detail !== undefined ? { detail: verified.detail } : {}),
+      };
+    }
+    const current = engine.getState();
+    if (current?.ballots.some((ballot) => ballot.id === verified.ballot.id) === true) {
+      return { ok: false, kind: "duplicate", errors: [] };
+    }
+    const result = this.mapApplyResult(
+      await engine.submit(
+        {
+          type: "ballot.receive_online",
+          payload: {
+            source: "qr",
+            ballot: verified.ballot,
+            submissionId: verified.submissionId,
+            receivedAt: (this.clock?.() ?? new Date()).toISOString(),
+          },
+        },
+        actor,
+      ),
+    );
+    if (!result.ok) {
+      return { ok: false, kind: "rejected", errors: result.errors };
+    }
+    return { ok: true, seq: result.seq, roundId: verified.ballot.roundId, debateId: verified.ballot.debateId };
   }
 
   async promoteToHost(params: PromoteParams): Promise<HostStatus> {
@@ -1581,7 +1637,10 @@ export class HostServiceImpl
     params: unknown[],
     actor: Actor,
   ): Promise<unknown> {
-    if (this.replacedBy !== undefined && (method === "submit" || method === "undo" || method === "cancelLong")) {
+    if (
+      this.replacedBy !== undefined &&
+      (method === "submit" || method === "undo" || method === "cancelLong" || method === "receiveQrBallot")
+    ) {
       throw new Error(this.replacedMessage(this.replacedBy));
     }
     switch (method) {
@@ -1623,6 +1682,13 @@ export class HostServiceImpl
       }
       case "getOpUndoInfo":
         return engine.opUndoInfo();
+      case "receiveQrBallot": {
+        const codes = params[0];
+        if (!Array.isArray(codes) || codes.some((code) => typeof code !== "string")) {
+          throw new Error("The scanned codes were not in a form the host understands.");
+        }
+        return this.receiveQrOnEngine(engine, codes as string[], actor);
+      }
       default:
         throw new Error("The host does not offer that action to devices.");
     }

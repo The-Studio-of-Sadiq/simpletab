@@ -114,5 +114,6 @@
   "results.submitBlindCheckButton": "",
   "results.saveDraftButton": "",
   "results.saveAndConfirmButton": "",
-  "results.replyBoundsHint": ""
+  "results.replyBoundsHint": "",
+  "results.qrDuplicate": ""
 }

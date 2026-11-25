@@ -114,5 +114,6 @@
   "results.submitBlindCheckButton": "TODO: Submit blind check",
   "results.saveDraftButton": "TODO: Save ballot",
   "results.saveAndConfirmButton": "সংরক্ষণ ও নিশ্চিত করুন",
-  "results.replyBoundsHint": "TODO: Reply score range: {min}–{max} (step {step})."
+  "results.replyBoundsHint": "TODO: Reply score range: {min}–{max} (step {step}).",
+  "results.qrDuplicate": "এই ব্যালট আগেই পাওয়া গেছে; একই কোড আবার স্ক্যান করা হয়েছে।"
 }

@@ -277,7 +277,14 @@ export interface ResyncMessage {
 }
 
 /** Host methods a device may call; each runs as the device's own actor and role. */
-export type CollabRequestMethod = "submit" | "undo" | "cancelLong" | "getChangelog" | "getOpUndoInfo";
+export type CollabRequestMethod =
+  | "submit"
+  | "undo"
+  | "cancelLong"
+  | "getChangelog"
+  | "getOpUndoInfo"
+  /** Step d: a scanned QR ballot, checked on the host. params: [codes: string[]]. */
+  | "receiveQrBallot";
 
 export interface RequestMessage {
   schema: 1;

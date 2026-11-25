@@ -32,6 +32,7 @@ export const SIMPLETAB_OPEN_PROJECTOR_CONTROL_COMMAND =
   "simpletab.projectorControl.open";
 export const SIMPLETAB_OPEN_STATUS_COMMAND = "simpletab.status.open";
 export const SIMPLETAB_OPEN_DEVICES_COMMAND = "simpletab.devices.open";
+export const SIMPLETAB_OPEN_ASSISTANT_COMMAND = "simpletab.assistant.open";
 
 @injectable()
 export class SimpleTabNavWidget extends ReactWidget {
@@ -84,6 +85,8 @@ export class SimpleTabNavWidget extends ReactWidget {
       state === null || stateHasPermission(state, "links.manage");
     const canManageDevices =
       state === null || stateHasPermission(state, "devices.manage");
+    const canUseAssistant =
+      state !== null && stateHasPermission(state, "results.enter");
     const locale = getLocale();
     const summaryText =
       status.open && status.slug
@@ -230,6 +233,19 @@ export class SimpleTabNavWidget extends ReactWidget {
           >
             {t("nav.openChangelog")}
           </button>
+          {canUseAssistant ? (
+            <button
+              type="button"
+              className="theia-button secondary simpletab-nav-btn"
+              onClick={() => {
+                void this.commandService.executeCommand(
+                  SIMPLETAB_OPEN_ASSISTANT_COMMAND,
+                );
+              }}
+            >
+              {t("nav.openAssistant")}
+            </button>
+          ) : null}
           {canManageDevices ? (
             <button
               type="button"

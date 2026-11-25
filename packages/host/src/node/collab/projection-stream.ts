@@ -22,6 +22,7 @@ const VALID_REQUEST_METHODS: ReadonlySet<string> = new Set<CollabRequestMethod>(
   "cancelLong",
   "getChangelog",
   "getOpUndoInfo",
+  "receiveQrBallot",
 ]);
 
 const defaultTimers: CollabTimers = {
@@ -465,7 +466,7 @@ export class ProjectionStream {
       if (this.disposed) {
         return;
       }
-      if (method === "submit" || method === "undo") {
+      if (method === "submit" || method === "undo" || method === "receiveQrBallot") {
         this.flush();
       }
       if (this.disposed || record.closed) {

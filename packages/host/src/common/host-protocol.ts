@@ -246,6 +246,28 @@ export interface ReplacedInfo {
   forkSeq: number;
 }
 
+/** Why a scanned QR ballot was not taken (the UI words each kind). */
+export type QrIntakeFailureKind =
+  | "empty"
+  /** The host has no private links, so no QR ballot can be checked. */
+  | "needs_links"
+  /** No participant's link key matches: a forged, damaged or other tournament's code. */
+  | "no_matching_key"
+  | "wrong_tournament"
+  | "invalid_payload"
+  | "missing_ids"
+  | "invalid"
+  /** This ballot was already received (the same code scanned again). */
+  | "duplicate"
+  /** A device that cannot reach the host cannot check codes. */
+  | "offline"
+  /** The code was valid but the ballot op was refused (see errors). */
+  | "rejected";
+
+export type QrReceiveResult =
+  | { ok: true; seq: number; roundId: string; debateId: string }
+  | { ok: false; kind: QrIntakeFailureKind; errors: string[]; detail?: string };
+
 export interface PromoteParams {
   /** Folder for the new host's tournament database. */
   directory: string;
@@ -405,6 +427,11 @@ export interface HostService extends RpcServer<HostServiceClient> {
   dismissRejectedEdits(): Promise<void>;
   /** Tells others what this person is looking at (presence chips). */
   setPresence(info: PresenceInfo): Promise<void>;
+  /**
+   * A scanned QR ballot (one code or all fragments). Always checked on the host, which holds the
+   * link secrets; on a device it is forwarded and runs as the device's actor.
+   */
+  receiveQrBallot(codes: string[]): Promise<QrReceiveResult>;
   /** Tab-director device: become the host from this laptop's copy (design section 4). */
   promoteToHost(params: PromoteParams): Promise<HostStatus>;
   /** Tab-director device: saves this laptop's copy as a `.simpletab` file; returns its path. */

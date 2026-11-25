@@ -43,6 +43,7 @@ import {
   ProjectorControlViewContribution,
   ReleasesViewContribution,
   DevicesViewContribution,
+  AssistantViewContribution,
   ResultsViewContribution,
   SetupViewContribution,
   SIMPLETAB_VIEW_CONTAINER_ID,
@@ -74,6 +75,7 @@ import { ParticipantsWidget } from "./views/participants-widget";
 import { ProjectorControlWidget } from "./views/projector-widget";
 import { ReleasesWidget } from "./views/releases-widget";
 import { DevicesWidget } from "./views/devices-widget";
+import { AssistantWidget } from "./views/assistant-widget";
 import { ResultsWidget } from "./views/results-widget";
 import { SetupWidget } from "./views/setup-widget";
 import { SimpleTabNavWidget } from "./views/simpletab-nav-widget";
@@ -249,6 +251,14 @@ export default new ContainerModule((bind) => {
     }))
     .inSingletonScope();
 
+  bind(AssistantWidget).toSelf().inSingletonScope();
+  bind(WidgetFactory)
+    .toDynamicValue((ctx) => ({
+      id: AssistantWidget.ID,
+      createWidget: () => ctx.container.get(AssistantWidget),
+    }))
+    .inSingletonScope();
+
   bind(DevicesWidget).toSelf().inSingletonScope();
   bind(WidgetFactory)
     .toDynamicValue((ctx) => ({
@@ -318,6 +328,7 @@ export default new ContainerModule((bind) => {
   bindViewContribution(bind, BreakViewContribution);
   bindViewContribution(bind, ReleasesViewContribution);
   bindViewContribution(bind, DevicesViewContribution);
+  bindViewContribution(bind, AssistantViewContribution);
   bindViewContribution(bind, ChangelogViewContribution);
   bindViewContribution(bind, CredentialsViewContribution);
   bindViewContribution(bind, LinksViewContribution);

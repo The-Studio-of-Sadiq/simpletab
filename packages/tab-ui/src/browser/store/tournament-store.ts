@@ -7,6 +7,7 @@ import type {
   DevicesStatus,
   JoinHostParams,
   PromoteParams,
+  QrReceiveResult,
   JoinProgress,
   CreateTournamentResult,
   HostCancelLongResult,
@@ -302,6 +303,15 @@ export class TournamentStore {
     } catch {
       // A closed tournament or a lost connection simply shows no presence.
     }
+  }
+
+  /** A scanned or pasted QR ballot; the host checks it. */
+  async receiveQrBallot(codes: string[]): Promise<QrReceiveResult> {
+    const result = await this.hostService.receiveQrBallot(codes);
+    if (result.ok) {
+      await this.refresh();
+    }
+    return result;
   }
 
   async setSuccession(order: string[]): Promise<void> {

@@ -18,6 +18,7 @@ import type {
   HostLockInfo,
   OpUndoInfo,
   ProjectedState,
+  QrReceiveResult,
   QueuedEditInfo,
   RejectedEditInfo,
   SubmitResult,
@@ -246,6 +247,18 @@ export class RemoteHost {
     if (afterSeq !== undefined || limit !== undefined) params.push(afterSeq ?? null);
     if (limit !== undefined) params.push(limit);
     return (await this.request("getChangelog", params, READ_TIMEOUT_MS)) as PublicChainItem[];
+  }
+
+  /** Forwards scanned codes to the host, which checks them; never queued (the host must check). */
+  async receiveQrBallot(codes: string[]): Promise<QrReceiveResult> {
+    if (!this.isConnected()) {
+      return { ok: false, kind: "offline", errors: ["Scanned ballots need the connection to the host, which checks them. Keep the paper and scan again when connected."] };
+    }
+    try {
+      return (await this.request("receiveQrBallot", [codes], SUBMIT_TIMEOUT_MS)) as QrReceiveResult;
+    } catch (error) {
+      return { ok: false, kind: "rejected", errors: [error instanceof Error ? error.message : String(error)] };
+    }
   }
 
   async getOpUndoInfo(): Promise<OpUndoInfo[]> {

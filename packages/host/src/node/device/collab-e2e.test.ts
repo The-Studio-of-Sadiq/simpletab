@@ -4,6 +4,7 @@ import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { FeedbackSubmission } from "@simpletab/core/types";
 import type { HostServiceClient } from "../../common/host-protocol";
+import { deriveKeys, encodeQrBallot } from "@simpletab/core/crypto";
 import { HostEngine } from "../engine/engine";
 import { HostServiceImpl } from "../host-service";
 import { DEBATE_ID, makeState, ROUND_ID } from "../publish/publish-test-fixtures";
@@ -30,11 +31,10 @@ describe("live collaboration end to end", () => {
     return dir;
   }
 
-  async function makeHost() {
+  async function makeHost(options: { withLink?: boolean } = {}) {
     const dir = tempDir("simpletab-e2e-host-");
     const dbPath = path.join(dir, "publish-test.simpletab.db");
-    const seed = HostEngine.open(dbPath, {
-      initialState: makeState({
+    const base = makeState({
         releaseResults: true,
         feedback: [
           {
@@ -52,7 +52,15 @@ describe("live collaboration end to end", () => {
             timestamp: "2026-11-24T11:00:00.000Z",
           } as unknown as FeedbackSubmission,
         ],
-      }),
+      });
+    const seed = HostEngine.open(dbPath, {
+      initialState: {
+        ...base,
+        // A link secret (16 zero bytes in base32) so QR ballots can be checked on the host.
+        links: options.withLink === true
+          ? [{ lookupId: "a123456789012", entityId: "adj-chair", secret: "aaaaaaaaaaaaaaaaaaaaaaaaaa" }]
+          : base.links,
+      } as typeof base,
     });
     await seed.close();
     const host = new HostServiceImpl();
@@ -227,4 +235,50 @@ describe("live collaboration end to end", () => {
     const refused = await host.submit({ type: "team.update", payload: { team: { ...team2, name: "Too Late" } } });
     expect(refused).toMatchObject({ ok: false, code: "FORBIDDEN" });
   }, 60_000);
+
+  it.skipIf(typeof globalThis.CompressionStream !== "function")(
+    "lets a tab assistant's device scan a QR ballot that only the host can check",
+    async () => {
+      const { host, address } = await makeHost({ withLink: true });
+      const assistant = await makeDevice(host, address, "tab_assistant", "Ballot desk");
+      // The assistant's role never receives link secrets, so it could not check a code itself.
+      expect(JSON.stringify((await assistant.service.getState())?.links ?? [])).not.toContain("aaaaaaaa");
+
+      const { qrKey } = await deriveKeys(new Uint8Array(16), "publish-test");
+      const codes = await encodeQrBallot(qrKey, {
+        sid: "desk-scan-1",
+        slug: "publish-test",
+        lid: "a123456789012",
+        rnd: ROUND_ID,
+        type: "ballot",
+        payload: { id: "qr-desk-1", debateId: DEBATE_ID, roundId: ROUND_ID, speakerScores: {}, teamScores: {} },
+      });
+      // The signature checks out on the host; the ballot then goes through the normal ballot rules
+      // as the device (this fixture's debate is not a full BP room, so the rules refuse it).
+      const result = await assistant.service.receiveQrBallot(codes);
+      expect(result).toMatchObject({ ok: false, kind: "rejected" });
+      if (!result.ok) expect(result.errors.join(" ")).toMatch(/substantive speeches/);
+
+      // A ballot already on record (the fixture's b-1) scanned again is refused, not stored twice.
+      const again = await encodeQrBallot(qrKey, {
+        sid: "desk-scan-3",
+        slug: "publish-test",
+        lid: "a123456789012",
+        rnd: ROUND_ID,
+        type: "ballot",
+        payload: { id: "b-1", debateId: DEBATE_ID, roundId: ROUND_ID },
+      });
+      expect(await assistant.service.receiveQrBallot(again)).toMatchObject({ ok: false, kind: "duplicate" });
+
+      const forged = await encodeQrBallot((await deriveKeys(new Uint8Array(16).fill(9), "publish-test")).qrKey, {
+        sid: "desk-scan-2",
+        slug: "publish-test",
+        lid: "a123456789012",
+        rnd: ROUND_ID,
+        type: "ballot",
+        payload: { debateId: DEBATE_ID, roundId: ROUND_ID },
+      });
+      expect(await assistant.service.receiveQrBallot(forged)).toMatchObject({ ok: false, kind: "no_matching_key" });
+    },
+  );
 });

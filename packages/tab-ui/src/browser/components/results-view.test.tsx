@@ -1,5 +1,4 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { deriveKeys, encodeQrBallot } from "@simpletab/core/crypto";
 import {
   applyOp,
   defaultRegistry,
@@ -677,55 +676,31 @@ describe("ResultsView", () => {
       expect(submitted.some((op) => op.type === "ballot.discard")).toBe(true);
     });
 
-    // QR without links shows M3 message
-    fireEvent.change(
-      screen.getByLabelText("Paste QR ballot code (ST1… or ST1F… fragments)"),
-      { target: { value: "ST1.dummy.code" } },
+    // QR codes go to the host, which checks them; refusals are shown in words.
+    const onReceiveQrBallot = vi
+      .fn()
+      .mockResolvedValueOnce({ ok: false, kind: "needs_links", errors: [] })
+      .mockResolvedValueOnce({ ok: true, seq: 14, roundId: "r1", debateId: "d1" });
+    rerender(
+      <ResultsView
+        state={stateNoLinks}
+        status={EMPTY_STATUS}
+        onSubmitOp={onSubmitOp}
+        onReceiveQrBallot={onReceiveQrBallot}
+      />,
     );
+    const qrBox = screen.getByLabelText("Paste QR ballot code (ST1… or ST1F… fragments)");
+    fireEvent.change(qrBox, { target: { value: "ST1F.a.1.2.9.x.y  ST1F.a.2.2.9.x.z" } });
     fireEvent.click(screen.getByRole("button", { name: "Import QR ballot" }));
     await waitFor(() => {
       expect(screen.getByText(/QR import needs private links \(M3\)/)).toBeTruthy();
     });
+    expect(onReceiveQrBallot).toHaveBeenCalledWith(["ST1F.a.1.2.9.x.y", "ST1F.a.2.2.9.x.z"]);
 
-    // QR with link secret decodes and submits ballot.receive_online (source: "qr")
-    if (typeof globalThis.CompressionStream === "function") {
-      const secretStr = "aaaaaaaaaaaaaaaaaaaaaaaaaa";
-      const secretBytes = new Uint8Array(16).fill(0);
-      const { qrKey } = await deriveKeys(secretBytes, "results-test");
-      const [qrCode] = await encodeQrBallot(qrKey, {
-        sid: "sub-qr-1",
-        slug: "results-test",
-        lid: "a123456789012",
-        rnd: "r1",
-        type: "ballot",
-        payload: makeBpBallot({ id: "qr-ballot-1" }),
-      });
-
-      const stateWithLinks = makeResultsState("bp", {
-        links: [{ lookupId: "a123456789012", entityId: "adj-1", secret: secretStr }],
-      });
-
-      rerender(
-        <ResultsView
-          state={stateWithLinks}
-          status={EMPTY_STATUS}
-          onSubmitOp={onSubmitOp}
-        />,
-      );
-
-      fireEvent.change(
-        screen.getByLabelText("Paste QR ballot code (ST1… or ST1F… fragments)"),
-        { target: { value: qrCode } },
-      );
-      fireEvent.click(screen.getByRole("button", { name: "Import QR ballot" }));
-
-      await waitFor(() => {
-        expect(
-          submitted.some((op) => op.type === "ballot.receive_online"),
-        ).toBe(true);
-      });
-      const qrOp = submitted.find((op) => op.type === "ballot.receive_online")!;
-      expect((qrOp.payload as { source: string }).source).toBe("qr");
-    }
+    fireEvent.change(qrBox, { target: { value: "ST1.body.tag" } });
+    fireEvent.click(screen.getByRole("button", { name: "Import QR ballot" }));
+    await waitFor(() => {
+      expect(screen.getByText("Imported signed QR ballot.")).toBeTruthy();
+    });
   });
 });

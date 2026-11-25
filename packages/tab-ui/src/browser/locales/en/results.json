@@ -114,5 +114,6 @@
   "results.submitBlindCheckButton": "Submit blind check",
   "results.saveDraftButton": "Save ballot",
   "results.saveAndConfirmButton": "Save and confirm",
-  "results.replyBoundsHint": "Reply score range: {min}–{max} (step {step})."
+  "results.replyBoundsHint": "Reply score range: {min}–{max} (step {step}).",
+  "results.qrDuplicate": "This ballot was already received; the same code was scanned again."
 }

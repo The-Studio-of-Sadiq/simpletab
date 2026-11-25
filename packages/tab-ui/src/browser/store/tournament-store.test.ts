@@ -148,6 +148,7 @@ describe("TournamentStore", () => {
       promoteToHost: vi.fn(),
       exportDeviceCopy: vi.fn(),
       setSuccession: vi.fn(),
+      receiveQrBallot: vi.fn(),
     };
 
     const dispatcher = new HostServiceClientDispatcher();
@@ -255,6 +256,7 @@ describe("TournamentStore", () => {
       promoteToHost: vi.fn(),
       exportDeviceCopy: vi.fn(),
       setSuccession: vi.fn(),
+      receiveQrBallot: vi.fn(),
     };
 
     const store = new TournamentStore(hostService, undefined, workspaceOpener);
@@ -336,6 +338,7 @@ describe("TournamentStore", () => {
       promoteToHost: vi.fn(),
       exportDeviceCopy: vi.fn(),
       setSuccession: vi.fn(),
+      receiveQrBallot: vi.fn(),
     };
 
     const dispatcher = new HostServiceClientDispatcher();

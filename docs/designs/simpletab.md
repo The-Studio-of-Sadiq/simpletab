@@ -410,6 +410,12 @@ The database is `better-sqlite3` 13.2.0, rebuilt for Theia's Electron with `@ele
 - **Who wins and stepping down.** Each device remembers the best host it has seen (number, then rank) across re-pairing. A device that reaches a host that loses to it refuses that host and sends `superseded`. The host then turns read-only (stored in `meta.replaced_by`, so it stays read-only after a restart), stops its device server, and writes its ops after the fork point (the winner's `promotedFromSeq`) to `<slug>.divergent.simpletab` next to the tournament file. A host refused by the service with `HOST_STALE` only pauses sync, as before; it does not step down by itself.
 - A tab director's copy is sent whole on each connection, inside one WebSocket message (16 MiB limit), which fits the benchmark tournaments; splitting it is left for later.
 
+**As built (step d).**
+
+- **Assistant mode** is a page ("Assistant mode") for any role that may enter ballots, on the host or on a device: a webcam scanner (`jsqr` 1.4.0, about 8 frames a second, fragments of one ballot collected until complete and repeats of the same code ignored), a list of recent scans in words, and shortcuts to hand entry and check-in. The design expected a host webcam scanner from M3; it arrives here and serves the host and devices alike.
+- **QR ballots are checked on the host only.** Checking needs the participants' link secrets and passcodes, which most roles never receive. Scans (and codes pasted into the Results page) go to the host as `receiveQrBallot`; on a device this runs as the device's actor, so the normal ballot permissions and rules apply. A device that cannot reach the host refuses to take a scan and says to keep the paper, since an unchecked code cannot be queued safely. A ballot whose id is already on record is refused as a repeat scan.
+- Nothing from the camera is kept: frames are read, decoded and dropped, and the camera stops when the page closes.
+
 **Milestone steps.** M5 is built in steps: (a) certificates, words, pairing codes, the `wss` server and the device client with pairing and reconnects; (b) the projection stream, device mode, submissions with the outbox, presence and locks, and the Devices page; (c) succession, catch-up, promotion, demotion and the divergent export; (d) assistant mode with the webcam scanner; (e) `npm run e2e:collab`.
 
 ### 5. Changelog v2

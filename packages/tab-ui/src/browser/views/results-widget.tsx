@@ -64,6 +64,7 @@ export class ResultsWidget extends ReactWidget {
         selectedRoundId={this.store.getSelectedRoundId() ?? undefined}
         onSelectRound={(roundId) => this.store.setSelectedRoundId(roundId)}
         onSubmitOp={(request) => this.store.submit(request)}
+        onReceiveQrBallot={(codes) => this.store.receiveQrBallot(codes)}
         onCancelLock={(lockId) => this.store.cancelLong(lockId)}
         onOpenSetup={() => {
           void this.commandService.executeCommand(SIMPLETAB_OPEN_SETUP_COMMAND_ID);
