@@ -1,0 +1,6 @@
+{
+  "developerMode.preferenceDescription": "Show the code editor on this laptop. Off by default: files open in the laptop's own apps and SimpleTab's pages are used for everything else.",
+  "developerMode.toggleCommand": "SimpleTab: Toggle developer mode",
+  "developerMode.editorHidden": "This needs the code editor, which is only available in developer mode. Turn it on with \"SimpleTab: Toggle developer mode\" in the command palette.",
+  "developerMode.tournamentFileNotOpened": "{name} belongs to the open tournament and only SimpleTab itself reads and changes it. Use SimpleTab's pages to see and change the tournament."
+}

@@ -1,0 +1,5 @@
+{
+  "files.protectedDatabase": "{name} is the open tournament's database. SimpleTab keeps it open, so it cannot be deleted, moved, renamed or overwritten from here. Close the tournament first.",
+  "files.protectedCertificate": "collab holds this host's private key for live collaboration; it cannot be changed from here.",
+  "files.protectedFolder": "This folder holds the open tournament; close it first."
+}

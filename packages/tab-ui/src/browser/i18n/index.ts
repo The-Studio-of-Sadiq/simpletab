@@ -8,6 +8,7 @@ import bnCommon from "../locales/bn/common.json";
 import bnCredentials from "../locales/bn/credentials.json";
 import bnDraw from "../locales/bn/draw.json";
 import bnFeedback from "../locales/bn/feedback.json";
+import bnFiles from "../locales/bn/files.json";
 import bnLinks from "../locales/bn/links.json";
 import bnMotions from "../locales/bn/motions.json";
 import bnParticipants from "../locales/bn/participants.json";
@@ -22,6 +23,7 @@ import bnSetup from "../locales/bn/setup.json";
 import bnStandings from "../locales/bn/standings.json";
 import bnStatus from "../locales/bn/status.json";
 import bnTerminal from "../locales/bn/terminal.json";
+import bnDeveloperMode from "../locales/bn/developer-mode.json";
 import enAllocation from "../locales/en/allocation.json";
 import enBreak from "../locales/en/break.json";
 import enChangelog from "../locales/en/changelog.json";
@@ -30,6 +32,7 @@ import enCommon from "../locales/en/common.json";
 import enCredentials from "../locales/en/credentials.json";
 import enDraw from "../locales/en/draw.json";
 import enFeedback from "../locales/en/feedback.json";
+import enFiles from "../locales/en/files.json";
 import enLinks from "../locales/en/links.json";
 import enMotions from "../locales/en/motions.json";
 import enParticipants from "../locales/en/participants.json";
@@ -44,6 +47,7 @@ import enSetup from "../locales/en/setup.json";
 import enStandings from "../locales/en/standings.json";
 import enStatus from "../locales/en/status.json";
 import enTerminal from "../locales/en/terminal.json";
+import enDeveloperMode from "../locales/en/developer-mode.json";
 
 export type SupportedLocale = "en" | "bn";
 
@@ -73,6 +77,7 @@ const DEFAULT_CATALOGS: Record<SupportedLocale, MessageCatalog> = {
     ...enMotions,
     ...enResults,
     ...enFeedback,
+    ...enFiles,
     ...enLinks,
     ...enStandings,
     ...enBreak,
@@ -85,6 +90,7 @@ const DEFAULT_CATALOGS: Record<SupportedLocale, MessageCatalog> = {
     ...enCredentials,
     ...enProjector,
     ...enTerminal,
+    ...enDeveloperMode,
   },
   bn: {
     ...bnCommon,
@@ -97,6 +103,7 @@ const DEFAULT_CATALOGS: Record<SupportedLocale, MessageCatalog> = {
     ...bnMotions,
     ...bnResults,
     ...bnFeedback,
+    ...bnFiles,
     ...bnLinks,
     ...bnStandings,
     ...bnBreak,
@@ -109,6 +116,7 @@ const DEFAULT_CATALOGS: Record<SupportedLocale, MessageCatalog> = {
     ...bnCredentials,
     ...bnProjector,
     ...bnTerminal,
+    ...bnDeveloperMode,
   },
 };
 

@@ -16,6 +16,7 @@ import {
   bindViewContribution,
   codicon,
   FrontendApplicationContribution,
+  OpenHandler,
   ServiceConnectionProvider,
   ViewContainer,
   WidgetFactory,
@@ -25,9 +26,23 @@ import {
   ElectronIpcConnectionProvider,
   ElectronMainConnectionProvider,
 } from "@theia/core/lib/electron-browser/messaging/electron-ipc-connection-source";
-import { FilterContribution } from "@theia/core/lib/common";
+import { CommandContribution, FilterContribution, MessageService } from "@theia/core/lib/common";
+import { PreferenceContribution } from "@theia/core/lib/common/preferences/preference-schema";
+import {
+  DeveloperMode,
+  DeveloperModeContribution,
+  developerModePreferenceContribution,
+  EditorlessOpenHandler,
+} from "./developer-mode";
+import { FileService } from "@theia/filesystem/lib/browser/file-service";
 import { ContainerModule } from "@theia/core/shared/inversify";
 import { t } from "./i18n";
+import {
+  FileGuardContext,
+  GuardedFileService,
+  GuardedWorkspaceDeleteHandler,
+} from "./tournament-file-guard";
+import { WorkspaceDeleteHandler } from "@theia/workspace/lib/browser/workspace-delete-handler";
 import { SimpleTabShellFilterContribution } from "./shell-view-filter";
 import {
   AllocationViewContribution,
@@ -84,7 +99,7 @@ import { SimpleTabNavWidget } from "./views/simpletab-nav-widget";
 import { StandingsWidget } from "./views/standings-widget";
 import { TerminalHostWarningContribution } from "./terminal-host-warning";
 
-export default new ContainerModule((bind) => {
+export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
   bind(HostServiceClientDispatcher).toSelf().inSingletonScope();
   bind(HostServiceClient).toService(HostServiceClientDispatcher);
 
@@ -102,6 +117,20 @@ export default new ContainerModule((bind) => {
   bind(TheiaTournamentWorkspaceOpener).toSelf().inSingletonScope();
   bind(TournamentWorkspaceOpener).toService(TheiaTournamentWorkspaceOpener);
   bind(TournamentStore).toSelf().inSingletonScope();
+
+  // Resolved on each call, not at injection: the store depends on FileService through the workspace.
+  bind(FileGuardContext)
+    .toDynamicValue((ctx) => ({
+      getStatus: () => ctx.container.get(TournamentStore).getStatus(),
+      notifyRefused: (message: string) => {
+        void ctx.container.get(MessageService).warn(message);
+      },
+    }))
+    .inSingletonScope();
+  bind(GuardedFileService).toSelf().inSingletonScope();
+  rebind(FileService).toService(GuardedFileService);
+  bind(GuardedWorkspaceDeleteHandler).toSelf().inSingletonScope();
+  rebind(WorkspaceDeleteHandler).toService(GuardedWorkspaceDeleteHandler);
 
   bind(SimpleTabShellFilterContribution).toSelf().inSingletonScope();
   bind(FilterContribution).toService(SimpleTabShellFilterContribution);
@@ -347,6 +376,14 @@ export default new ContainerModule((bind) => {
   bindViewContribution(bind, ProjectorControlViewContribution);
   bindViewContribution(bind, SimpleTabContribution);
   bind(FrontendApplicationContribution).toService(SimpleTabContribution);
+
+  bind(DeveloperMode).toSelf().inSingletonScope();
+  bind(PreferenceContribution).toConstantValue(developerModePreferenceContribution);
+  bind(EditorlessOpenHandler).toSelf().inSingletonScope();
+  bind(OpenHandler).toService(EditorlessOpenHandler);
+  bind(DeveloperModeContribution).toSelf().inSingletonScope();
+  bind(FrontendApplicationContribution).toService(DeveloperModeContribution);
+  bind(CommandContribution).toService(DeveloperModeContribution);
 
   bind(TerminalHostWarningContribution).toSelf().inSingletonScope();
   bind(FrontendApplicationContribution).toService(TerminalHostWarningContribution);

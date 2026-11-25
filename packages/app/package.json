@@ -19,6 +19,7 @@
     "@theia/core": "1.77.0",
     "@theia/electron": "1.77.0",
     "@theia/messages": "1.77.0",
+    "@theia/navigator": "1.77.0",
     "@theia/plugin-ext": "1.77.0",
     "@theia/plugin-ext-vscode": "1.77.0",
     "@theia/preferences": "1.77.0",
@@ -38,6 +39,17 @@
     "frontend": {
       "config": {
         "applicationName": "SimpleTab",
+        "preferences": {
+          "files.exclude": {
+            "**/.git": true,
+            "**/.svn": true,
+            "**/.hg": true,
+            "**/CVS": true,
+            "**/.DS_Store": true,
+            "**/*.simpletab.db-*": true,
+            "**/collab": true
+          }
+        },
         "electron": {
           "appUserModelId": "app.simpletab.desktop",
           "windowOptions": {

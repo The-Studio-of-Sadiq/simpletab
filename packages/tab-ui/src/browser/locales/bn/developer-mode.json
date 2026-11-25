@@ -1,0 +1,6 @@
+{
+  "developerMode.preferenceDescription": "এই ল্যাপটপে কোড এডিটর দেখান। শুরুতে বন্ধ থাকে: ফাইলগুলো ল্যাপটপের নিজস্ব অ্যাপে খোলে, আর বাকি সব কাজ SimpleTab-এর নিজস্ব পাতায় হয়।",
+  "developerMode.toggleCommand": "SimpleTab: ডেভেলপার মোড চালু/বন্ধ",
+  "developerMode.editorHidden": "এর জন্য কোড এডিটর লাগবে, যা শুধু ডেভেলপার মোডে পাওয়া যায়। কমান্ড প্যালেটে \"SimpleTab: ডেভেলপার মোড চালু/বন্ধ\" দিয়ে এটি চালু করুন।",
+  "developerMode.tournamentFileNotOpened": "{name} চলমান টুর্নামেন্টের অংশ; শুধু SimpleTab নিজেই এটি পড়ে ও বদলায়। টুর্নামেন্ট দেখতে ও বদলাতে SimpleTab-এর পাতাগুলো ব্যবহার করুন।"
+}

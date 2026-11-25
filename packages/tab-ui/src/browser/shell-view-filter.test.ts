@@ -5,19 +5,11 @@ import {
 } from "./shell-view-filter";
 
 describe("SimpleTabShellFilterContribution", () => {
-  it("filters out Plugins (M9), Navigator (M7), and transitive IDE views", () => {
+  it("filters out Plugins (M9) and transitive IDE views", () => {
     expect(
       shouldFilterShellContribution({
         viewId: "plugins",
         toggleCommand: { id: "pluginsView:toggle" },
-      }),
-    ).toBe(true);
-
-    expect(
-      shouldFilterShellContribution({
-        viewId: "files",
-        effectiveWidgetId: "explorer-view-container",
-        toggleCommand: { id: "fileNavigator:toggle" },
       }),
     ).toBe(true);
 
@@ -43,7 +35,7 @@ describe("SimpleTabShellFilterContribution", () => {
     ).toBe(true);
   });
 
-  it("keeps SimpleTab, Source Control (SCM / Git) and the terminal (M6) active", () => {
+  it("keeps SimpleTab, Source Control (SCM / Git), the terminal (M6) and the explorer (M7) active", () => {
     expect(
       shouldFilterShellContribution({
         openTerminal: () => undefined,
@@ -65,6 +57,14 @@ describe("SimpleTabShellFilterContribution", () => {
         viewId: "scm-view",
         effectiveWidgetId: "scm-view-container",
         toggleCommand: { id: "scmView:toggle" },
+      }),
+    ).toBe(false);
+
+    expect(
+      shouldFilterShellContribution({
+        viewId: "files",
+        effectiveWidgetId: "explorer-view-container",
+        toggleCommand: { id: "fileNavigator:toggle" },
       }),
     ).toBe(false);
   });
@@ -115,8 +115,9 @@ describe("SimpleTabShellFilterContribution", () => {
       },
     } as never);
 
-    expect(closed).toEqual(["plugins", "explorer-view-container"]);
+    expect(closed).toEqual(["plugins"]);
     expect(isHiddenShellWidgetId("scm-view-container")).toBe(false);
+    expect(isHiddenShellWidgetId("explorer-view-container")).toBe(false);
     expect(isHiddenShellWidgetId("terminal-1")).toBe(false);
   });
 });
