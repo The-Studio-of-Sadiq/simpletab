@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync } from "node:fs";
+import { existsSync, mkdtempSync, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -175,4 +175,56 @@ describe("live collaboration end to end", () => {
     expect(await director.service.getState()).toBeNull();
     expect(director.store.load()).toBeUndefined();
   }, 30_000);
+
+  it("promotes a tab director's copy when the host is down, and the old host steps down", async () => {
+    // Created first so it is removed last, after the promoted laptop has closed its database.
+    const newDir = tempDir("simpletab-e2e-promoted-");
+    const { host, address } = await makeHost();
+    const director = await makeDevice(host, address, "tab_director", "Director laptop");
+    const equity = await makeDevice(host, address, "equity", "Equity laptop");
+
+    // The director's full copy follows every commit.
+    const team = (await host.getState())!.teams.find((t) => t.id === "team-og")!;
+    expect(await host.submit({ type: "team.update", payload: { team: { ...team, name: "Before Failure" } } })).toMatchObject({ ok: true });
+    const sharedSeq = (await host.status()).headSeq!;
+    await vi.waitFor(async () => {
+      expect((await director.service.status()).device?.copy?.lastSeq).toBe(sharedSeq);
+    }, { timeout: 15_000, interval: 100 });
+
+    // Promotion is refused while the host is reachable.
+    await expect(director.service.promoteToHost({ directory: newDir })).rejects.toThrow(/still reachable/);
+
+    // The host "dies" for the devices, but keeps working on its own: that op is divergent.
+    await host.setDevicesEnabled(false);
+    await vi.waitFor(async () => {
+      expect((await director.service.status()).device?.connection).not.toBe("connected");
+    });
+    const team2 = (await host.getState())!.teams.find((t) => t.id === "team-og")!;
+    expect(await host.submit({ type: "team.update", payload: { team: { ...team2, name: "Divergent Name" } } })).toMatchObject({ ok: true });
+
+    const promoted = await director.service.promoteToHost({ directory: newDir });
+    expect(promoted.open).toBe(true);
+    expect(promoted.device).toBeUndefined();
+    expect(promoted.hostNumber).toBe(2);
+    expect(promoted.headSeq).toBe(sharedSeq + 1);
+    const newState = await director.service.getState();
+    expect(newState?.teams.find((t) => t.id === "team-og")?.name).toBe("Before Failure");
+    const changelog = await director.service.getChangelog();
+    expect(changelog.at(-1)?.entry.opType).toBe("host.promote");
+
+    // A device that already knows the new host reaches the old one: the old host steps down.
+    equity.store.saveBestHost({ hostNumber: 2, hostId: "promoted-host", hostRank: 1, certFingerprint: "", promotedFromSeq: sharedSeq });
+    const port = Number(address.split(":")[1]);
+    host.setCollabListen({ port, host: "127.0.0.1" });
+    await host.setDevicesEnabled(true);
+    await vi.waitFor(async () => {
+      expect((await host.status()).replacedBy).toMatchObject({ hostNumber: 2, forkSeq: sharedSeq });
+    }, { timeout: 20_000, interval: 100 });
+    const replaced = (await host.status()).replacedBy!;
+    expect(replaced.divergentFile).toMatch(/\.divergent\.simpletab$/);
+    expect(existsSync(replaced.divergentFile!)).toBe(true);
+    expect((await equity.service.status()).device?.connection).toBe("superseded");
+    const refused = await host.submit({ type: "team.update", payload: { team: { ...team2, name: "Too Late" } } });
+    expect(refused).toMatchObject({ ok: false, code: "FORBIDDEN" });
+  }, 60_000);
 });

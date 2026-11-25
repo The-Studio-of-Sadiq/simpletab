@@ -10,6 +10,7 @@ import {
   type DeviceRecord,
   type HostRecord,
   type OpDef,
+  type TournamentState,
 } from "../types";
 
 export interface DeviceApprovePayload {
@@ -263,6 +264,80 @@ export const deviceSetRoleOp: OpDef<DeviceSetRolePayload> = {
     };
   },
 };
+
+export interface SuccessionSetPayload {
+  /** Tab-director device ids, best (rank 1) first. */
+  order: string[];
+  previous?: string[];
+}
+
+/**
+ * Sets the succession list (design section 4): which tab-director laptop should be promoted first
+ * if the host dies. Every id must be an approved tab-director device, each once.
+ */
+export const successionSetOp: OpDef<SuccessionSetPayload> = {
+  type: "succession.set",
+  permission: "devices.manage",
+  category: "devices",
+  visibility: "private",
+  lock: false,
+  reads(state) {
+    return [recordKey("host", state.tournament.id)];
+  },
+  writes(state) {
+    return [recordKey("host", state.tournament.id)];
+  },
+  validate(state, payload) {
+    if (!Array.isArray(payload.order)) {
+      return ["order must be a list of device ids."];
+    }
+    const errors: string[] = [];
+    const seen = new Set<string>();
+    for (const id of payload.order) {
+      if (typeof id !== "string" || id.length === 0) {
+        errors.push("Every succession entry must be a device id.");
+        continue;
+      }
+      if (seen.has(id)) errors.push(`Device ${id} is listed twice.`);
+      seen.add(id);
+      const device = state.devices.find((item) => item.id === id);
+      if (device === undefined) {
+        errors.push(`Device ${id} does not exist.`);
+      } else if (device.role.id !== "tab_director") {
+        errors.push(`Device ${device.name} is not a tab director, so it cannot be promoted.`);
+      }
+    }
+    return errors;
+  },
+  apply(state, payload) {
+    const previous = state.succession !== undefined ? [...state.succession] : undefined;
+    return {
+      state: { ...state, succession: [...payload.order] },
+      committedPayload: {
+        order: [...payload.order],
+        ...(previous !== undefined ? { previous } : {}),
+      },
+    };
+  },
+  inverse(committedPayload) {
+    return {
+      type: "succession.set",
+      payload: { order: [...(committedPayload.previous ?? [])] },
+    };
+  },
+};
+
+/**
+ * The succession list as it applies: the stored order, or tab-director devices in pairing order when
+ * none was set (design section 4), keeping only current tab directors.
+ */
+export function effectiveSuccession(state: Pick<TournamentState, "devices" | "succession">): string[] {
+  const directors = state.devices.filter((device) => device.role.id === "tab_director");
+  const ids = new Set(directors.map((device) => device.id));
+  if (state.succession === undefined) return directors.map((device) => device.id);
+  const ordered = state.succession.filter((id) => ids.has(id));
+  return [...ordered, ...directors.map((d) => d.id).filter((id) => !ordered.includes(id))];
+}
 
 export const hostPromoteOp: OpDef<HostPromotePayload> = {
   type: "host.promote",

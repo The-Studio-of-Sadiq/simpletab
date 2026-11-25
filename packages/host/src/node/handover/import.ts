@@ -19,6 +19,7 @@ import {
   allRecordKeys,
   fromContentOnlyState,
   writeChangedRecords,
+  type ContentOnlyState,
 } from "../state/load";
 import { stateHash, stateHashFromState } from "../state/state-hash";
 import {
@@ -44,7 +45,20 @@ export interface ImportHandoverResult {
   stateHash: string;
 }
 
-function toStoredOpRow(record: HandoverOpRecord): StoredOpRowFull {
+export interface VerifiedHandover {
+  manifest: HandoverManifest;
+  opRecords: HandoverOpRecord[];
+  snapshotBytes: Uint8Array;
+  snapshotContent: ContentOnlyState;
+  snapshotHash: string;
+  hasRealSnapshot: boolean;
+  initialSnapshotState: TournamentState;
+  finalState: TournamentState;
+  snapshotSeq: number;
+  replayedSteps: { record: HandoverOpRecord; state: TournamentState }[];
+}
+
+export function toStoredOpRow(record: HandoverOpRecord): StoredOpRowFull {
   return {
     seq: record.seq,
     ts: record.ts,
@@ -65,30 +79,17 @@ function toStoredOpRow(record: HandoverOpRecord): StoredOpRowFull {
 }
 
 /**
- * Imports a `.simpletab` handover file into `targetPath`:
- * 1. Unzips and validates `manifest.json`, `ops.ndjson`, `snapshot.json.gz`, and `links.json`.
+ * Verifies the extracted entries of a `.simpletab` handover archive:
+ * 1. Validates `manifest.json`, `ops.ndjson`, `snapshot.json.gz`, and `links.json`.
  * 2. Verifies the entire changelog chain and payload commitments via core's `verifyChain`.
  * 3. Verifies the snapshot hash against its changelog entry (if a snapshot existed) and replays
- *    all subsequent ops through core's `applyOp`.
- * 4. Rebuilds the SQLite database with `host_number = imported + 1`, a fresh random `host_id`,
- *    and `host_rank = 1`.
+ *    all subsequent ops through core's `applyOp`, checking `links.json` matches.
  */
-export async function importHandover(
-  file: string | Uint8Array,
-  targetPath: string,
+export async function verifyHandoverEntries(
+  entries: Record<string, Uint8Array>,
   options: ImportHandoverOptions = {},
-): Promise<ImportHandoverResult> {
+): Promise<VerifiedHandover> {
   const registry = options.registry ?? defaultRegistry();
-  const rawBytes = typeof file === "string" ? readFileSync(file) : file;
-
-  let entries: Record<string, Uint8Array>;
-  try {
-    entries = unzipSync(rawBytes);
-  } catch (error) {
-    throw new Error(
-      `Invalid handover archive: ${error instanceof Error ? error.message : String(error)}`,
-    );
-  }
 
   const manifestBytes = entries["manifest.json"];
   const opsBytes = entries["ops.ndjson"];
@@ -153,7 +154,7 @@ export async function importHandover(
     );
   }
 
-  let snapshotContent;
+  let snapshotContent: ContentOnlyState;
   try {
     snapshotContent = decodeSnapshot(snapshotBytes);
   } catch (error) {
@@ -221,6 +222,57 @@ export async function importHandover(
   if (canonicalize(currentState.links) !== canonicalize(linksFromFile)) {
     throw new Error("Handover links.json does not match reconstructed state links.");
   }
+
+  return {
+    manifest,
+    opRecords,
+    snapshotBytes,
+    snapshotContent,
+    snapshotHash,
+    hasRealSnapshot,
+    initialSnapshotState,
+    finalState: currentState,
+    snapshotSeq,
+    replayedSteps,
+  };
+}
+
+/**
+ * Imports a `.simpletab` handover file into `targetPath`:
+ * 1. Unzips and validates `manifest.json`, `ops.ndjson`, `snapshot.json.gz`, and `links.json`.
+ * 2. Verifies the entire changelog chain and payload commitments via core's `verifyChain`.
+ * 3. Verifies the snapshot hash against its changelog entry (if a snapshot existed) and replays
+ *    all subsequent ops through core's `applyOp`.
+ * 4. Rebuilds the SQLite database with `host_number = imported + 1`, a fresh random `host_id`,
+ *    and `host_rank = 1`.
+ */
+export async function importHandover(
+  file: string | Uint8Array,
+  targetPath: string,
+  options: ImportHandoverOptions = {},
+): Promise<ImportHandoverResult> {
+  const rawBytes = typeof file === "string" ? readFileSync(file) : file;
+
+  let entries: Record<string, Uint8Array>;
+  try {
+    entries = unzipSync(rawBytes);
+  } catch (error) {
+    throw new Error(
+      `Invalid handover archive: ${error instanceof Error ? error.message : String(error)}`,
+    );
+  }
+
+  const {
+    manifest,
+    opRecords,
+    snapshotBytes,
+    snapshotHash,
+    hasRealSnapshot,
+    initialSnapshotState,
+    finalState: currentState,
+    snapshotSeq,
+    replayedSteps,
+  } = await verifyHandoverEntries(entries, options);
 
   const newHostNumber = manifest.hostNumber + 1;
   const newHostId = randomUUID();

@@ -35,5 +35,11 @@
   "devices.disconnected": "Not connected",
   "devices.remove": "Remove",
   "devices.removeLabel": "Remove {name}",
-  "devices.removeConfirm": "Remove {name}? It is disconnected at once, cannot reconnect, and deletes its copy of the tournament when it next tries."
+  "devices.removeConfirm": "Remove {name}? It is disconnected at once, cannot reconnect, and deletes its copy of the tournament when it next tries.",
+  "devices.successionTitle": "Succession list",
+  "devices.successionHint": "If this laptop dies, the first tab director in this list should be promoted to host. Every tab director's laptop keeps a full copy.",
+  "devices.up": "Up",
+  "devices.down": "Down",
+  "devices.moveUp": "Move {name} up",
+  "devices.moveDown": "Move {name} down"
 }

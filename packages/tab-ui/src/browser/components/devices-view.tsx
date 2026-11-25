@@ -13,6 +13,8 @@ export interface DevicesViewProps {
   onApprove: (joinId: string) => Promise<void>;
   onReject: (joinId: string) => Promise<void>;
   onRemove: (deviceId: string) => Promise<void>;
+  /** Sets the succession list (tab-director device ids, rank 1 first). */
+  onSetSuccession?: (order: string[]) => Promise<void>;
   /** Asks the user to confirm removing a device; tests pass a stub. */
   confirmRemove?: (name: string) => boolean;
   pollMs?: number;
@@ -46,6 +48,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
   onApprove,
   onReject,
   onRemove,
+  onSetSuccession,
   confirmRemove = (name) => window.confirm(t("devices.removeConfirm", { name })),
   pollMs = 2000,
 }) => {
@@ -258,6 +261,49 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
               </div>
             </div>
           ))}
+        </section>
+      ) : null}
+
+      {status !== null && status.succession.length > 0 && onSetSuccession !== undefined ? (
+        <section className="simpletab-section" aria-labelledby="simpletab-devices-succession">
+          <h3 id="simpletab-devices-succession" className="simpletab-subtitle">
+            {t("devices.successionTitle")}
+          </h3>
+          <p className="simpletab-hint">{t("devices.successionHint")}</p>
+          <ol aria-label={t("devices.successionTitle")}>
+            {status.succession.map((deviceId, index) => {
+              const name = status.devices.find((d) => d.deviceId === deviceId)?.name ?? deviceId;
+              const move = (to: number): void => {
+                const next = [...status.succession];
+                next.splice(index, 1);
+                next.splice(to, 0, deviceId);
+                void run(() => onSetSuccession(next));
+              };
+              return (
+                <li key={deviceId}>
+                  {name}{" "}
+                  <button
+                    type="button"
+                    className="theia-button secondary"
+                    disabled={busy || index === 0}
+                    aria-label={t("devices.moveUp", { name })}
+                    onClick={() => move(index - 1)}
+                  >
+                    {t("devices.up")}
+                  </button>{" "}
+                  <button
+                    type="button"
+                    className="theia-button secondary"
+                    disabled={busy || index === status.succession.length - 1}
+                    aria-label={t("devices.moveDown", { name })}
+                    onClick={() => move(index + 1)}
+                  >
+                    {t("devices.down")}
+                  </button>
+                </li>
+              );
+            })}
+          </ol>
         </section>
       ) : null}
 

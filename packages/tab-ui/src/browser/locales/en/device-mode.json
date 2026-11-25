@@ -26,5 +26,22 @@
   "deviceMode.leaveConfirm": "Leave the host? This laptop's copy of the tournament and its pairing are deleted; changes not yet sent are lost.",
   "presence.alsoHere": "Also here:",
   "presence.viewing": "{name}",
-  "presence.holding": "{name} (editing)"
+  "presence.holding": "{name} (editing)",
+  "promote.title": "Promote this laptop to host",
+  "promote.copyState": "This laptop's full copy holds every change up to number {seq}.",
+  "promote.noCopy": "This laptop has no full copy yet. It receives one while connected to the host.",
+  "promote.rank": "It is number {rank} in the succession list.",
+  "promote.betterRanked": "Laptops ranked above this one: {names}. If one of them is working, promote that one instead.",
+  "promote.folderLabel": "Folder for the new host's tournament file",
+  "promote.choose": "Choose…",
+  "promote.newerCopyLabel": "Newer copy from another tab director (optional)",
+  "promote.newerCopyHint": "If another tab director's laptop stayed connected longer, save its copy there and choose the file here. SimpleTab uses whichever copy is newer, and refuses copies that disagree.",
+  "promote.hostReachable": "The host is reachable, so this laptop cannot be promoted. Promotion is only for when the host laptop is gone.",
+  "promote.promote": "Promote this laptop to host",
+  "promote.saveCopy": "Save this laptop's copy to the folder",
+  "promote.saved": "Saved {file}.",
+  "promote.confirm": "Promote this laptop to host? It becomes the new host with a higher host number. Every other laptop must pair with it again, and the old host stops accepting changes once it learns about the new one.",
+  "promote.replacedTitle": "Replaced by host {number}",
+  "promote.replacedBody": "Another laptop was promoted to host, so this tournament is now read-only here. Pair this laptop with the new host as a device to keep working.",
+  "promote.replacedFile": "Changes made here after the handover were saved for review in {file}."
 }

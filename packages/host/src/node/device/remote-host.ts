@@ -2,6 +2,8 @@ import type { PublicChainItem } from "@simpletab/core/changelog";
 import type { OpRequest } from "@simpletab/core/ops";
 import {
   COLLAB_SCHEMA,
+  hostBeats,
+  type HostIdentity,
   type CollabLock,
   type CollabRequestMethod,
   type CollabStateView,
@@ -24,6 +26,8 @@ import { applyStateDelta } from "../../common/state-delta";
 import { CollabClient, type CollabConnectResult, type CollabConnection } from "../collab/device-client";
 import type { CollabJsonMessage } from "../collab/server";
 import type { StoredPairing } from "./pairing-store";
+import type { ReplicaStore } from "./replica-store";
+import type { HandoverOpRecord } from "../handover/format";
 
 /**
  * The device side of live collaboration (design section 4.1): keeps one authenticated connection
@@ -58,6 +62,10 @@ export interface RemoteHostDeps {
   onChange?: (reason: "state" | "locks" | "presence" | "connection" | "outbox") => void;
   /** The host removed this device: its copy is gone and the pairing must be deleted. */
   onRemoved?: () => void;
+  /** Tab directors: the encrypted full copy kept for promotion. */
+  replica?: ReplicaStore;
+  /** The best host this laptop has seen, kept across re-pairing (host number, then rank). */
+  bestHost?: { load(): HostIdentity | undefined; save(host: HostIdentity): void };
 }
 
 interface PendingRequest {
@@ -124,6 +132,8 @@ export class RemoteHost {
   private readySnapshot = false;
   private stopped = false;
   private myPresence: PresenceInfo = {};
+  private replicaQueue: Promise<void> = Promise.resolve();
+  private copyError: string | undefined;
 
   constructor(deps: RemoteHostDeps) {
     this.deps = deps;
@@ -175,6 +185,15 @@ export class RemoteHost {
       queued: this.outbox.map<QueuedEditInfo>((item) => ({ id: item.id, opType: item.op.type, queuedAt: item.queuedAt })),
       rejected: this.rejected.map((item) => ({ ...item, errors: [...item.errors] })),
       presence: this.presenceEntries.map((entry) => ({ ...entry })),
+      ...(this.deps.replica !== undefined
+        ? {
+            copy: {
+              lastSeq: this.deps.replica.lastSeq(),
+              ...(this.deps.replica.headHash() !== undefined ? { headHash: this.deps.replica.headHash()! } : {}),
+              ...(this.copyError !== undefined ? { error: this.copyError } : {}),
+            },
+          }
+        : {}),
     };
   }
 
@@ -273,6 +292,7 @@ export class RemoteHost {
     }
     // Subscribe before yielding, so the snapshot that follows `welcome` cannot be missed.
     const connection = result.connection;
+    if (this.refuseReplacedHost(connection)) return;
     this.connection = connection;
     this.readySnapshot = false;
     connection.onMessage((message) => this.handleMessage(message));
@@ -321,10 +341,57 @@ export class RemoteHost {
     this.locks = [];
     this.presenceEntries = [];
     this.outbox = [];
+    this.deps.replica?.clear();
     this.lastError = "The host removed this laptop. Its copy of the tournament has been deleted.";
     this.setConnectionState("removed");
     this.deps.onChange?.("state");
     this.deps.onRemoved?.();
+  }
+
+  /**
+   * A paired host that loses to a host this laptop already knows (design section 4, step 6) is
+   * refused and told about the winner, so it can step down.
+   */
+  private refuseReplacedHost(connection: CollabConnection): boolean {
+    const seen = connection.welcome.host;
+    const best = this.deps.bestHost?.load();
+    if (best !== undefined && best.hostId !== seen.hostId && hostBeats(best, seen)) {
+      connection.send({ schema: COLLAB_SCHEMA, kind: "superseded", winner: best });
+      connection.close();
+      this.connection = null;
+      this.stopped = true;
+      this.lastError = `This host was replaced by host ${best.hostNumber}. Leave it and pair with the new host.`;
+      this.setConnectionState("superseded");
+      return true;
+    }
+    if (best === undefined || best.hostId === seen.hostId || hostBeats(seen, best)) {
+      this.deps.bestHost?.save(seen);
+    }
+    return false;
+  }
+
+  /** Copy updates run one at a time, in arrival order; a failure forces a fresh copy. */
+  private queueReplica(task: () => Promise<void>): void {
+    this.replicaQueue = this.replicaQueue
+      .then(task)
+      .then(() => {
+        this.copyError = undefined;
+        this.deps.onChange?.("state");
+      })
+      .catch((error: unknown) => {
+        this.copyError = `This laptop's full copy could not be updated: ${error instanceof Error ? error.message : String(error)} Reconnecting for a fresh copy.`;
+        this.connection?.close();
+        this.deps.onChange?.("connection");
+      });
+  }
+
+  /** Waits for pending copy updates (before promotion or export). */
+  async settleCopy(): Promise<void> {
+    await this.replicaQueue;
+  }
+
+  getPairing(): StoredPairing {
+    return this.deps.pairing;
   }
 
   // ---- messages ------------------------------------------------------------------------------
@@ -369,6 +436,18 @@ export class RemoteHost {
           this.presenceEntries = message.entries as PresenceEntry[];
           this.deps.onChange?.("presence");
         }
+        return;
+      }
+      case "replica_init": {
+        if (this.deps.replica === undefined || typeof message.handover !== "string") return;
+        const bytes = Buffer.from(message.handover, "base64");
+        this.queueReplica(() => this.deps.replica!.reset(bytes));
+        return;
+      }
+      case "ops": {
+        if (this.deps.replica === undefined || !Array.isArray(message.records)) return;
+        const records = message.records as HandoverOpRecord[];
+        this.queueReplica(() => this.deps.replica!.append(records));
         return;
       }
       case "response": {

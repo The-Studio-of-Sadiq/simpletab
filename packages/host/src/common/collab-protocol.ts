@@ -48,6 +48,8 @@ export interface HostIdentity {
   /** Rank in the succession list; lower wins on equal host numbers. */
   hostRank: number;
   certFingerprint: CertFingerprint;
+  /** For a promoted host: the last seq it shares with the host it replaced (the fork point). */
+  promotedFromSeq?: number;
 }
 
 // ---- device -> host -------------------------------------------------------------------------
@@ -294,4 +296,43 @@ export type ResponseMessage =
 /** Device actors are named `device:<deviceId>` in the op log and changelog. */
 export function deviceActorRef(deviceId: string): string {
   return `device:${deviceId}`;
+}
+
+// ---- step c: tab-director copies, succession and promotion -------------------------------------
+//
+// Tab-director devices keep a full copy so one of them can become host (design section 4). On every
+// connection the host sends `replica_init` (a complete handover file: snapshot, every op record with
+// its changelog entry, links) and then `ops` with each new committed op record, in seq order. The
+// device verifies the chain before replacing its copy.
+
+export interface ReplicaInitMessage {
+  schema: 1;
+  kind: "replica_init";
+  /** Base64 of a `.simpletab` handover zip (design Appendix E). */
+  handover: string;
+  lastSeq: number;
+  headHash: string;
+}
+
+export interface ReplicaOpsMessage {
+  schema: 1;
+  kind: "ops";
+  /** Handover op records (`HandoverOpRecord`), contiguous and in seq order. */
+  records: unknown[];
+}
+
+/**
+ * Sent by a device that knows a host which beats this one (host number, then lower rank). The host
+ * becomes read-only and writes its ops after the fork point to `<slug>.divergent.simpletab`.
+ */
+export interface SupersededMessage {
+  schema: 1;
+  kind: "superseded";
+  winner: HostIdentity;
+}
+
+/** True when `a` beats `b`: a higher host number, or the same number and a lower (better) rank. */
+export function hostBeats(a: HostIdentity, b: HostIdentity): boolean {
+  if (a.hostNumber !== b.hostNumber) return a.hostNumber > b.hostNumber;
+  return a.hostRank < b.hostRank;
 }

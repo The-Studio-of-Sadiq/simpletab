@@ -53,6 +53,7 @@ export class DevicesWidget extends ReactWidget {
   private readonly approve = (joinId: string) => this.store.approveJoin(joinId);
   private readonly reject = (joinId: string) => this.store.rejectJoin(joinId);
   private readonly remove = (deviceId: string) => this.store.removeDevice(deviceId);
+  private readonly setSuccession = (order: string[]) => this.store.setSuccession(order);
 
   protected override render(): React.ReactNode {
     const snapshot = this.store.getSnapshot();
@@ -67,6 +68,7 @@ export class DevicesWidget extends ReactWidget {
         onApprove={this.approve}
         onReject={this.reject}
         onRemove={this.remove}
+        onSetSuccession={this.setSuccession}
       />
     );
   }

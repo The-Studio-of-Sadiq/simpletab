@@ -196,7 +196,9 @@ export type DeviceConnectionState =
   | "connected"
   | "reconnecting"
   /** The host removed this device; its copy was deleted. */
-  | "removed";
+  | "removed"
+  /** This laptop knows a newer host than the one it is paired with (that host was replaced). */
+  | "superseded";
 
 export interface QueuedEditInfo {
   id: string;
@@ -226,6 +228,29 @@ export interface DeviceModeStatus {
   /** Edits the host refused after a reconnect. */
   rejected: RejectedEditInfo[];
   presence: PresenceEntry[];
+  /** Tab directors only: the full copy this laptop keeps for promotion. */
+  copy?: { lastSeq: number; headHash?: string; error?: string };
+  /** Tab directors only: this laptop's rank in the succession list (1 = promote first). */
+  successionRank?: number;
+  /** Better-ranked tab-director laptops, by name, so the person promotes the right one. */
+  betterRanked?: string[];
+}
+
+/** Set when another host beat this one; the tournament is then read-only (section 4, step 7). */
+export interface ReplacedInfo {
+  hostNumber: number;
+  hostRank: number;
+  at: string;
+  /** `<slug>.divergent.simpletab` with this host's ops after the fork point, for manual review. */
+  divergentFile?: string;
+  forkSeq: number;
+}
+
+export interface PromoteParams {
+  /** Folder for the new host's tournament database. */
+  directory: string;
+  /** A `.simpletab` copy saved on another tab director's laptop, when it is newer than this one. */
+  newerCopyPath?: string;
 }
 
 export type JoinState = "idle" | "connecting" | "waiting" | "joined" | "failed";
@@ -262,6 +287,8 @@ export interface HostStatus {
   device?: DeviceModeStatus;
   /** Who is working where (host: its connected devices; device: from the host). */
   presence?: PresenceEntry[];
+  /** This host was replaced by a promoted one and is read-only. */
+  replacedBy?: ReplacedInfo;
 }
 
 export interface CreateDemoResult {
@@ -378,6 +405,12 @@ export interface HostService extends RpcServer<HostServiceClient> {
   dismissRejectedEdits(): Promise<void>;
   /** Tells others what this person is looking at (presence chips). */
   setPresence(info: PresenceInfo): Promise<void>;
+  /** Tab-director device: become the host from this laptop's copy (design section 4). */
+  promoteToHost(params: PromoteParams): Promise<HostStatus>;
+  /** Tab-director device: saves this laptop's copy as a `.simpletab` file; returns its path. */
+  exportDeviceCopy(directory: string): Promise<string>;
+  /** Host: sets the succession list (tab-director device ids, rank 1 first). */
+  setSuccession(order: string[]): Promise<void>;
   /** Devices page (design section 4). Every call needs `devices.manage`. */
   getDevicesStatus(): Promise<DevicesStatus>;
   setDevicesEnabled(enabled: boolean, port?: number): Promise<DevicesStatus>;

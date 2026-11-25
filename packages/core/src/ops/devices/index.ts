@@ -5,6 +5,7 @@ import {
   deviceRemoveOp,
   deviceSetRoleOp,
   hostPromoteOp,
+  successionSetOp,
 } from "./devices";
 
 export * from "./devices";
@@ -14,4 +15,5 @@ export const DEVICE_OPS: readonly OpDef<unknown>[] = [
   eraseOpType(deviceRemoveOp),
   eraseOpType(deviceSetRoleOp),
   eraseOpType(hostPromoteOp),
+  eraseOpType(successionSetOp),
 ];

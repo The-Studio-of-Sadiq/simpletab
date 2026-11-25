@@ -15,6 +15,8 @@ import type { CollabCertificate } from "../collab/tls";
  */
 
 export const PAIRING_FILE_NAME = "pairing.json";
+/** The best host this laptop has seen (number, then rank). Kept across leaving and re-pairing. */
+export const BEST_HOST_FILE_NAME = "best-host.json";
 
 export interface StoredPairing {
   version: 1;
@@ -69,6 +71,35 @@ function isStoredPairing(value: unknown): value is StoredPairing {
 
 export class PairingStore {
   constructor(private readonly dir: string = defaultDeviceDir()) {}
+
+  get directory(): string {
+    return this.dir;
+  }
+
+  loadBestHost(): HostIdentity | undefined {
+    const file = path.join(this.dir, BEST_HOST_FILE_NAME);
+    if (!existsSync(file)) return undefined;
+    try {
+      const parsed = JSON.parse(readFileSync(file, "utf8")) as unknown;
+      if (
+        isRecord(parsed) &&
+        typeof parsed.hostNumber === "number" &&
+        typeof parsed.hostRank === "number" &&
+        typeof parsed.hostId === "string" &&
+        typeof parsed.certFingerprint === "string"
+      ) {
+        return parsed as unknown as HostIdentity;
+      }
+    } catch {
+      // A damaged file is treated as no knowledge.
+    }
+    return undefined;
+  }
+
+  saveBestHost(host: HostIdentity): void {
+    mkdirSync(this.dir, { recursive: true });
+    writeFileSync(path.join(this.dir, BEST_HOST_FILE_NAME), JSON.stringify(host), "utf8");
+  }
 
   private get file(): string {
     return path.join(this.dir, PAIRING_FILE_NAME);

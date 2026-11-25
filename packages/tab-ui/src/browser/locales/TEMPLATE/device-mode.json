@@ -26,5 +26,22 @@
   "deviceMode.leaveConfirm": "",
   "presence.alsoHere": "",
   "presence.viewing": "",
-  "presence.holding": ""
+  "presence.holding": "",
+  "promote.title": "",
+  "promote.copyState": "",
+  "promote.noCopy": "",
+  "promote.rank": "",
+  "promote.betterRanked": "",
+  "promote.folderLabel": "",
+  "promote.choose": "",
+  "promote.newerCopyLabel": "",
+  "promote.newerCopyHint": "",
+  "promote.hostReachable": "",
+  "promote.promote": "",
+  "promote.saveCopy": "",
+  "promote.saved": "",
+  "promote.confirm": "",
+  "promote.replacedTitle": "",
+  "promote.replacedBody": "",
+  "promote.replacedFile": ""
 }

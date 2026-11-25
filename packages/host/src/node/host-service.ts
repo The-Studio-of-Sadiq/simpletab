@@ -37,6 +37,8 @@ import {
   type BallotCollectionMode,
   type CreateDemoResult,
   type DevicesStatus,
+  type PromoteParams,
+  type ReplacedInfo,
   type JoinHostParams,
   type JoinProgress,
   type CreateTournamentParams,
@@ -63,12 +65,15 @@ import { readHostNumber } from "./handover/format";
 import type {
   CollabRequestMethod,
   CollabStateView,
+  HostIdentity,
   IssuedPairingCode,
   PresenceInfo,
 } from "../common/collab-protocol";
 import { HostCollab } from "./devices/host-collab";
 import { DeviceMode } from "./device/device-mode";
 import { ProjectionStream } from "./collab/projection-stream";
+import { ReplicaFeed } from "./collab/replica-feed";
+import { exportDivergent } from "./handover/divergent";
 import { restoreHiddenFields } from "./collab/hidden-fields";
 import { buildProjectedStateFor } from "./state/projected-state";
 import { Archiver } from "./publish/archiver";
@@ -166,6 +171,34 @@ export function ensureTournamentGitignore(dir: string): void {
   );
 }
 
+function readMetaValue(engine: HostEngine, key: string): string | undefined {
+  return (
+    engine.database.prepare("SELECT value FROM meta WHERE key = ?").get(key) as
+      | { value: string }
+      | undefined
+  )?.value;
+}
+
+function readReplacedInfo(engine: HostEngine): ReplacedInfo | undefined {
+  const raw = readMetaValue(engine, "replaced_by");
+  if (raw === undefined) return undefined;
+  try {
+    const parsed = JSON.parse(raw) as Partial<ReplacedInfo>;
+    if (typeof parsed.hostNumber !== "number" || typeof parsed.hostRank !== "number" || typeof parsed.at !== "string") {
+      return undefined;
+    }
+    return {
+      hostNumber: parsed.hostNumber,
+      hostRank: parsed.hostRank,
+      at: parsed.at,
+      forkSeq: typeof parsed.forkSeq === "number" ? parsed.forkSeq : 0,
+      ...(typeof parsed.divergentFile === "string" ? { divergentFile: parsed.divergentFile } : {}),
+    };
+  } catch {
+    return undefined;
+  }
+}
+
 export const HOST_OWNER_ACTOR: Actor = {
   ref: "host-owner",
   type: "human",
@@ -204,6 +237,8 @@ export class HostServiceImpl
   private collab: HostCollab | null = null;
   private deviceMode: DeviceMode | null = null;
   private stream: ProjectionStream | null = null;
+  private replicaFeed: ReplicaFeed | null = null;
+  private replacedBy: ReplacedInfo | undefined;
   private collabListen: { port: number; host?: string } | undefined;
   private githubArchiver: IpcGitHubArchiver | null = null;
   private publishInFlight: Promise<void> | null = null;
@@ -303,6 +338,32 @@ export class HostServiceImpl
   async leaveHost(): Promise<void> {
     this.deviceMode?.leave();
     this.emitStateChanged({ seq: 0, type: "device.left", writes: [] });
+  }
+
+  async promoteToHost(params: PromoteParams): Promise<HostStatus> {
+    const deviceMode = this.deviceMode;
+    if (deviceMode === null || deviceMode.active() === null) {
+      throw new Error("Only a tab director's laptop joined to a host can be promoted.");
+    }
+    const directory = params.directory.trim();
+    if (directory.length === 0) {
+      throw new Error("Choose a folder for the new host's tournament file.");
+    }
+    const result = await deviceMode.promote({
+      directory,
+      ...(params.newerCopyPath !== undefined ? { newerCopyPath: params.newerCopyPath } : {}),
+    });
+    const status = await this.openTournament(result.dbPath);
+    ensureTournamentGitignore(path.dirname(result.dbPath));
+    return status;
+  }
+
+  async exportDeviceCopy(directory: string): Promise<string> {
+    const deviceMode = this.deviceMode;
+    if (deviceMode === null || deviceMode.active() === null) {
+      throw new Error("This laptop is not joined to a host.");
+    }
+    return deviceMode.exportCopy(directory.trim());
   }
 
   async dismissRejectedEdits(): Promise<void> {
@@ -560,6 +621,10 @@ export class HostServiceImpl
     if (remote !== null) {
       return remote.submit(request);
     }
+    const replaced = this.replacedFailure();
+    if (replaced !== null) {
+      return replaced;
+    }
     if (this.engine === null) {
       return {
         ok: false,
@@ -575,6 +640,10 @@ export class HostServiceImpl
     const remote = this.remote();
     if (remote !== null) {
       return remote.undo(seq);
+    }
+    const replaced = this.replacedFailure();
+    if (replaced !== null) {
+      return replaced;
     }
     if (this.engine === null) {
       return {
@@ -880,8 +949,19 @@ export class HostServiceImpl
     return this.requireCollab().status();
   }
 
+  async setSuccession(order: string[]): Promise<void> {
+    this.requireCollab();
+    const result = await this.submit({ type: "succession.set", payload: { order } });
+    if (!result.ok) {
+      throw new Error(result.errors.join(" "));
+    }
+  }
+
   async setDevicesEnabled(enabled: boolean, port?: number): Promise<DevicesStatus> {
     const collab = this.requireCollab();
+    if (enabled && this.replacedBy !== undefined) {
+      throw new Error(this.replacedMessage(this.replacedBy));
+    }
     if (enabled) {
       if (port !== undefined && (!Number.isInteger(port) || port < 1024 || port > 65535)) {
         throw new Error("Choose a port between 1024 and 65535.");
@@ -1051,6 +1131,9 @@ export class HostServiceImpl
         nextEngine.getState()?.devices.find((device) => device.id === deviceId)?.name ?? deviceId,
     });
     this.stream = stream;
+    const replicaFeed = new ReplicaFeed(nextEngine);
+    this.replicaFeed = replicaFeed;
+    this.replacedBy = readReplacedInfo(nextEngine);
 
     this.collab = new HostCollab({
       engine: {
@@ -1072,7 +1155,17 @@ export class HostServiceImpl
       },
       workspaceDir: path.dirname(dbPath),
       hostOwner: HOST_OWNER_ACTOR,
-      getHostIdentity: () => readHostIdentity(nextEngine.database),
+      getHostIdentity: () => {
+        const promoted = readMetaValue(nextEngine, "promoted_from_seq");
+        const promotedFromSeq = promoted === undefined ? NaN : Number(promoted);
+        return {
+          ...readHostIdentity(nextEngine.database),
+          ...(Number.isInteger(promotedFromSeq) ? { promotedFromSeq } : {}),
+        };
+      },
+      onSuperseded: (winner) => {
+        void this.demote(nextEngine, winner);
+      },
       ...(this.clock !== undefined ? { now: this.clock } : {}),
       onChanged: () => {
         this.emitStateChanged({
@@ -1083,6 +1176,7 @@ export class HostServiceImpl
       },
       onSession: (session) => {
         stream.addSession(session);
+        replicaFeed.addSession(session);
       },
     });
 
@@ -1118,6 +1212,7 @@ export class HostServiceImpl
       });
       this.syncScheduler?.handleCommitted(event);
       this.stream?.notifyCommitted(event.type);
+      this.replicaFeed?.notifyCommitted();
       this.publisher?.handleCommitted(event);
       if (isPublishRelevantOp(event.type)) {
         this.scheduleRoundFilesBuild();
@@ -1228,6 +1323,11 @@ export class HostServiceImpl
       this.stream.dispose();
       this.stream = null;
     }
+    if (this.replicaFeed !== null) {
+      this.replicaFeed.dispose();
+      this.replicaFeed = null;
+    }
+    this.replacedBy = undefined;
     if (this.collab !== null) {
       await this.collab.stop().catch((error: unknown) => {
         console.warn("SimpleTab: stopping the device server failed", error);
@@ -1380,7 +1480,13 @@ export class HostServiceImpl
     const remote = this.remote();
     if (remote !== null) {
       const state = remote.getState();
-      const device = remote.status();
+      const succession = this.deviceMode?.successionInfo();
+      const device = {
+        ...remote.status(),
+        ...(succession !== undefined
+          ? { successionRank: succession.rank, betterRanked: succession.betterRanked }
+          : {}),
+      };
       return {
         open: state !== null,
         ...(state !== null ? { slug: state.tournament.slug, headSeq: state.seq } : {}),
@@ -1423,7 +1529,46 @@ export class HostServiceImpl
       ...(this.stream !== null && this.stream.sessionCount() > 0
         ? { presence: this.stream.presence() }
         : {}),
+      ...(this.replacedBy !== undefined ? { replacedBy: { ...this.replacedBy } } : {}),
     };
+  }
+
+  private replacedMessage(info: ReplacedInfo): string {
+    return `This laptop was replaced by host ${info.hostNumber}, so the tournament here is read-only. Changes made here after the handover were saved for review.`;
+  }
+
+  private replacedFailure(): SubmitResult | null {
+    if (this.replacedBy === undefined) return null;
+    return { ok: false, code: "FORBIDDEN", errors: [this.replacedMessage(this.replacedBy)] };
+  }
+
+  /**
+   * Another host beat this one (design section 4, promotion step 7): stop serving devices, become
+   * read-only, and write every op committed after the fork point to `<slug>.divergent.simpletab`.
+   */
+  private async demote(engine: HostEngine, winner: HostIdentity): Promise<void> {
+    if (this.engine !== engine || this.replacedBy !== undefined) return;
+    const forkSeq = Math.min(winner.promotedFromSeq ?? 0, engine.head().seq);
+    const info: ReplacedInfo = {
+      hostNumber: winner.hostNumber,
+      hostRank: winner.hostRank,
+      at: (this.clock?.() ?? new Date()).toISOString(),
+      forkSeq,
+    };
+    if (engine.head().seq > forkSeq && this.openDbPath !== null) {
+      try {
+        const exported = exportDivergent(engine, forkSeq, path.dirname(this.openDbPath) + path.sep);
+        info.divergentFile = exported.filePath;
+      } catch (error) {
+        console.warn("SimpleTab: could not write the divergent ops file", error);
+      }
+    }
+    engine.database
+      .prepare("INSERT INTO meta(key, value) VALUES ('replaced_by', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value")
+      .run(JSON.stringify(info));
+    this.replacedBy = info;
+    await this.collab?.stop().catch(() => undefined);
+    this.emitStateChanged({ seq: engine.head().seq, type: "host.replaced", writes: [] });
   }
 
   /**
@@ -1436,6 +1581,9 @@ export class HostServiceImpl
     params: unknown[],
     actor: Actor,
   ): Promise<unknown> {
+    if (this.replacedBy !== undefined && (method === "submit" || method === "undo" || method === "cancelLong")) {
+      throw new Error(this.replacedMessage(this.replacedBy));
+    }
     switch (method) {
       case "submit": {
         const request = params[0];

@@ -6,6 +6,7 @@ import * as React from "@theia/core/shared/react";
 import { FileDialogService } from "@theia/filesystem/lib/browser/file-dialog";
 import { DeviceBanner } from "../components/device-banner";
 import { JoinHostPanel } from "../components/join-host-panel";
+import { PromotePanel, ReplacedBanner } from "../components/promote-panel";
 import { SetupView } from "../components/setup-view";
 import { onLocaleChange, t } from "../i18n";
 import { TournamentStore } from "../store/tournament-store";
@@ -84,14 +85,41 @@ export class SetupWidget extends ReactWidget {
   private readonly loadJoinProgress = () => this.store.getJoinProgress();
   private readonly leaveHost = () => this.store.leaveHost();
   private readonly dismissRejected = () => this.store.dismissRejectedEdits();
+  private readonly promote = (params: Parameters<TournamentStore["promoteToHost"]>[0]) => this.store.promoteToHost(params);
+  private readonly exportCopy = (directory: string) => this.store.exportDeviceCopy(directory);
+
+  private async pickCopyFile(): Promise<string | undefined> {
+    if (this.fileDialogService === undefined) {
+      return undefined;
+    }
+    const uri = await this.fileDialogService.showOpenDialog({
+      title: t("promote.newerCopyLabel"),
+      canSelectFiles: true,
+      canSelectFolders: false,
+      canSelectMany: false,
+      filters: { SimpleTab: ["simpletab"] },
+    });
+    return uri?.path.fsPath();
+  }
 
   protected override render(): React.ReactNode {
     const snapshot = this.store.getSnapshot();
     const device = snapshot.status.device;
     return (
       <>
+        {snapshot.status.replacedBy !== undefined ? <ReplacedBanner info={snapshot.status.replacedBy} /> : null}
         {device !== undefined ? (
           <DeviceBanner device={device} onLeave={this.leaveHost} onDismissRejected={this.dismissRejected} />
+        ) : null}
+        {device !== undefined ? (
+          <PromotePanel
+            device={device}
+            onPromote={this.promote}
+            onExportCopy={this.exportCopy}
+            {...(this.fileDialogService !== undefined
+              ? { onPickDirectory: () => this.pickDirectory(), onPickFile: () => this.pickCopyFile() }
+              : {})}
+          />
         ) : null}
       <SetupView
         state={snapshot.state}

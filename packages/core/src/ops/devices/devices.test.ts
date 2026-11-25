@@ -181,3 +181,36 @@ describe("ops devices & host promotion", () => {
     expectWrittenVersionBumps(state0, promoted);
   });
 });
+
+describe("succession.set", () => {
+  it("orders tab-director devices and refuses others", async () => {
+    const { applyOp, defaultRegistry, createTournamentState } = await import("@/ops");
+    const { BUILT_IN_ROLES } = await import("@/permissions");
+    const base = createTournamentState(
+      {
+        id: "t", name: "T", slug: "t", format: "bp", active: true, ownerId: "o", admins: { o: true },
+        preferences: {} as never, createdAt: "2026-11-25T00:00:00.000Z", updatedAt: "2026-11-25T00:00:00.000Z",
+      } as never,
+      {},
+    );
+    const state = {
+      ...base,
+      devices: [
+        { id: "a", name: "A", role: BUILT_IN_ROLES.tab_director, publicKey: "k", approvedAt: "2026-11-25T00:00:00.000Z" },
+        { id: "b", name: "B", role: BUILT_IN_ROLES.tab_director, publicKey: "k", approvedAt: "2026-11-25T00:00:00.000Z" },
+        { id: "e", name: "E", role: BUILT_IN_ROLES.equity, publicKey: "k", approvedAt: "2026-11-25T00:00:00.000Z" },
+      ],
+    };
+    const actor = { ref: "host-owner", type: "human" as const, role: BUILT_IN_ROLES.host_owner, isHostOwner: true };
+    const registry = defaultRegistry();
+    const { effectiveSuccession } = await import("./devices");
+    expect(effectiveSuccession(state)).toEqual(["a", "b"]);
+    const ok = applyOp(state, { type: "succession.set", payload: { order: ["b", "a"] } }, actor, registry);
+    expect(ok.ok).toBe(true);
+    if (ok.ok) expect(effectiveSuccession(ok.state)).toEqual(["b", "a"]);
+    const bad = applyOp(state, { type: "succession.set", payload: { order: ["e"] } }, actor, registry);
+    expect(bad.ok).toBe(false);
+    const twice = applyOp(state, { type: "succession.set", payload: { order: ["a", "a"] } }, actor, registry);
+    expect(twice.ok).toBe(false);
+  });
+});

@@ -2,10 +2,11 @@ import { randomUUID } from "node:crypto";
 import { chmodSync, existsSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
-import type { Actor, OpRequest, TournamentState } from "@simpletab/core/ops";
+import { effectiveSuccession, type Actor, type OpRequest, type TournamentState } from "@simpletab/core/ops";
 import { BUILT_IN_ROLES, PRESET_ROLES, type Role } from "@simpletab/core/permissions";
 import {
   COLLAB_DEFAULT_PORT,
+  hostBeats,
   type CertFingerprint,
   type ConnectedDeviceInfo,
   type HostIdentity,
@@ -60,6 +61,30 @@ export interface HostCollabDeps {
   onChanged?: () => void;
   /** Called for every authenticated device connection (step b streams data through it). */
   onSession?: (session: DeviceSession) => void;
+  /** A device reported a host that beats this one (design section 4, promotion step 6). */
+  onSuperseded?: (winner: HostIdentity) => void;
+}
+
+function parseHostIdentity(value: unknown): HostIdentity | undefined {
+  if (value === null || typeof value !== "object") return undefined;
+  const v = value as Record<string, unknown>;
+  if (
+    typeof v.hostNumber !== "number" || !Number.isInteger(v.hostNumber) || v.hostNumber < 1 ||
+    typeof v.hostRank !== "number" || !Number.isInteger(v.hostRank) || v.hostRank < 1 ||
+    typeof v.hostId !== "string" || v.hostId.length === 0 ||
+    typeof v.certFingerprint !== "string"
+  ) {
+    return undefined;
+  }
+  return {
+    hostNumber: v.hostNumber,
+    hostId: v.hostId,
+    hostRank: v.hostRank,
+    certFingerprint: v.certFingerprint,
+    ...(typeof v.promotedFromSeq === "number" && Number.isInteger(v.promotedFromSeq) && v.promotedFromSeq >= 0
+      ? { promotedFromSeq: v.promotedFromSeq }
+      : {}),
+  };
 }
 
 function isCertificateFile(value: unknown): value is CollabCertificate {
@@ -139,6 +164,12 @@ export class HostCollab {
       onPendingJoin: () => this.deps.onChanged?.(),
       onJoinResolved: () => this.deps.onChanged?.(),
       onDeviceConnected: (session) => {
+        session.onMessage((message) => {
+          if (message.kind !== "superseded") return;
+          const winner = parseHostIdentity(message.winner);
+          const own: HostIdentity = { ...this.deps.getHostIdentity(), certFingerprint: certificate.fingerprint };
+          if (winner !== undefined && hostBeats(winner, own)) this.deps.onSuperseded?.(winner);
+        });
         this.deps.onSession?.(session);
         this.deps.onChanged?.();
       },
@@ -236,7 +267,7 @@ export class HostCollab {
         approvedAt: device.approvedAt,
         connected: connected.some((c) => c.deviceId === device.id),
       })),
-      succession: [...(state?.succession ?? [])],
+      succession: state !== null ? effectiveSuccession(state) : [],
       pairableRoles,
     };
   }

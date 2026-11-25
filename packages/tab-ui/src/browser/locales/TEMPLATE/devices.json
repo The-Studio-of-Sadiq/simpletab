@@ -35,5 +35,11 @@
   "devices.disconnected": "",
   "devices.remove": "",
   "devices.removeLabel": "",
-  "devices.removeConfirm": ""
+  "devices.removeConfirm": "",
+  "devices.successionTitle": "",
+  "devices.successionHint": "",
+  "devices.up": "",
+  "devices.down": "",
+  "devices.moveUp": "",
+  "devices.moveDown": ""
 }

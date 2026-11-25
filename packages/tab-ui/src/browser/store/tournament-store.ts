@@ -6,6 +6,7 @@ import type {
   CreateTournamentParams,
   DevicesStatus,
   JoinHostParams,
+  PromoteParams,
   JoinProgress,
   CreateTournamentResult,
   HostCancelLongResult,
@@ -301,6 +302,21 @@ export class TournamentStore {
     } catch {
       // A closed tournament or a lost connection simply shows no presence.
     }
+  }
+
+  async setSuccession(order: string[]): Promise<void> {
+    await this.hostService.setSuccession(order);
+    await this.refresh();
+  }
+
+  async promoteToHost(params: PromoteParams): Promise<HostStatus> {
+    const status = await this.hostService.promoteToHost(params);
+    await this.refresh();
+    return status;
+  }
+
+  async exportDeviceCopy(directory: string): Promise<string> {
+    return this.hostService.exportDeviceCopy(directory);
   }
 
   async getDevicesStatus(): Promise<DevicesStatus> {

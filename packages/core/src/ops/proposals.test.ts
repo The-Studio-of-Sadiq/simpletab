@@ -299,9 +299,9 @@ describe("ops proposals & Appendix A registry metadata", () => {
     );
   });
 
-  it("registers all 25 new ops with exact Appendix A visibility, releaseGate, and lock metadata", () => {
+  it("registers all 26 new ops with exact Appendix A visibility, releaseGate, and lock metadata", () => {
     const registry = defaultRegistry();
-    expect(registry.types()).toHaveLength(75);
+    expect(registry.types()).toHaveLength(76);
 
     expect(registry.get("ballot.enter")?.visibility).toBe("private");
     expect(registry.get("ballot.receive_online")?.visibility).toBe("private");
@@ -328,6 +328,7 @@ describe("ops proposals & Appendix A registry metadata", () => {
       "device.remove",
       "device.set_role",
       "host.promote",
+      "succession.set",
       "proposal.create",
       "proposal.accept",
       "proposal.reject",

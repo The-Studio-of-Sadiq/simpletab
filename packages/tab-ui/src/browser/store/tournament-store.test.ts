@@ -145,6 +145,9 @@ describe("TournamentStore", () => {
       leaveHost: vi.fn(),
       dismissRejectedEdits: vi.fn(),
       setPresence: vi.fn(),
+      promoteToHost: vi.fn(),
+      exportDeviceCopy: vi.fn(),
+      setSuccession: vi.fn(),
     };
 
     const dispatcher = new HostServiceClientDispatcher();
@@ -249,6 +252,9 @@ describe("TournamentStore", () => {
       leaveHost: vi.fn(),
       dismissRejectedEdits: vi.fn(),
       setPresence: vi.fn(),
+      promoteToHost: vi.fn(),
+      exportDeviceCopy: vi.fn(),
+      setSuccession: vi.fn(),
     };
 
     const store = new TournamentStore(hostService, undefined, workspaceOpener);
@@ -327,6 +333,9 @@ describe("TournamentStore", () => {
       leaveHost: vi.fn(),
       dismissRejectedEdits: vi.fn(),
       setPresence: vi.fn(),
+      promoteToHost: vi.fn(),
+      exportDeviceCopy: vi.fn(),
+      setSuccession: vi.fn(),
     };
 
     const dispatcher = new HostServiceClientDispatcher();
