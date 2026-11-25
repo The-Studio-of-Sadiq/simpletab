@@ -8,6 +8,7 @@ import type {
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import { t } from "../i18n";
+import { inputRequired } from "./prompt-helpers";
 import {
   defaultTournamentTimeZone,
   isValidIanaTimeZone,
@@ -168,12 +169,9 @@ async function pickMotionFields(
   ctx: ActionContext,
   defaults: { text: string; infoSlide: string; reference: string },
 ): Promise<{ text: string; infoSlide?: string; reference?: string } | undefined> {
-  const text = trimmedText(
-    await ctx.prompts.input(t("motions.motionTextLabel"), {
-      value: defaults.text,
-    }),
-  );
-  if (text === undefined || text.length === 0) {
+  // A motion needs text: asked again when blank, never a silent cancel.
+  const text = trimmedText(await inputRequired(ctx, t("motions.motionTextLabel"), defaults.text));
+  if (text === undefined) {
     return undefined;
   }
   const infoSlide = trimmedText(

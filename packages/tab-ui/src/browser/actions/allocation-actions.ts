@@ -6,6 +6,8 @@ import type {
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import { t } from "../i18n";
+import { pickRestorableRound } from "./draw-actions";
+import { inputNumber } from "./prompt-helpers";
 import { stateHasPermission } from "../lib/permissions";
 import type { TournamentStoreSnapshot } from "../store/tournament-store";
 import { defineAction, type ActionContext } from "./action";
@@ -82,14 +84,6 @@ async function pickDebate(ctx: ActionContext, state: ProjectedState): Promise<st
       })),
     t("action.allocation.pickDebate"),
   );
-}
-
-function parseInteger(text: string | undefined): number | undefined {
-  if (text === undefined) {
-    return undefined;
-  }
-  const value = Number(text.trim());
-  return Number.isInteger(value) && value >= 1 ? value : undefined;
 }
 
 interface PanelMembers {
@@ -182,11 +176,10 @@ export const autoAllocateAction = defineAction<AutoAllocateArgs, SubmitResult>({
     if (roundId === undefined) {
       return undefined;
     }
-    const panelSize = parseInteger(
-      await ctx.prompts.input(t("action.allocation.pickPanelSize"), {
-        value: "3",
-      }),
-    );
+    const panelSize = await inputNumber(ctx, t("action.allocation.pickPanelSize"), 3, {
+      integer: true,
+      min: 1,
+    });
     return panelSize === undefined ? undefined : { roundId, panelSize };
   },
   run(ctx, { roundId, panelSize }) {
@@ -480,8 +473,11 @@ export const restoreAllocationAction = defineAction<
   page: ALLOCATION_PAGE,
   isEnabled: canAllocate,
   async prompt(ctx) {
-    const text = await ctx.prompts.input(t("action.allocation.pickRestoreSeq"));
-    const seq = parseInteger(text);
+    const state = ctx.store.getState();
+    if (state === null) {
+      return undefined;
+    }
+    const seq = await pickRestorableRound(ctx, state, "allocation.auto", t("action.allocation.pickRound"));
     if (seq === undefined) {
       return undefined;
     }

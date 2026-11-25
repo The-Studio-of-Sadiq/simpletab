@@ -201,7 +201,9 @@ describe("draw actions", () => {
   });
 
   it("cancels every prompt when its first answer is missing", async () => {
-    const { store } = fakeStore(drawState(), SUBMIT);
+    const { store } = fakeStore(drawState(), SUBMIT, {
+      lastRoundOpSeqs: { "draw.generate:r1": 9 },
+    });
     for (const action of DRAW_ACTIONS) {
       expect(
         await action.prompt(testContext(store, scriptedPrompts([undefined]))),
@@ -240,20 +242,22 @@ describe("draw actions", () => {
     ).toBeUndefined();
   });
 
-  it("asks for a change number and confirms before restoring a draw", async () => {
-    const { store } = fakeStore(drawState(), SUBMIT);
-    const prompts = scriptedPrompts(["9", true]);
+  it("picks a round with a draw to restore and confirms before restoring it", async () => {
+    const { store } = fakeStore(drawState(), SUBMIT, { lastRoundOpSeqs: { "draw.generate:r1": 9 } });
+    const prompts = scriptedPrompts([9, true]);
     expect(await restoreDrawAction.prompt(testContext(store, prompts))).toEqual({ seq: 9 });
     expect(prompts.asked).toEqual([
-      t("action.draw.pickRestoreSeq"),
+      t("action.draw.pickRound"),
       t("action.draw.confirmRestoreTitle"),
     ]);
     expect(
-      await restoreDrawAction.prompt(testContext(store, scriptedPrompts(["9", false]))),
+      await restoreDrawAction.prompt(testContext(store, scriptedPrompts([9, false]))),
     ).toBeUndefined();
-    expect(
-      await restoreDrawAction.prompt(testContext(store, scriptedPrompts(["nine", true]))),
-    ).toBeUndefined();
+    // Nothing generated this session: said, not a silent cancel.
+    const none = fakeStore(drawState(), SUBMIT);
+    await expect(
+      restoreDrawAction.prompt(testContext(none.store, scriptedPrompts([]))),
+    ).rejects.toThrow(t("action.draw.nothingToRestore"));
   });
 
   it("prompts for a team, its current place and its target", async () => {

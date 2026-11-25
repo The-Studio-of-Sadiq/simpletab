@@ -58,7 +58,6 @@
   "action.draw.pickSeed": "",
   "action.draw.confirmRegenerateTitle": "",
   "action.draw.confirmRegenerateMessage": "",
-  "action.draw.pickRestoreSeq": "",
   "action.draw.confirmRestoreTitle": "",
   "action.draw.confirmRestoreMessage": "",
   "action.draw.teamInRoom": "",
@@ -87,7 +86,6 @@
   "action.allocation.pickMoveAdjudicator": "",
   "action.allocation.pickAdjudicator": "",
   "action.allocation.pickRole": "",
-  "action.allocation.pickRestoreSeq": "",
   "action.allocation.confirmRestoreTitle": "",
   "action.allocation.confirmRestoreMessage": "",
   "action.checkin.setVenue": "",
@@ -291,5 +289,6 @@
   "action.nav.openStatus": "",
   "action.nav.openDevices": "",
   "action.nav.openAssistant": "",
-  "action.nav.openProposals": ""
+  "action.nav.openProposals": "",
+  "action.draw.nothingToRestore": ""
 }

@@ -106,6 +106,8 @@ export default defineConfig({
             alias: {
               "@": path.resolve(__dirname, "packages/core/src"),
               "@simpletab/core": path.resolve(__dirname, "packages/core/src"),
+              // e2e:commands runs the tab-ui actions in Node against a real host.
+              "@simpletab/host/lib/common": path.resolve(__dirname, "packages/host/src/common"),
             },
           },
         },

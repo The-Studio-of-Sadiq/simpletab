@@ -58,7 +58,6 @@
   "action.draw.pickSeed": "ড্র সিড (পূর্ণসংখ্যা)",
   "action.draw.confirmRegenerateTitle": "এই ড্র আবার তৈরি করবেন?",
   "action.draw.confirmRegenerateMessage": "বর্তমান ড্র প্রতিস্থাপিত হবে।",
-  "action.draw.pickRestoreSeq": "ফিরিয়ে আনার পরিবর্তন নম্বর",
   "action.draw.confirmRestoreTitle": "এই ড্র ফিরিয়ে আনবেন?",
   "action.draw.confirmRestoreMessage": "এর পরের পরিবর্তনগুলোও বাতিল হবে।",
   "action.draw.teamInRoom": "{room}-এ {team}",
@@ -87,7 +86,6 @@
   "action.allocation.pickMoveAdjudicator": "একজন বিচারকও সরাবেন?",
   "action.allocation.pickAdjudicator": "সরাতে একজন বিচারক বেছে নিন",
   "action.allocation.pickRole": "নতুন ভূমিকা বেছে নিন",
-  "action.allocation.pickRestoreSeq": "ফিরিয়ে আনার পরিবর্তন নম্বর",
   "action.allocation.confirmRestoreTitle": "এই বরাদ্দ ফিরিয়ে আনবেন?",
   "action.allocation.confirmRestoreMessage": "এর পরের পরিবর্তনগুলোও বাতিল হবে।",
   "action.checkin.setVenue": "ভেন্যুর চেক-ইন ঠিক করুন",
@@ -291,5 +289,6 @@
   "action.nav.openStatus": "হোস্ট অবস্থা পাতা খুলুন",
   "action.nav.openDevices": "ডিভাইস পাতা খুলুন",
   "action.nav.openAssistant": "সহকারী মোড খুলুন",
-  "action.nav.openProposals": "প্রস্তাব পাতা খুলুন"
+  "action.nav.openProposals": "প্রস্তাব পাতা খুলুন",
+  "action.draw.nothingToRestore": "ফিরিয়ে আনার কিছু নেই: এই সেশনে কোনো ড্র বা বণ্টন তৈরি হয়নি।"
 }

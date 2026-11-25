@@ -29,6 +29,7 @@ import {
   drawStageActionFor,
   generateDrawAction,
   moveTeamAction,
+  randomSeedInt,
   restoreDrawAction,
   swapTeamsAction,
   toggleSwingRoundAction,
@@ -54,10 +55,6 @@ export interface DrawViewProps {
 interface RoomErrorEntry {
   error: InlineOpErrorData;
   retry: (runner: ActionRunner) => Promise<SubmitResult>;
-}
-
-function randomSeedInt(): number {
-  return Math.floor(Math.random() * 1_000_000) + 1;
 }
 
 function stageText(stage: DrawStage): string {

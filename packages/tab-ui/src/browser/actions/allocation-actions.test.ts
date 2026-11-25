@@ -87,7 +87,9 @@ describe("allocation actions", () => {
   });
 
   it("prompts for each action and cancels when the first answer is missing", async () => {
-    const { store } = fakeStore(allocationState(), SUBMIT);
+    const { store } = fakeStore(allocationState(), SUBMIT, {
+      lastRoundOpSeqs: { "allocation.auto:r2": 9 },
+    });
     for (const action of ALLOCATION_ACTIONS) {
       expect(
         await action.prompt(testContext(store, scriptedPrompts([undefined]))),
@@ -151,11 +153,14 @@ describe("allocation actions", () => {
     expect(
       await autofillPreformedAction.prompt(testContext(store, scriptedPrompts(["r2"]))),
     ).toEqual({ roundId: "r2", panels: [PANEL] });
+    const restorable = fakeStore(allocationState(), SUBMIT, {
+      lastRoundOpSeqs: { "allocation.auto:r2": 9 },
+    }).store;
     expect(
-      await restoreAllocationAction.prompt(testContext(store, scriptedPrompts(["9", false]))),
+      await restoreAllocationAction.prompt(testContext(restorable, scriptedPrompts([9, false]))),
     ).toBeUndefined();
     expect(
-      await restoreAllocationAction.prompt(testContext(store, scriptedPrompts(["9", true]))),
+      await restoreAllocationAction.prompt(testContext(restorable, scriptedPrompts([9, true]))),
     ).toEqual({ seq: 9 });
   });
 

@@ -88,6 +88,8 @@ export interface FakeStoreOptions {
   /** Changelog and undo info for the Changelog undo prompt; default empty. */
   changelog?: PublicChainItem[];
   opUndoInfo?: OpUndoInfo[];
+  /** This session's last draw/allocation change per round, keyed `<opType>:<roundId>`. */
+  lastRoundOpSeqs?: Record<string, number>;
   fullCheckResult?: HostIntegrityCheckResult;
   pullNowResult?: SyncStatus;
   createDemoResult?: (directory: string) => CreateDemoResult;
@@ -298,6 +300,8 @@ export function fakeStore(
     },
     getChangelog: async (): Promise<PublicChainItem[]> => options.changelog ?? [],
     getOpUndoInfo: async (): Promise<OpUndoInfo[]> => options.opUndoInfo ?? [],
+    getLastRoundOpSeq: (opType: string, roundId: string): number | undefined =>
+      options.lastRoundOpSeqs?.[`${opType}:${roundId}`],
     receiveQrBallot: async (codes: string[]): Promise<QrReceiveResult> => {
       calls.qrCodes.push(codes);
       return options.receiveQrBallot?.(codes) ?? OK_QR;

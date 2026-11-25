@@ -58,7 +58,6 @@
   "action.draw.pickSeed": "Draw seed (a whole number)",
   "action.draw.confirmRegenerateTitle": "Regenerate this draw?",
   "action.draw.confirmRegenerateMessage": "The current draw will be replaced.",
-  "action.draw.pickRestoreSeq": "Change number to restore",
   "action.draw.confirmRestoreTitle": "Restore this draw?",
   "action.draw.confirmRestoreMessage": "Later changes will also be undone.",
   "action.draw.teamInRoom": "{team} in {room}",
@@ -87,7 +86,6 @@
   "action.allocation.pickMoveAdjudicator": "Move an adjudicator as well?",
   "action.allocation.pickAdjudicator": "Choose an adjudicator to move",
   "action.allocation.pickRole": "Choose the new role",
-  "action.allocation.pickRestoreSeq": "Change number to restore",
   "action.allocation.confirmRestoreTitle": "Restore this allocation?",
   "action.allocation.confirmRestoreMessage": "Later changes will also be undone.",
   "action.checkin.setVenue": "Set a venue's check-in",
@@ -291,5 +289,6 @@
   "action.nav.openStatus": "Open the Host Status page",
   "action.nav.openDevices": "Open the Devices page",
   "action.nav.openAssistant": "Open Assistant mode",
-  "action.nav.openProposals": "Open the Proposals page"
+  "action.nav.openProposals": "Open the Proposals page",
+  "action.draw.nothingToRestore": "Nothing to restore: no draw or allocation was generated in this session."
 }

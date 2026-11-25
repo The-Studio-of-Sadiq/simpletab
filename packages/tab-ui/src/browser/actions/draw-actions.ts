@@ -17,7 +17,8 @@ import type {
 } from "@simpletab/host/lib/common/host-protocol";
 import { t } from "../i18n";
 import { stateHasPermission } from "../lib/permissions";
-import type { TournamentStoreSnapshot } from "../store/tournament-store";
+import type { TournamentStoreSnapshot, TrackedRoundOpType } from "../store/tournament-store";
+import { inputNumber } from "./prompt-helpers";
 import {
   defineAction,
   type ActionContext,
@@ -107,12 +108,30 @@ async function pickOnOff(ctx: ActionContext): Promise<boolean | undefined> {
   );
 }
 
-function parseInteger(text: string | undefined): number | undefined {
-  if (text === undefined) {
-    return undefined;
+/** A fresh draw seed, as the page offers one. */
+export function randomSeedInt(): number {
+  return Math.floor(Math.random() * 1_000_000) + 1;
+}
+
+/**
+ * Picks a round whose last draw or allocation this session can restore, as the page's Restore
+ * button does for the selected round; returns the change to undo.
+ */
+export async function pickRestorableRound(
+  ctx: ActionContext,
+  state: ProjectedState,
+  opType: TrackedRoundOpType,
+  placeholder: string,
+): Promise<number | undefined> {
+  const choices = activeRounds(state).flatMap((round) => {
+    const seq = ctx.store.getLastRoundOpSeq(opType, round.id);
+    return seq === undefined ? [] : [{ label: round.name, description: `#${seq}`, value: seq }];
+  });
+  if (choices.length === 0) {
+    // Said, not a silent cancel: nothing was generated in this session yet.
+    throw new Error(t("action.draw.nothingToRestore"));
   }
-  const value = Number(text.trim());
-  return Number.isInteger(value) ? value : undefined;
+  return ctx.prompts.pick(choices, placeholder);
 }
 
 function placedTeamIds(state: ProjectedState, debateId: string): Set<string> {
@@ -153,9 +172,7 @@ export const generateDrawAction = defineAction<GenerateDrawArgs, SubmitResult>({
     if (roundId === undefined) {
       return undefined;
     }
-    const seed = parseInteger(
-      await ctx.prompts.input(t("action.draw.pickSeed")),
-    );
+    const seed = await inputNumber(ctx, t("action.draw.pickSeed"), randomSeedInt(), { integer: true });
     if (seed === undefined) {
       return undefined;
     }
@@ -194,9 +211,11 @@ export const restoreDrawAction = defineAction<RestoreDrawArgs, SubmitResult>({
   page: DRAW_PAGE,
   isEnabled: canDraw,
   async prompt(ctx) {
-    const seq = parseInteger(
-      await ctx.prompts.input(t("action.draw.pickRestoreSeq")),
-    );
+    const state = ctx.store.getState();
+    if (state === null) {
+      return undefined;
+    }
+    const seq = await pickRestorableRound(ctx, state, "draw.generate", t("action.draw.pickRound"));
     if (seq === undefined) {
       return undefined;
     }
