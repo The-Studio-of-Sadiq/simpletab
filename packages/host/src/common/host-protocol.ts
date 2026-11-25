@@ -12,6 +12,7 @@ import type {
   OpRequest,
   OpRound,
   OpTournament,
+  ProposalRecord,
   RecordKey,
 } from "@simpletab/core/ops";
 import type { Permission } from "@simpletab/core/permissions";
@@ -340,6 +341,8 @@ export interface ProjectedState extends ProjectableState {
   lateSubmissions?: LateSubmissionRecord[];
   ballotIntake?: BallotIntakeRecord[];
   versions: Record<RecordKey, number>;
+  /** AI proposals the role may see, with each proposed change projected for the role (M6). */
+  proposals?: ProposalRecord[];
 }
 
 export interface CreateTournamentResult {

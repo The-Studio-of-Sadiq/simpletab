@@ -466,6 +466,15 @@ Credentials are never part of the state.
 
 **AI actor.** The CLI pairs as a device with the AI role. An op it submits on draw, allocation, results, break or release becomes a `proposal`. A person with the needed permission accepts it, and the change is committed with `actorType: "ai"`, or rejects it. The UI warns whenever the integrated terminal is opened on the host itself.
 
+**Milestone steps (M6).** M6 is built in steps: (a) AI proposals on the host and the Proposals page; (b) the `simpletab` CLI in `packages/cli`; (c) the integrated terminal (`@theia/terminal`) with the host warning; (d) `npm run e2e:cli` and `docs/cli-and-ai.md`.
+
+**As built (M6 step a).**
+- The AI role is pairable from the Devices page. A device whose role is proposals-only acts with `actorType: "ai"`.
+- `packages/host/src/node/cli-server.ts` turns every change such a device submits into `proposal.create`. Only ops in the categories `draw`, `allocation`, `ballot` (results), `break` and `releases` can be proposed; anything else, and any `proposal.accept` / `proposal.reject`, is refused with a reason. A `proposal.create` the AI builds itself is checked by its inner op the same way. Undo is refused for the AI.
+- Each role's view now carries `proposals`, with the proposed op projected for that role by `projectOp` (the changelog rule); a proposal whose op the role cannot see is left out, and Display sees none.
+- Deviation: the `proposal.accept` entry is recorded as the person who accepted it (`actorType: "human"`), not as the AI. Its payload keeps `proposedBy` with `actorType: "ai"`, so the changelog shows both who suggested and who approved the change.
+- The Proposals page lists pending proposals (oldest first) with Accept, Reject and an optional reason, then decided ones. The nav button shows the pending count.
+
 ### 7. Host ↔ shared service
 
 The shared service is an inbox and a validator. It never decides outcomes.

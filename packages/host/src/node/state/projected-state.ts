@@ -1,6 +1,13 @@
-import type { OpBallotSubmission, OpRound, OpTournament, RecordKey, TournamentState } from "@simpletab/core/ops";
+import type {
+  OpBallotSubmission,
+  OpRound,
+  OpTournament,
+  ProposalRecord,
+  RecordKey,
+  TournamentState,
+} from "@simpletab/core/ops";
 import { BUILT_IN_ROLES, hasPermission, type Role } from "@simpletab/core/permissions";
-import { project } from "@simpletab/core/projection";
+import { project, projectOp } from "@simpletab/core/projection";
 import type { ProjectedState } from "../../common/host-protocol";
 
 /**
@@ -30,11 +37,28 @@ export function buildProjectedStateFor(raw: TournamentState, role: Role, seq: nu
     ...(canEnterLate ? { lateSubmissions: structuredClone(raw.lateSubmissions ?? []) } : {}),
     ...(canViewIntake ? { ballotIntake: structuredClone(raw.ballotIntake ?? []) } : {}),
     versions: { ...raw.versions },
+    proposals: visibleProposals(raw.proposals, role),
   };
   if (role.id !== BUILT_IN_ROLES.host_owner.id) {
     state.versions = visibleVersions(state, raw.versions);
   }
   return state;
+}
+
+/**
+ * Proposals as a role may see them (design section 6): staff roles see each proposal with the
+ * proposed change projected for that role, the same rule the changelog uses. A proposal whose
+ * change the role cannot see at all is left out; the Display role sees none.
+ */
+function visibleProposals(proposals: readonly ProposalRecord[], role: Role): ProposalRecord[] {
+  if (role.permissions.length === 0 && role.proposalsOnly !== true) return [];
+  const out: ProposalRecord[] = [];
+  for (const proposal of proposals) {
+    const op = projectOp(proposal.op, role);
+    if (op === null) continue;
+    out.push({ ...structuredClone(proposal), op });
+  }
+  return out;
 }
 
 function visibleVersions(

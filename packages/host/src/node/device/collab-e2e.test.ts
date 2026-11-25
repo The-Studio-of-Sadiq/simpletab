@@ -97,6 +97,67 @@ describe("live collaboration end to end", () => {
     return { service, store, events };
   }
 
+  it("turns an AI device's changes into proposals that a person accepts or rejects (M6)", async () => {
+    const { host, address } = await makeHost();
+    const ai = await makeDevice(host, address, "ai", "AI agent");
+    const equity = await makeDevice(host, address, "equity", "Equity laptop");
+
+    // The AI reads like Adjudication core without feedback.
+    expect((await ai.service.getState())?.feedback).toEqual([]);
+
+    // A release change becomes a pending proposal, recorded as the AI; nothing is released yet.
+    const gate = { type: "release.set_gate", payload: { gate: "tab_team", released: true } };
+    const before = (await host.getState())?.tournament;
+    const proposed = await ai.service.submit(gate);
+    expect(proposed).toMatchObject({ ok: true });
+    const proposalId = (proposed.ok ? (proposed.committedPayload as { id: string }).id : "") as string;
+    expect(proposalId).toMatch(/^proposal-/);
+    expect((await host.getState())?.tournament).toEqual(before);
+    const entry = (await host.getChangelog()).at(-1)!.entry;
+    expect(entry).toMatchObject({ opType: "proposal.create", actorType: "ai" });
+    expect(entry.actorRef).toMatch(/^device:dev-/);
+    await vi.waitFor(async () => {
+      expect((await ai.service.getState())?.proposals?.map((p) => [p.id, p.status])).toEqual([[proposalId, "pending"]]);
+    });
+    // Equity cannot see release changes in the changelog either, so it does not see this proposal.
+    expect((await equity.service.getState())?.proposals).toEqual([]);
+
+    // Other areas are refused in words; the AI cannot accept, reject or undo.
+    const team = (await ai.service.getState())!.teams[0]!;
+    expect(await ai.service.submit({ type: "team.update", payload: { team } })).toMatchObject({
+      ok: false,
+      code: "FORBIDDEN",
+      errors: [expect.stringMatching(/only propose changes/)],
+    });
+    expect(await ai.service.submit({ type: "proposal.accept", payload: { proposalId } })).toMatchObject({
+      ok: false,
+      code: "FORBIDDEN",
+    });
+    expect(await ai.service.undo(1)).toMatchObject({ ok: false, code: "FORBIDDEN", errors: ["Only a person can undo changes."] });
+
+    // A person accepts it: the change is applied and the proposal is marked accepted.
+    expect(await host.submit({ type: "proposal.accept", payload: { proposalId } })).toMatchObject({ ok: true });
+    const accepted = (await host.getState())?.proposals?.find((p) => p.id === proposalId);
+    expect(accepted).toMatchObject({ status: "accepted" });
+    const acceptEntry = (await host.getChangelog()).at(-1)!.entry;
+    expect(acceptEntry).toMatchObject({ opType: "proposal.accept", actorType: "human" });
+
+    // A second proposal is rejected with a reason, and nothing changes.
+    const second = await ai.service.submit({ type: "release.set_gate", payload: { gate: "tab_team", released: false } });
+    const secondId = (second.ok ? (second.committedPayload as { id: string }).id : "") as string;
+    const beforeReject = (await host.getState())?.tournament;
+    expect(await host.submit({ type: "proposal.reject", payload: { proposalId: secondId, reason: "Not yet" } })).toMatchObject({
+      ok: true,
+    });
+    expect((await host.getState())?.tournament).toEqual(beforeReject);
+    await vi.waitFor(async () => {
+      expect((await ai.service.getState())?.proposals?.find((p) => p.id === secondId)).toMatchObject({
+        status: "rejected",
+        reason: "Not yet",
+      });
+    });
+  });
+
   it("streams role views, carries edits between devices, and keeps feedback from Equity", async () => {
     const { host, address } = await makeHost();
     const director = await makeDevice(host, address, "tab_director", "Director laptop");

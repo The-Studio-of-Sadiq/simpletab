@@ -380,7 +380,8 @@ export class ProjectionStream {
       const params = msg.params;
       const actor: Actor = {
         ref: deviceActorRef(record.session.deviceId),
-        type: "human",
+        // A proposals-only device (the CLI paired with the AI role) acts as the AI (section 6).
+        type: record.session.role.proposalsOnly === true ? "ai" : "human",
         role: record.session.role,
         isHostOwner: false,
       };

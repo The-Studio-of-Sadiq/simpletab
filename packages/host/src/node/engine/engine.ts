@@ -258,7 +258,8 @@ function mergeDisjointWrites(
 /** Serial SQLite wrapper around core's pure tournament operation engine. */
 export class HostEngine {
   readonly database: SqliteDatabase;
-  private readonly registry: OpRegistryLookup;
+  /** The op definitions this engine applies (read-only for callers). */
+  readonly registry: OpRegistryLookup;
   private readonly usingDefaultRegistry: boolean;
   private readonly clock: () => Date;
   private readonly snapshotEvery: number;

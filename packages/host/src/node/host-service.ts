@@ -76,6 +76,7 @@ import { ProjectionStream } from "./collab/projection-stream";
 import { ReplicaFeed } from "./collab/replica-feed";
 import { exportDivergent } from "./handover/divergent";
 import { restoreHiddenFields } from "./collab/hidden-fields";
+import { isProposalsOnly, wrapAsProposal } from "./cli-server";
 import { verifyQrBallot } from "./collab/qr-intake";
 import { buildProjectedStateFor } from "./state/projected-state";
 import { Archiver } from "./publish/archiver";
@@ -1667,9 +1668,18 @@ export class HostServiceImpl
         const { forced: _forced, ...op } = request as OpRequest & { forced?: boolean };
         const current = engine.getState();
         const safe = current === null ? op : restoreHiddenFields(op, current, actor.role);
+        if (isProposalsOnly(actor.role)) {
+          // The AI never changes the tournament itself: its change becomes a proposal (section 6).
+          const wrapped = wrapAsProposal(safe, engine.registry);
+          if (!wrapped.ok) return { ok: false, code: "FORBIDDEN", errors: wrapped.errors } satisfies SubmitResult;
+          return this.mapApplyResult(await engine.submit(wrapped.request, actor));
+        }
         return this.mapApplyResult(await engine.submit(safe, actor));
       }
       case "undo": {
+        if (isProposalsOnly(actor.role)) {
+          return { ok: false, code: "FORBIDDEN", errors: ["Only a person can undo changes."] } satisfies SubmitResult;
+        }
         const seq = params[0];
         if (typeof seq !== "number" || !Number.isInteger(seq) || seq < 1) {
           throw new Error("Undo needs the number of the change to undo.");

@@ -33,6 +33,7 @@ export const SIMPLETAB_OPEN_PROJECTOR_CONTROL_COMMAND =
 export const SIMPLETAB_OPEN_STATUS_COMMAND = "simpletab.status.open";
 export const SIMPLETAB_OPEN_DEVICES_COMMAND = "simpletab.devices.open";
 export const SIMPLETAB_OPEN_ASSISTANT_COMMAND = "simpletab.assistant.open";
+export const SIMPLETAB_OPEN_PROPOSALS_COMMAND = "simpletab.proposals.open";
 
 @injectable()
 export class SimpleTabNavWidget extends ReactWidget {
@@ -87,6 +88,13 @@ export class SimpleTabNavWidget extends ReactWidget {
       state === null || stateHasPermission(state, "devices.manage");
     const canUseAssistant =
       state !== null && stateHasPermission(state, "results.enter");
+    const canViewProposals =
+      state === null ||
+      (state.permissions?.length ?? 0) > 0 ||
+      state.roleId === "ai";
+    const pendingProposalCount =
+      state?.proposals?.filter((proposal) => proposal.status === "pending")
+        .length ?? 0;
     const locale = getLocale();
     const summaryText =
       status.open && status.slug
@@ -257,6 +265,19 @@ export class SimpleTabNavWidget extends ReactWidget {
               }}
             >
               {t("nav.openDevices")}
+            </button>
+          ) : null}
+          {canViewProposals ? (
+            <button
+              type="button"
+              className="theia-button secondary simpletab-nav-btn"
+              onClick={() => {
+                void this.commandService.executeCommand(
+                  SIMPLETAB_OPEN_PROPOSALS_COMMAND,
+                );
+              }}
+            >
+              {t("nav.openProposals", { count: pendingProposalCount })}
             </button>
           ) : null}
           {canManageLinks ? (

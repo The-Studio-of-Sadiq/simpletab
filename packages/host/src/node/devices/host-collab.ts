@@ -32,13 +32,14 @@ export const COLLAB_DIR_NAME = "collab";
 const CERT_FILE = "host-certificate.json";
 const REMOVED_META_KEY = "collab_removed_devices";
 
-/** Roles a device can be paired to (the host owner stays on the host; AI pairs in M6). */
+/** Roles a device can be paired to (the host owner stays on the host; the CLI pairs as AI). */
 export const PAIRABLE_ROLES: readonly Role[] = [
   BUILT_IN_ROLES.tab_director,
   BUILT_IN_ROLES.adjudication_core,
   BUILT_IN_ROLES.equity,
   BUILT_IN_ROLES.tab_assistant,
   BUILT_IN_ROLES.display,
+  BUILT_IN_ROLES.ai,
   PRESET_ROLES.ballot_desk,
   PRESET_ROLES.check_in_desk,
   PRESET_ROLES.feedback_desk,

@@ -42,6 +42,7 @@ import {
   ParticipantsViewContribution,
   ProjectorControlViewContribution,
   ReleasesViewContribution,
+  ProposalsViewContribution,
   DevicesViewContribution,
   AssistantViewContribution,
   ResultsViewContribution,
@@ -74,6 +75,7 @@ import { MotionsWidget } from "./views/motions-widget";
 import { ParticipantsWidget } from "./views/participants-widget";
 import { ProjectorControlWidget } from "./views/projector-widget";
 import { ReleasesWidget } from "./views/releases-widget";
+import { ProposalsWidget } from "./views/proposals-widget";
 import { DevicesWidget } from "./views/devices-widget";
 import { AssistantWidget } from "./views/assistant-widget";
 import { ResultsWidget } from "./views/results-widget";
@@ -267,6 +269,14 @@ export default new ContainerModule((bind) => {
     }))
     .inSingletonScope();
 
+  bind(ProposalsWidget).toSelf().inSingletonScope();
+  bind(WidgetFactory)
+    .toDynamicValue((ctx) => ({
+      id: ProposalsWidget.ID,
+      createWidget: () => ctx.container.get(ProposalsWidget),
+    }))
+    .inSingletonScope();
+
   bind(ReleasesWidget).toSelf().inSingletonScope();
   bind(WidgetFactory)
     .toDynamicValue((ctx) => ({
@@ -327,6 +337,7 @@ export default new ContainerModule((bind) => {
   bindViewContribution(bind, StandingsViewContribution);
   bindViewContribution(bind, BreakViewContribution);
   bindViewContribution(bind, ReleasesViewContribution);
+  bindViewContribution(bind, ProposalsViewContribution);
   bindViewContribution(bind, DevicesViewContribution);
   bindViewContribution(bind, AssistantViewContribution);
   bindViewContribution(bind, ChangelogViewContribution);
