@@ -72,33 +72,16 @@ function isHiddenViewContribution(contrib: object): boolean {
 }
 
 /**
- * Matches @theia/terminal's TerminalFrontendContribution (pulled in transitively
- * by @theia/plugin-ext) without importing @theia/terminal in tab-ui.
- * Integrated terminal UI is deferred to M6.
- */
-function isTerminalFrontendContribution(contrib: object): boolean {
-  if (!isRecord(contrib)) {
-    return false;
-  }
-  return (
-    typeof contrib.openTerminal === "function" &&
-    typeof contrib.toggleTerminal === "function" &&
-    typeof contrib.getDefaultShell === "function"
-  );
-}
-
-/**
- * Returns true if the contribution should be filtered out in M2.
- * Always keeps SimpleTab and Source Control (SCM / Git) contributions active.
+ * Returns true if the contribution should be filtered out.
+ * Always keeps SimpleTab, Source Control (SCM / Git) and, since M6, the
+ * integrated terminal active (the host warning is in terminal-host-warning.ts).
  */
 export function shouldFilterShellContribution(contrib: object): boolean {
-  return (
-    isHiddenViewContribution(contrib) || isTerminalFrontendContribution(contrib)
-  );
+  return isHiddenViewContribution(contrib);
 }
 
 export function isHiddenShellWidgetId(widgetId: string): boolean {
-  return HIDDEN_VIEW_IDS.has(widgetId) || widgetId.startsWith("terminal-");
+  return HIDDEN_VIEW_IDS.has(widgetId);
 }
 
 @injectable()

@@ -482,6 +482,11 @@ Credentials are never part of the state.
 - Expected versions sent with an AI change are kept inside the proposal and checked when a person accepts it, so a proposal made against a record that has changed since is refused (`VERSION_CONFLICT`) rather than applied.
 - `packages/cli/README.md` is the guide for AI agents.
 
+**As built (M6 step c).**
+- `@theia/terminal` 1.77.0 is now a direct dependency of the app and tab-ui. It was already bundled through `@theia/plugin-ext`; the shell filter that hid it since M2 no longer does.
+- `packages/tab-ui/src/browser/terminal-host-warning.ts` shows a warning notification each time a terminal is opened on the host: programs run there, AI agents included, work on the tournament files directly and skip proposals, roles and the changelog, so AI agents and the CLI belong on a staff laptop. It is a notification, not a modal, so it does not block the terminal.
+- "The host" means any laptop that is not a staff device of another host, even before a tournament is opened, because it keeps tournament files and can open one at any time. A staff device gets no warning: its terminal cannot reach the host's files.
+
 ### 7. Host ↔ shared service
 
 The shared service is an inbox and a validator. It never decides outcomes.

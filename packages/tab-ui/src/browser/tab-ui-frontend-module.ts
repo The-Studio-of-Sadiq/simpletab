@@ -82,6 +82,7 @@ import { ResultsWidget } from "./views/results-widget";
 import { SetupWidget } from "./views/setup-widget";
 import { SimpleTabNavWidget } from "./views/simpletab-nav-widget";
 import { StandingsWidget } from "./views/standings-widget";
+import { TerminalHostWarningContribution } from "./terminal-host-warning";
 
 export default new ContainerModule((bind) => {
   bind(HostServiceClientDispatcher).toSelf().inSingletonScope();
@@ -346,4 +347,7 @@ export default new ContainerModule((bind) => {
   bindViewContribution(bind, ProjectorControlViewContribution);
   bindViewContribution(bind, SimpleTabContribution);
   bind(FrontendApplicationContribution).toService(SimpleTabContribution);
+
+  bind(TerminalHostWarningContribution).toSelf().inSingletonScope();
+  bind(FrontendApplicationContribution).toService(TerminalHostWarningContribution);
 });

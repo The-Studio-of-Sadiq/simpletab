@@ -5,7 +5,7 @@ import {
 } from "./shell-view-filter";
 
 describe("SimpleTabShellFilterContribution", () => {
-  it("filters out Plugins (M9), Navigator (M7), Terminal (M6), and transitive IDE views", () => {
+  it("filters out Plugins (M9), Navigator (M7), and transitive IDE views", () => {
     expect(
       shouldFilterShellContribution({
         viewId: "plugins",
@@ -41,17 +41,17 @@ describe("SimpleTabShellFilterContribution", () => {
         effectiveWidgetId: "test-view-container",
       }),
     ).toBe(true);
+  });
 
+  it("keeps SimpleTab, Source Control (SCM / Git) and the terminal (M6) active", () => {
     expect(
       shouldFilterShellContribution({
         openTerminal: () => undefined,
         toggleTerminal: () => undefined,
         getDefaultShell: () => Promise.resolve(""),
       }),
-    ).toBe(true);
-  });
+    ).toBe(false);
 
-  it("keeps SimpleTab and Source Control (SCM / Git) contributions active", () => {
     expect(
       shouldFilterShellContribution({
         viewId: "simpletab-view-container",
@@ -115,12 +115,8 @@ describe("SimpleTabShellFilterContribution", () => {
       },
     } as never);
 
-    expect(closed).toEqual([
-      "plugins",
-      "explorer-view-container",
-      "terminal-0",
-    ]);
+    expect(closed).toEqual(["plugins", "explorer-view-container"]);
     expect(isHiddenShellWidgetId("scm-view-container")).toBe(false);
-    expect(isHiddenShellWidgetId("terminal-1")).toBe(true);
+    expect(isHiddenShellWidgetId("terminal-1")).toBe(false);
   });
 });
