@@ -1,9 +1,11 @@
-import { DisposableCollection } from "@theia/core/lib/common";
+import { CommandService, DisposableCollection } from "@theia/core/lib/common";
 import { Message } from "@theia/core/lib/browser";
 import { ReactWidget } from "@theia/core/lib/browser/widgets/react-widget";
 import { inject, injectable, optional, postConstruct } from "@theia/core/shared/inversify";
 import * as React from "@theia/core/shared/react";
 import { FileDialogService } from "@theia/filesystem/lib/browser/file-dialog";
+import type { ActionRunner } from "../actions/action";
+import { commandActionRunner } from "../actions/action-runner";
 import { DeviceBanner } from "../components/device-banner";
 import { JoinHostPanel } from "../components/join-host-panel";
 import { PromotePanel, ReplacedBanner } from "../components/promote-panel";
@@ -17,13 +19,17 @@ export class SetupWidget extends ReactWidget {
 
   private readonly disposables = new DisposableCollection();
 
+  private readonly run: ActionRunner;
+
   constructor(
     @inject(TournamentStore) private readonly store: TournamentStore,
+    @inject(CommandService) commands: CommandService,
     @inject(FileDialogService)
     @optional()
     private readonly fileDialogService?: FileDialogService,
   ) {
     super();
+    this.run = commandActionRunner(commands);
     this.id = SetupWidget.ID;
     this.title.label = t("setup.widgetLabel");
     this.title.caption = t("setup.widgetLabel");
@@ -85,9 +91,6 @@ export class SetupWidget extends ReactWidget {
   private readonly loadJoinProgress = () => this.store.getJoinProgress();
   private readonly leaveHost = () => this.store.leaveHost();
   private readonly dismissRejected = () => this.store.dismissRejectedEdits();
-  private readonly promote = (params: Parameters<TournamentStore["promoteToHost"]>[0]) => this.store.promoteToHost(params);
-  private readonly exportCopy = (directory: string) => this.store.exportDeviceCopy(directory);
-
   private async pickCopyFile(): Promise<string | undefined> {
     if (this.fileDialogService === undefined) {
       return undefined;
@@ -114,8 +117,7 @@ export class SetupWidget extends ReactWidget {
         {device !== undefined ? (
           <PromotePanel
             device={device}
-            onPromote={this.promote}
-            onExportCopy={this.exportCopy}
+            run={this.run}
             {...(this.fileDialogService !== undefined
               ? { onPickDirectory: () => this.pickDirectory(), onPickFile: () => this.pickCopyFile() }
               : {})}

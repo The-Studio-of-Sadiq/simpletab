@@ -24,6 +24,7 @@ import bnStandings from "../locales/bn/standings.json";
 import bnStatus from "../locales/bn/status.json";
 import bnTerminal from "../locales/bn/terminal.json";
 import bnDeveloperMode from "../locales/bn/developer-mode.json";
+import bnActions from "../locales/bn/actions.json";
 import enAllocation from "../locales/en/allocation.json";
 import enBreak from "../locales/en/break.json";
 import enChangelog from "../locales/en/changelog.json";
@@ -48,6 +49,7 @@ import enStandings from "../locales/en/standings.json";
 import enStatus from "../locales/en/status.json";
 import enTerminal from "../locales/en/terminal.json";
 import enDeveloperMode from "../locales/en/developer-mode.json";
+import enActions from "../locales/en/actions.json";
 
 export type SupportedLocale = "en" | "bn";
 
@@ -91,6 +93,7 @@ const DEFAULT_CATALOGS: Record<SupportedLocale, MessageCatalog> = {
     ...enProjector,
     ...enTerminal,
     ...enDeveloperMode,
+    ...enActions,
   },
   bn: {
     ...bnCommon,
@@ -117,6 +120,7 @@ const DEFAULT_CATALOGS: Record<SupportedLocale, MessageCatalog> = {
     ...bnProjector,
     ...bnTerminal,
     ...bnDeveloperMode,
+    ...bnActions,
   },
 };
 

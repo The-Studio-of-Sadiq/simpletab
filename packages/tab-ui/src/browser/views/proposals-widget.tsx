@@ -1,13 +1,11 @@
-import { DisposableCollection } from "@theia/core/lib/common";
+import { CommandService, DisposableCollection } from "@theia/core/lib/common";
 import { Message } from "@theia/core/lib/browser";
 import { ReactWidget } from "@theia/core/lib/browser/widgets/react-widget";
 import { inject, injectable, postConstruct } from "@theia/core/shared/inversify";
 import * as React from "@theia/core/shared/react";
-import type { OpRequest } from "@simpletab/core/ops";
-import {
-  ProposalsView,
-  type ProposalDecision,
-} from "../components/proposals-view";
+import type { ActionRunner } from "../actions/action";
+import { commandActionRunner } from "../actions/action-runner";
+import { ProposalsView } from "../components/proposals-view";
 import { onLocaleChange, t } from "../i18n";
 import { TournamentStore } from "../store/tournament-store";
 
@@ -17,8 +15,14 @@ export class ProposalsWidget extends ReactWidget {
 
   private readonly disposables = new DisposableCollection();
 
-  constructor(@inject(TournamentStore) private readonly store: TournamentStore) {
+  private readonly run: ActionRunner;
+
+  constructor(
+    @inject(TournamentStore) private readonly store: TournamentStore,
+    @inject(CommandService) commands: CommandService,
+  ) {
     super();
+    this.run = commandActionRunner(commands);
     this.id = ProposalsWidget.ID;
     this.title.label = t("proposals.widgetLabel");
     this.title.caption = t("proposals.widgetLabel");
@@ -49,25 +53,8 @@ export class ProposalsWidget extends ReactWidget {
     this.update();
   }
 
-  private readonly decide = (decision: ProposalDecision) => {
-    const request: OpRequest =
-      decision.kind === "accept"
-        ? {
-            type: "proposal.accept",
-            payload: { proposalId: decision.proposalId },
-          }
-        : {
-            type: "proposal.reject",
-            payload:
-              decision.reason !== undefined
-                ? { proposalId: decision.proposalId, reason: decision.reason }
-                : { proposalId: decision.proposalId },
-          };
-    return this.store.submit(request);
-  };
-
   protected override render(): React.ReactNode {
     const { state } = this.store.getSnapshot();
-    return <ProposalsView state={state} onDecide={this.decide} />;
+    return <ProposalsView state={state} run={this.run} />;
   }
 }

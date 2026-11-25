@@ -42,6 +42,8 @@ export interface TournamentStoreSnapshot {
   loading: boolean;
   error: string | null;
   lastEvent: StateChangedEvent | null;
+  /** Last devices status read, so commands can tell which device actions apply. */
+  devicesStatus?: DevicesStatus;
 }
 
 export type TournamentStoreListener = (snapshot: TournamentStoreSnapshot) => void;
@@ -330,7 +332,10 @@ export class TournamentStore {
   }
 
   async getDevicesStatus(): Promise<DevicesStatus> {
-    return this.hostService.getDevicesStatus();
+    const status = await this.hostService.getDevicesStatus();
+    // Kept in the snapshot without notifying: the page polls for fresh status itself.
+    this.snapshot = { ...this.snapshot, devicesStatus: status };
+    return status;
   }
 
   async setDevicesEnabled(enabled: boolean, port?: number): Promise<DevicesStatus> {

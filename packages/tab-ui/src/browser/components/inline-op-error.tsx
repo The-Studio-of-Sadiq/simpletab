@@ -81,7 +81,7 @@ export const InlineOpError: React.FC<InlineOpErrorProps> = ({
       {onRetry !== undefined || onDismiss !== undefined ? (
         <div className="simpletab-actions">
           {onRetry !== undefined ? (
-            <button type="button" className="theia-button" onClick={onRetry}>
+            <button type="button" className="theia-button" data-view-only onClick={onRetry}>
               {t("opError.retry")}
             </button>
           ) : null}
@@ -89,6 +89,7 @@ export const InlineOpError: React.FC<InlineOpErrorProps> = ({
             <button
               type="button"
               className="theia-button secondary"
+              data-view-only
               onClick={onDismiss}
             >
               {t("opError.dismiss")}

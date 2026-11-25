@@ -1,8 +1,10 @@
-import { DisposableCollection } from "@theia/core/lib/common";
+import { CommandService, DisposableCollection } from "@theia/core/lib/common";
 import { Message } from "@theia/core/lib/browser";
 import { ReactWidget } from "@theia/core/lib/browser/widgets/react-widget";
 import { inject, injectable, postConstruct } from "@theia/core/shared/inversify";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import { commandActionRunner } from "../actions/action-runner";
 import { DevicesView } from "../components/devices-view";
 import { onLocaleChange, t } from "../i18n";
 import { stateHasPermission } from "../lib/permissions";
@@ -14,8 +16,14 @@ export class DevicesWidget extends ReactWidget {
 
   private readonly disposables = new DisposableCollection();
 
-  constructor(@inject(TournamentStore) private readonly store: TournamentStore) {
+  private readonly run: ActionRunner;
+
+  constructor(
+    @inject(TournamentStore) private readonly store: TournamentStore,
+    @inject(CommandService) commands: CommandService,
+  ) {
     super();
+    this.run = commandActionRunner(commands);
     this.id = DevicesWidget.ID;
     this.title.label = t("devices.widgetLabel");
     this.title.caption = t("devices.widgetLabel");
@@ -43,17 +51,12 @@ export class DevicesWidget extends ReactWidget {
       }),
     );
     this.toDispose.push(this.disposables);
+    // Commands need the device list to decide what they can do, even before the page polls.
+    void this.store.getDevicesStatus();
     this.update();
   }
 
   private readonly loadStatus = () => this.store.getDevicesStatus();
-  private readonly setEnabled = (enabled: boolean) => this.store.setDevicesEnabled(enabled);
-  private readonly issueCode = (roleId: string) => this.store.issuePairingCode(roleId);
-  private readonly cancelCode = (code: string) => this.store.cancelPairingCode(code);
-  private readonly approve = (joinId: string) => this.store.approveJoin(joinId);
-  private readonly reject = (joinId: string) => this.store.rejectJoin(joinId);
-  private readonly remove = (deviceId: string) => this.store.removeDevice(deviceId);
-  private readonly setSuccession = (order: string[]) => this.store.setSuccession(order);
 
   protected override render(): React.ReactNode {
     const snapshot = this.store.getSnapshot();
@@ -62,13 +65,7 @@ export class DevicesWidget extends ReactWidget {
         open={snapshot.status.open}
         canManage={snapshot.state !== null && stateHasPermission(snapshot.state, "devices.manage")}
         loadStatus={this.loadStatus}
-        onSetEnabled={this.setEnabled}
-        onIssueCode={this.issueCode}
-        onCancelCode={this.cancelCode}
-        onApprove={this.approve}
-        onReject={this.reject}
-        onRemove={this.remove}
-        onSetSuccession={this.setSuccession}
+        run={this.run}
       />
     );
   }

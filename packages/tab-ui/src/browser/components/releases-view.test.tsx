@@ -7,6 +7,7 @@ import type {
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "react";
+import { directRunner, fakeStore } from "../actions/test-context";
 import { ReleasesView } from "./releases-view";
 
 const EMPTY_STATUS: HostStatus = {
@@ -104,17 +105,19 @@ function makeReleasesState(): ProjectedState {
 
 describe("ReleasesView", () => {
   it("renders grouped Appendix B gates with text state and submits release.set_gate", async () => {
-    const submitted: OpRequest[] = [];
-    const onSubmitOp = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
-      submitted.push(req);
-      return { ok: true, seq: 9, writes: [], committedPayload: req.payload };
+    const state = makeReleasesState();
+    const { submitted, store } = fakeStore(state, {
+      ok: true,
+      seq: 9,
+      writes: [],
+      committedPayload: null,
     });
 
     render(
       <ReleasesView
-        state={makeReleasesState()}
+        state={state}
         status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
+        run={directRunner(store)}
         nowIso="2026-10-01T10:00:00.000Z"
       />,
     );
@@ -161,18 +164,16 @@ describe("ReleasesView", () => {
   });
 
   it("opens confirmation dialog listing gates before submitting release.tab_bundle", async () => {
-    const submitted: OpRequest[] = [];
-    const onSubmitOp = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
-      submitted.push(req);
-      return { ok: true, seq: 10, writes: [], committedPayload: req.payload };
+    const state = makeReleasesState();
+    const { submitted, store } = fakeStore(state, {
+      ok: true,
+      seq: 10,
+      writes: [],
+      committedPayload: null,
     });
 
     render(
-      <ReleasesView
-        state={makeReleasesState()}
-        status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
-      />,
+      <ReleasesView state={state} status={EMPTY_STATUS} run={directRunner(store)} />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Release final tab" }));

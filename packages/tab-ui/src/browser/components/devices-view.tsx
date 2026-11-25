@@ -1,20 +1,24 @@
-import type { IssuedPairingCode } from "@simpletab/host/lib/common/collab-protocol";
 import type { DevicesStatus } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import {
+  approveJoinAction,
+  cancelPairingCodeAction,
+  groupCode,
+  issuePairingCodeAction,
+  rejectJoinAction,
+  removeDeviceAction,
+  setDevicesEnabledAction,
+  setSuccessionOrderAction,
+} from "../actions/devices-actions";
 import { t } from "../i18n";
 
 export interface DevicesViewProps {
   open: boolean;
   canManage: boolean;
   loadStatus: () => Promise<DevicesStatus>;
-  onSetEnabled: (enabled: boolean) => Promise<DevicesStatus>;
-  onIssueCode: (roleId: string) => Promise<IssuedPairingCode>;
-  onCancelCode: (code: string) => Promise<void>;
-  onApprove: (joinId: string) => Promise<void>;
-  onReject: (joinId: string) => Promise<void>;
-  onRemove: (deviceId: string) => Promise<void>;
-  /** Sets the succession list (tab-director device ids, rank 1 first). */
-  onSetSuccession?: (order: string[]) => Promise<void>;
+  /** Runs the same commands as the palette; the status loader stays a prop. */
+  run: ActionRunner;
   /** Asks the user to confirm removing a device; tests pass a stub. */
   confirmRemove?: (name: string) => boolean;
   pollMs?: number;
@@ -23,10 +27,6 @@ export interface DevicesViewProps {
 function formatTime(iso: string): string {
   const ms = Date.parse(iso);
   return Number.isFinite(ms) ? new Date(ms).toLocaleTimeString() : iso;
-}
-
-function groupCode(code: string): string {
-  return code.length === 8 ? `${code.slice(0, 4)} ${code.slice(4)}` : code;
 }
 
 function shortFingerprint(fp: string): string {
@@ -42,13 +42,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
   open,
   canManage,
   loadStatus,
-  onSetEnabled,
-  onIssueCode,
-  onCancelCode,
-  onApprove,
-  onReject,
-  onRemove,
-  onSetSuccession,
+  run,
   confirmRemove = (name) => window.confirm(t("devices.removeConfirm", { name })),
   pollMs = 2000,
 }) => {
@@ -74,7 +68,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
     return () => clearInterval(timer);
   }, [open, canManage, refresh, pollMs]);
 
-  const run = async (action: () => Promise<unknown>): Promise<void> => {
+  const apply = async (action: () => Promise<unknown>): Promise<void> => {
     setError(null);
     setBusy(true);
     try {
@@ -123,7 +117,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
             disabled={busy || status === null}
             onChange={(e) => {
               const on = e.target.checked;
-              void run(() => onSetEnabled(on));
+              void apply(() => run(setDevicesEnabledAction, { enabled: on }));
             }}
           />
           <span>{t("devices.allow")}</span>
@@ -180,9 +174,10 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
             <button
               type="button"
               className="theia-button"
+              data-action={issuePairingCodeAction.id}
               disabled={busy}
               onClick={() => {
-                void run(() => onIssueCode(roleId));
+                void apply(() => run(issuePairingCodeAction, { roleId }));
               }}
             >
               {t("devices.createCode")}
@@ -202,9 +197,10 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                   <button
                     type="button"
                     className="theia-button secondary"
+                    data-action={cancelPairingCodeAction.id}
                     disabled={busy}
                     onClick={() => {
-                      void run(() => onCancelCode(code.code));
+                      void apply(() => run(cancelPairingCodeAction, { code: code.code }));
                     }}
                   >
                     {t("devices.cancelCode")}
@@ -241,9 +237,10 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                 <button
                   type="button"
                   className="theia-button"
+                  data-action={approveJoinAction.id}
                   disabled={busy}
                   onClick={() => {
-                    void run(() => onApprove(join.joinId));
+                    void apply(() => run(approveJoinAction, { joinId: join.joinId }));
                   }}
                 >
                   {t("devices.approve")}
@@ -251,9 +248,10 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                 <button
                   type="button"
                   className="theia-button secondary"
+                  data-action={rejectJoinAction.id}
                   disabled={busy}
                   onClick={() => {
-                    void run(() => onReject(join.joinId));
+                    void apply(() => run(rejectJoinAction, { joinId: join.joinId }));
                   }}
                 >
                   {t("devices.reject")}
@@ -264,7 +262,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
         </section>
       ) : null}
 
-      {status !== null && status.succession.length > 0 && onSetSuccession !== undefined ? (
+      {status !== null && status.succession.length > 0 ? (
         <section className="simpletab-section" aria-labelledby="simpletab-devices-succession">
           <h3 id="simpletab-devices-succession" className="simpletab-subtitle">
             {t("devices.successionTitle")}
@@ -277,7 +275,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                 const next = [...status.succession];
                 next.splice(index, 1);
                 next.splice(to, 0, deviceId);
-                void run(() => onSetSuccession(next));
+                void apply(() => run(setSuccessionOrderAction, { order: next }));
               };
               return (
                 <li key={deviceId}>
@@ -285,6 +283,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                   <button
                     type="button"
                     className="theia-button secondary"
+                    data-action={setSuccessionOrderAction.id}
                     disabled={busy || index === 0}
                     aria-label={t("devices.moveUp", { name })}
                     onClick={() => move(index - 1)}
@@ -294,6 +293,7 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                   <button
                     type="button"
                     className="theia-button secondary"
+                    data-action={setSuccessionOrderAction.id}
                     disabled={busy || index === status.succession.length - 1}
                     aria-label={t("devices.moveDown", { name })}
                     onClick={() => move(index + 1)}
@@ -338,11 +338,12 @@ export const DevicesView: React.FC<DevicesViewProps> = ({
                       <button
                         type="button"
                         className="theia-button secondary"
+                        data-action={removeDeviceAction.id}
                         disabled={busy}
                         aria-label={t("devices.removeLabel", { name: device.name })}
                         onClick={() => {
                           if (confirmRemove(device.name)) {
-                            void run(() => onRemove(device.deviceId));
+                            void apply(() => run(removeDeviceAction, { deviceId: device.deviceId }));
                           }
                         }}
                       >

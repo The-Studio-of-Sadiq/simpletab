@@ -5,17 +5,18 @@ import type {
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
 import { t } from "../i18n";
+import type { ActionRunner } from "../actions/action";
+import {
+  acceptProposalAction,
+  canDecideProposals,
+  rejectProposalAction,
+} from "../actions/proposals-actions";
 import { InlineOpError, type InlineOpErrorData } from "./inline-op-error";
-
-export interface ProposalDecision {
-  kind: "accept" | "reject";
-  proposalId: string;
-  reason?: string;
-}
 
 export interface ProposalsViewProps {
   state: ProjectedState | null;
-  onDecide: (decision: ProposalDecision) => Promise<SubmitResult>;
+  /** Runs SimpleTab actions; the page's buttons are the same commands as in the palette (M8). */
+  run: ActionRunner;
 }
 
 function instantOf(iso: string | undefined): number {
@@ -60,7 +61,7 @@ function failureOf(result: SubmitResult): InlineOpErrorData | null {
  */
 export const ProposalsView: React.FC<ProposalsViewProps> = ({
   state,
-  onDecide,
+  run,
 }) => {
   const baseId = React.useId();
   const [reasons, setReasons] = React.useState<Record<string, string>>({});
@@ -76,8 +77,7 @@ export const ProposalsView: React.FC<ProposalsViewProps> = ({
     return <p className="simpletab-hint">{t("proposals.noTournament")}</p>;
   }
 
-  const canDecide =
-    state.roleId !== "ai" && (state.permissions?.length ?? 0) > 0;
+  const canDecide = canDecideProposals(state);
   const pending = pendingProposals(state);
   const decided = decidedProposals(state);
 
@@ -98,15 +98,13 @@ export const ProposalsView: React.FC<ProposalsViewProps> = ({
       return next;
     });
     try {
-      const result = await onDecide(
+      const result =
         kind === "reject"
-          ? {
-              kind,
+          ? await run(rejectProposalAction, {
               proposalId: proposal.id,
               ...(reason.length > 0 ? { reason } : {}),
-            }
-          : { kind, proposalId: proposal.id },
-      );
+            })
+          : await run(acceptProposalAction, { proposalId: proposal.id });
       const failure = failureOf(result);
       if (failure !== null) {
         setErrors((current) => ({ ...current, [proposal.id]: failure }));
@@ -151,6 +149,7 @@ export const ProposalsView: React.FC<ProposalsViewProps> = ({
           <button
             type="button"
             className="theia-button"
+            data-action={acceptProposalAction.id}
             disabled={busy}
             onClick={() => {
               void decide(proposal, "accept");
@@ -161,6 +160,7 @@ export const ProposalsView: React.FC<ProposalsViewProps> = ({
           <button
             type="button"
             className="theia-button secondary"
+            data-action={rejectProposalAction.id}
             disabled={busy}
             onClick={() => {
               void decide(proposal, "reject");

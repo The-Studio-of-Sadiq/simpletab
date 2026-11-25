@@ -4,6 +4,8 @@ import type {
   HostLockInfo,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import { cancelLockAction, lockLabel } from "../actions/releases-actions";
 import { t } from "../i18n";
 
 export interface LockBannerProps {
@@ -11,38 +13,8 @@ export interface LockBannerProps {
   rounds: readonly Round[];
   isHostOwner: boolean;
   onCancelLock?: (lockId: string) => Promise<HostCancelLongResult | void>;
-}
-
-function formatLockLabel(
-  lock: HostLockInfo,
-  rounds: readonly Round[],
-): string {
-  const roundName =
-    lock.roundId !== undefined
-      ? rounds.find((round) => round.id === lock.roundId)?.name
-      : undefined;
-
-  switch (lock.opType) {
-    case "draw.generate":
-      return roundName
-        ? t("lock.generatingRound", { round: roundName })
-        : t("lock.generatingFallback");
-    case "allocation.auto":
-      return roundName
-        ? t("lock.allocatingRound", { round: roundName })
-        : t("lock.allocatingFallback");
-    case "allocation.preformed_autofill":
-      return roundName
-        ? t("lock.autofillingRound", { round: roundName })
-        : t("lock.autofillingFallback");
-    case "break.compute":
-      return t("lock.computingBreak");
-    default:
-      return t("lock.generic", {
-        opType: lock.opType,
-        actorRef: lock.actorRef,
-      });
-  }
+  /** Pages converted to M8 pass the runner; older pages still pass onCancelLock. */
+  run?: ActionRunner;
 }
 
 export const LockBanner: React.FC<LockBannerProps> = ({
@@ -50,6 +22,7 @@ export const LockBanner: React.FC<LockBannerProps> = ({
   rounds,
   isHostOwner,
   onCancelLock,
+  run,
 }) => {
   const [cancellingId, setCancellingId] = React.useState<string | null>(null);
   const [cancelError, setCancelError] = React.useState<string | null>(null);
@@ -59,13 +32,13 @@ export const LockBanner: React.FC<LockBannerProps> = ({
   }
 
   const handleCancel = async (lockId: string): Promise<void> => {
-    if (onCancelLock === undefined) {
-      return;
-    }
     setCancelError(null);
     setCancellingId(lockId);
     try {
-      const result = await onCancelLock(lockId);
+      const result =
+        run !== undefined
+          ? await run(cancelLockAction, { lockId })
+          : await onCancelLock?.(lockId);
       if (result && !result.ok) {
         setCancelError(
           t("common.errorWithCode", {
@@ -87,12 +60,13 @@ export const LockBanner: React.FC<LockBannerProps> = ({
         {locks.map((lock) => (
           <li key={lock.lockId} className="simpletab-lock-item">
             <span className="simpletab-lock-text">
-              {formatLockLabel(lock, rounds)}
+              {lockLabel(lock, rounds)}
             </span>
-            {isHostOwner && onCancelLock !== undefined ? (
+            {isHostOwner && (run !== undefined || onCancelLock !== undefined) ? (
               <button
                 type="button"
                 className="theia-button secondary"
+                data-action={cancelLockAction.id}
                 disabled={cancellingId === lock.lockId}
                 onClick={() => {
                   void handleCancel(lock.lockId);

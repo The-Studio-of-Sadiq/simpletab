@@ -28,6 +28,7 @@ import {
 } from "@theia/core/lib/electron-browser/messaging/electron-ipc-connection-source";
 import { CommandContribution, FilterContribution, MessageService } from "@theia/core/lib/common";
 import { PreferenceContribution } from "@theia/core/lib/common/preferences/preference-schema";
+import { ActionCommandContribution } from "./actions/action-commands";
 import {
   DeveloperMode,
   DeveloperModeContribution,
@@ -376,6 +377,10 @@ export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
   bindViewContribution(bind, ProjectorControlViewContribution);
   bindViewContribution(bind, SimpleTabContribution);
   bind(FrontendApplicationContribution).toService(SimpleTabContribution);
+
+  // M8: every SimpleTab action is a command; pages run their buttons through these commands.
+  bind(ActionCommandContribution).toSelf().inSingletonScope();
+  bind(CommandContribution).toService(ActionCommandContribution);
 
   bind(DeveloperMode).toSelf().inSingletonScope();
   bind(PreferenceContribution).toConstantValue(developerModePreferenceContribution);

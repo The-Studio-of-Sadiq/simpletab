@@ -3,6 +3,11 @@ import type {
   OnlineSettings,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import {
+  archiveNowAction,
+  setArchiveMirrorAction,
+} from "../actions/releases-actions";
 import { t } from "../i18n";
 
 export interface ArchivePanelProps {
@@ -10,8 +15,8 @@ export interface ArchivePanelProps {
   canManage: boolean;
   onlineSettings: OnlineSettings;
   loadStatus: () => Promise<ArchiveStatus>;
-  onArchiveNow: () => Promise<ArchiveStatus>;
-  onSetMirror: (on: boolean) => Promise<void>;
+  /** Runs the same commands as the palette; the status loader stays a prop. */
+  run: ActionRunner;
   /** Poll interval while the panel is shown; tests pass a small value. */
   pollMs?: number;
 }
@@ -33,8 +38,7 @@ export const ArchivePanel: React.FC<ArchivePanelProps> = ({
   canManage,
   onlineSettings,
   loadStatus,
-  onArchiveNow,
-  onSetMirror,
+  run,
   pollMs = 5000,
 }) => {
   const [status, setStatus] = React.useState<ArchiveStatus | null>(null);
@@ -80,7 +84,8 @@ export const ArchivePanel: React.FC<ArchivePanelProps> = ({
     setError(null);
     setRequesting(true);
     try {
-      setStatus(await onArchiveNow());
+      const result = await run(archiveNowAction, {});
+      setStatus(result.status);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -91,7 +96,7 @@ export const ArchivePanel: React.FC<ArchivePanelProps> = ({
   const toggleMirror = async (on: boolean): Promise<void> => {
     setError(null);
     try {
-      await onSetMirror(on);
+      await run(setArchiveMirrorAction, { on });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -149,6 +154,7 @@ export const ArchivePanel: React.FC<ArchivePanelProps> = ({
         <button
           type="button"
           className="theia-button"
+          data-action={archiveNowAction.id}
           disabled={!open || !canManage || busy}
           onClick={() => {
             void archive();

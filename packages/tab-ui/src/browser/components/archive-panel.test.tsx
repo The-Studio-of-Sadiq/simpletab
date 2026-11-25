@@ -2,7 +2,37 @@ import { DEFAULT_ONLINE_SETTINGS, type ArchiveStatus } from "@simpletab/host/lib
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { describe, expect, it, vi } from "vitest";
+import type { ActionRunner } from "../actions/action";
+import {
+  archiveNowAction,
+  setArchiveMirrorAction,
+  type ArchiveNowResult,
+} from "../actions/releases-actions";
 import { ArchivePanel } from "./archive-panel";
+
+/** Turns the page's action runs back into the old callbacks, so the tests keep their assertions. */
+function runnerFor(
+  archive: () => Promise<ArchiveStatus>,
+  setMirror: (on: boolean) => Promise<void> = async () => undefined,
+): ActionRunner {
+  const run = async (
+    action: { id: string },
+    args: unknown,
+  ): Promise<ArchiveNowResult | { ok: true }> => {
+    if (action.id === archiveNowAction.id) {
+      const status = await archive();
+      return status.state === "failed"
+        ? { ok: false, errors: [status.reason ?? "failed"], status }
+        : { ok: true, status };
+    }
+    if (action.id === setArchiveMirrorAction.id) {
+      await setMirror((args as { on: boolean }).on);
+      return { ok: true };
+    }
+    throw new Error(`Unexpected action ${action.id}`);
+  };
+  return run as unknown as ActionRunner;
+}
 import { normalizeGithubRepo } from "./credentials-view";
 
 const CONFIGURED = {
@@ -20,8 +50,7 @@ describe("ArchivePanel", () => {
         canManage
         onlineSettings={DEFAULT_ONLINE_SETTINGS}
         loadStatus={loadStatus}
-        onArchiveNow={async () => ({ state: "idle" })}
-        onSetMirror={async () => undefined}
+        run={runnerFor(async () => ({ state: "idle" }))}
       />,
     );
     expect(screen.getByText(/The GitHub archive is off/)).toBeTruthy();
@@ -43,8 +72,7 @@ describe("ArchivePanel", () => {
         canManage
         onlineSettings={CONFIGURED}
         loadStatus={async () => ({ state: "idle" })}
-        onArchiveNow={onArchiveNow}
-        onSetMirror={async () => undefined}
+        run={runnerFor(onArchiveNow)}
       />,
     );
     await screen.findByText("Not archived yet");
@@ -80,8 +108,7 @@ describe("ArchivePanel", () => {
         canManage
         onlineSettings={CONFIGURED}
         loadStatus={async () => ({ state: "failed", reason: "The archive repository must be public." })}
-        onArchiveNow={async () => ({ state: "idle" })}
-        onSetMirror={onSetMirror}
+        run={runnerFor(async () => ({ state: "idle" }), onSetMirror)}
       />,
     );
     expect((await screen.findByRole("alert")).textContent).toContain("must be public");

@@ -2,6 +2,16 @@ import type { DevicesStatus } from "@simpletab/host/lib/common/host-protocol";
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { describe, expect, it, vi } from "vitest";
+import type { ActionResult, ActionRunner } from "../actions/action";
+import {
+  approveJoinAction,
+  cancelPairingCodeAction,
+  issuePairingCodeAction,
+  rejectJoinAction,
+  removeDeviceAction,
+  setDevicesEnabledAction,
+  setSuccessionOrderAction,
+} from "../actions/devices-actions";
 import { DevicesView, type DevicesViewProps } from "./devices-view";
 
 const ROLES = [
@@ -25,9 +35,53 @@ function status(patch: Partial<DevicesStatus> = {}): DevicesStatus {
   };
 }
 
+interface DeviceHandlers {
+  loadStatus: () => Promise<DevicesStatus>;
+  onSetEnabled: (on: boolean) => Promise<unknown>;
+  onIssueCode: (roleId: string) => Promise<unknown>;
+  onCancelCode: (code: string) => Promise<unknown>;
+  onApprove: (joinId: string) => Promise<unknown>;
+  onReject: (joinId: string) => Promise<unknown>;
+  onRemove: (deviceId: string) => Promise<unknown>;
+  onSetSuccession: (order: string[]) => Promise<unknown>;
+}
+
+/** Turns the page's action runs back into the calls its buttons used to make. */
+function runnerFor(handlers: DeviceHandlers): ActionRunner {
+  const run = async (action: { id: string }, args: unknown): Promise<ActionResult> => {
+    switch (action.id) {
+      case setDevicesEnabledAction.id:
+        await handlers.onSetEnabled((args as { enabled: boolean }).enabled);
+        break;
+      case issuePairingCodeAction.id:
+        await handlers.onIssueCode((args as { roleId: string }).roleId);
+        break;
+      case cancelPairingCodeAction.id:
+        await handlers.onCancelCode((args as { code: string }).code);
+        break;
+      case approveJoinAction.id:
+        await handlers.onApprove((args as { joinId: string }).joinId);
+        break;
+      case rejectJoinAction.id:
+        await handlers.onReject((args as { joinId: string }).joinId);
+        break;
+      case removeDeviceAction.id:
+        await handlers.onRemove((args as { deviceId: string }).deviceId);
+        break;
+      case setSuccessionOrderAction.id:
+        await handlers.onSetSuccession((args as { order: string[] }).order);
+        break;
+      default:
+        throw new Error(`Unexpected action: ${action.id}`);
+    }
+    return { ok: true };
+  };
+  return run as unknown as ActionRunner;
+}
+
 function renderView(props: Partial<DevicesViewProps> & { initial: DevicesStatus }) {
   let current = props.initial;
-  const handlers = {
+  const handlers: DeviceHandlers = {
     loadStatus: vi.fn(async () => current),
     onSetEnabled: vi.fn(async (on: boolean) => {
       current = { ...current, running: on };
@@ -42,8 +96,18 @@ function renderView(props: Partial<DevicesViewProps> & { initial: DevicesStatus 
     onApprove: vi.fn(async () => undefined),
     onReject: vi.fn(async () => undefined),
     onRemove: vi.fn(async () => undefined),
+    onSetSuccession: vi.fn(async () => undefined),
   };
-  render(<DevicesView open canManage pollMs={60_000} {...handlers} {...props} />);
+  render(
+    <DevicesView
+      open
+      canManage
+      pollMs={60_000}
+      {...handlers}
+      run={runnerFor(handlers)}
+      {...props}
+    />,
+  );
   return handlers;
 }
 
@@ -118,17 +182,22 @@ describe("DevicesView", () => {
   });
 
   it("says plainly when the role cannot manage devices", () => {
+    const handlers: DeviceHandlers = {
+      loadStatus: vi.fn(async () => status()),
+      onSetEnabled: vi.fn(async () => undefined),
+      onIssueCode: vi.fn(async () => undefined),
+      onCancelCode: vi.fn(async () => undefined),
+      onApprove: vi.fn(async () => undefined),
+      onReject: vi.fn(async () => undefined),
+      onRemove: vi.fn(async () => undefined),
+      onSetSuccession: vi.fn(async () => undefined),
+    };
     render(
       <DevicesView
         open
         canManage={false}
-        loadStatus={vi.fn()}
-        onSetEnabled={vi.fn()}
-        onIssueCode={vi.fn()}
-        onCancelCode={vi.fn()}
-        onApprove={vi.fn()}
-        onReject={vi.fn()}
-        onRemove={vi.fn()}
+        loadStatus={handlers.loadStatus}
+        run={runnerFor(handlers)}
       />,
     );
     expect(screen.getByText(/Only the host owner and tab directors/)).toBeTruthy();

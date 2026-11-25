@@ -1,11 +1,16 @@
-import type { DeviceModeStatus, HostStatus, PromoteParams, ReplacedInfo } from "@simpletab/host/lib/common/host-protocol";
+import type { DeviceModeStatus, ReplacedInfo } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import {
+  promoteToHostAction,
+  saveDeviceCopyAction,
+} from "../actions/devices-actions";
 import { t } from "../i18n";
 
 export interface PromotePanelProps {
   device: DeviceModeStatus;
-  onPromote: (params: PromoteParams) => Promise<HostStatus>;
-  onExportCopy: (directory: string) => Promise<string>;
+  /** Runs the same commands as the palette. File pickers stay view-only props. */
+  run: ActionRunner;
   onPickDirectory?: () => Promise<string | undefined>;
   onPickFile?: () => Promise<string | undefined>;
   confirmPromote?: () => boolean;
@@ -18,8 +23,7 @@ export interface PromotePanelProps {
  */
 export const PromotePanel: React.FC<PromotePanelProps> = ({
   device,
-  onPromote,
-  onExportCopy,
+  run,
   onPickDirectory,
   onPickFile,
   confirmPromote = () => window.confirm(t("promote.confirm")),
@@ -35,7 +39,7 @@ export const PromotePanel: React.FC<PromotePanelProps> = ({
   const connected = device.connection === "connected";
   const better = device.betterRanked ?? [];
 
-  const run = async (action: () => Promise<void>): Promise<void> => {
+  const apply = async (action: () => Promise<void>): Promise<void> => {
     setError(null);
     setMessage(null);
     setBusy(true);
@@ -84,6 +88,7 @@ export const PromotePanel: React.FC<PromotePanelProps> = ({
             <button
               type="button"
               className="theia-button secondary"
+              data-view-only
               disabled={busy}
               onClick={() => {
                 void onPickDirectory().then((picked) => {
@@ -108,6 +113,7 @@ export const PromotePanel: React.FC<PromotePanelProps> = ({
             <button
               type="button"
               className="theia-button secondary"
+              data-view-only
               disabled={busy}
               onClick={() => {
                 void onPickFile().then((picked) => {
@@ -127,13 +133,16 @@ export const PromotePanel: React.FC<PromotePanelProps> = ({
         <button
           type="button"
           className="theia-button"
+          data-action={promoteToHostAction.id}
           disabled={busy || connected || directory.trim().length === 0 || device.copy === undefined}
           onClick={() => {
             if (!confirmPromote()) return;
-            void run(async () => {
-              await onPromote({
+            void apply(async () => {
+              await run(promoteToHostAction, {
                 directory,
-                ...(newerCopy.trim().length > 0 ? { newerCopyPath: newerCopy.trim() } : {}),
+                ...(newerCopy.trim().length > 0
+                  ? { newerCopyPath: newerCopy.trim() }
+                  : {}),
               });
             });
           }}
@@ -143,11 +152,12 @@ export const PromotePanel: React.FC<PromotePanelProps> = ({
         <button
           type="button"
           className="theia-button secondary"
+          data-action={saveDeviceCopyAction.id}
           disabled={busy || directory.trim().length === 0 || device.copy === undefined}
           onClick={() => {
-            void run(async () => {
-              const file = await onExportCopy(directory);
-              setMessage(t("promote.saved", { file }));
+            void apply(async () => {
+              const result = await run(saveDeviceCopyAction, { directory });
+              setMessage(t("promote.saved", { file: result.file }));
             });
           }}
         >

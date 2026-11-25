@@ -2,7 +2,37 @@ import { DEFAULT_ONLINE_SETTINGS, type PublishStatus } from "@simpletab/host/lib
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { describe, expect, it, vi } from "vitest";
+import type { ActionRunner } from "../actions/action";
+import {
+  publishNowAction,
+  setLivePublicSiteAction,
+  type PublishNowResult,
+} from "../actions/releases-actions";
 import { PublishPanel } from "./publish-panel";
+
+/** Turns the page's action runs back into the old callbacks, so the tests keep their assertions. */
+function runnerFor(
+  publish: () => Promise<PublishStatus>,
+  setLive: (on: boolean) => Promise<void> = async () => undefined,
+): ActionRunner {
+  const run = async (
+    action: { id: string },
+    args: unknown,
+  ): Promise<PublishNowResult | { ok: true }> => {
+    if (action.id === publishNowAction.id) {
+      const status = await publish();
+      return status.state === "failed"
+        ? { ok: false, errors: [status.reason ?? "failed"], status }
+        : { ok: true, status };
+    }
+    if (action.id === setLivePublicSiteAction.id) {
+      await setLive((args as { on: boolean }).on);
+      return { ok: true };
+    }
+    throw new Error(`Unexpected action ${action.id}`);
+  };
+  return run as unknown as ActionRunner;
+}
 
 const CONFIGURED = {
   ...DEFAULT_ONLINE_SETTINGS,
@@ -27,8 +57,7 @@ describe("PublishPanel", () => {
         canManage
         onlineSettings={CONFIGURED}
         loadStatus={async () => ({ state: "idle" })}
-        onPublishNow={onPublishNow}
-        onSetLive={async () => undefined}
+        run={runnerFor(onPublishNow)}
       />,
     );
     await screen.findByText("Not published yet");
@@ -62,8 +91,7 @@ describe("PublishPanel", () => {
           reason: "Cloudflare rejected the upload.",
           nextRetryAt: "2026-11-24T10:01:00.000Z",
         })}
-        onPublishNow={async () => ({ state: "idle" })}
-        onSetLive={async () => undefined}
+        run={runnerFor(async () => ({ state: "idle" }))}
       />,
     );
     const alert = await screen.findByRole("alert");
@@ -80,8 +108,7 @@ describe("PublishPanel", () => {
         canManage
         onlineSettings={CONFIGURED}
         loadStatus={async () => ({ state: "idle" })}
-        onPublishNow={async () => ({ state: "idle" })}
-        onSetLive={onSetLive}
+        run={runnerFor(async () => ({ state: "idle" }), onSetLive)}
       />,
     );
     fireEvent.click(screen.getByRole("checkbox"));
@@ -93,8 +120,7 @@ describe("PublishPanel", () => {
         canManage={false}
         onlineSettings={CONFIGURED}
         loadStatus={async () => ({ state: "idle" })}
-        onPublishNow={async () => ({ state: "idle" })}
-        onSetLive={onSetLive}
+        run={runnerFor(async () => ({ state: "idle" }), onSetLive)}
       />,
     );
     expect((screen.getByRole("checkbox") as HTMLInputElement).disabled).toBe(true);

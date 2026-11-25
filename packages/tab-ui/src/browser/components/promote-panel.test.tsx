@@ -2,6 +2,15 @@ import type { DeviceModeStatus, DevicesStatus } from "@simpletab/host/lib/common
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { describe, expect, it, vi } from "vitest";
+import type { ActionResult, ActionRunner } from "../actions/action";
+import {
+  promoteToHostAction,
+  type PromoteArgs,
+  saveDeviceCopyAction,
+  type SaveCopyArgs,
+  type SaveCopyResult,
+  setSuccessionOrderAction,
+} from "../actions/devices-actions";
 import { DevicesView } from "./devices-view";
 import { PromotePanel, ReplacedBanner } from "./promote-panel";
 
@@ -23,11 +32,43 @@ function director(patch: Partial<DeviceModeStatus> = {}): DeviceModeStatus {
   };
 }
 
+function runnerFor(
+  onPromote: (args: PromoteArgs) => Promise<unknown> = async () => undefined,
+  onExportCopy: (args: SaveCopyArgs) => Promise<string> = async () => "",
+): ActionRunner {
+  const run = async (action: { id: string }, args: unknown): Promise<ActionResult | SaveCopyResult> => {
+    if (action.id === promoteToHostAction.id) {
+      await onPromote(args as PromoteArgs);
+      return { ok: true };
+    }
+    if (action.id === saveDeviceCopyAction.id) {
+      return { ok: true, file: await onExportCopy(args as SaveCopyArgs) };
+    }
+    throw new Error(`Unexpected action: ${action.id}`);
+  };
+  return run as unknown as ActionRunner;
+}
+
+function successionRunner(onSetSuccession: (order: string[]) => Promise<unknown>): ActionRunner {
+  const run = async (action: { id: string }, args: unknown): Promise<ActionResult> => {
+    if (action.id !== setSuccessionOrderAction.id) {
+      throw new Error(`Unexpected action: ${action.id}`);
+    }
+    await onSetSuccession((args as { order: string[] }).order);
+    return { ok: true };
+  };
+  return run as unknown as ActionRunner;
+}
+
 describe("PromotePanel", () => {
   it("names better-ranked laptops and promotes with the chosen folder after confirmation", async () => {
     const onPromote = vi.fn(async () => ({ open: true, locks: [] }));
     render(
-      <PromotePanel device={director()} onPromote={onPromote} onExportCopy={vi.fn()} confirmPromote={() => true} />,
+      <PromotePanel
+        device={director()}
+        run={runnerFor(onPromote)}
+        confirmPromote={() => true}
+      />,
     );
     expect(screen.getByText(/up to number 412/)).toBeTruthy();
     expect(screen.getByRole("note").textContent).toContain("Rafi's laptop");
@@ -41,7 +82,10 @@ describe("PromotePanel", () => {
   it("refuses to promote while the host is reachable, but can still save the copy", async () => {
     const onExportCopy = vi.fn(async () => "C:/tabs/wudc.copy-412.simpletab");
     render(
-      <PromotePanel device={director({ connection: "connected" })} onPromote={vi.fn()} onExportCopy={onExportCopy} />,
+      <PromotePanel
+        device={director({ connection: "connected" })}
+        run={runnerFor(async () => undefined, onExportCopy)}
+      />,
     );
     expect(screen.getByText(/host is reachable/)).toBeTruthy();
     fireEvent.change(screen.getByLabelText("Folder for the new host's tournament file"), { target: { value: "C:/tabs" } });
@@ -51,9 +95,7 @@ describe("PromotePanel", () => {
   });
 
   it("shows nothing for roles that cannot be promoted", () => {
-    const { container } = render(
-      <PromotePanel device={director({ roleId: "equity" })} onPromote={vi.fn()} onExportCopy={vi.fn()} />,
-    );
+    const { container } = render(<PromotePanel device={director({ roleId: "equity" })} run={runnerFor()} />);
     expect(container.textContent).toBe("");
   });
 });
@@ -93,13 +135,7 @@ describe("DevicesView succession list", () => {
         canManage
         pollMs={60_000}
         loadStatus={async () => status}
-        onSetEnabled={vi.fn()}
-        onIssueCode={vi.fn()}
-        onCancelCode={vi.fn()}
-        onApprove={vi.fn()}
-        onReject={vi.fn()}
-        onRemove={vi.fn()}
-        onSetSuccession={onSetSuccession}
+        run={successionRunner(onSetSuccession)}
       />,
     );
     const up = await screen.findByRole("button", { name: "Move Mina up" });

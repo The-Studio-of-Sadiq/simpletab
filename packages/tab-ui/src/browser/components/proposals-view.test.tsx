@@ -6,7 +6,31 @@ import type {
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import * as React from "react";
 import { describe, expect, it, vi } from "vitest";
-import { ProposalsView, type ProposalDecision } from "./proposals-view";
+import type { ActionRunner } from "../actions/action";
+import { acceptProposalAction } from "../actions/proposals-actions";
+import { ProposalsView } from "./proposals-view";
+
+interface ProposalDecision {
+  kind: "accept" | "reject";
+  proposalId: string;
+  reason?: string;
+}
+
+/** Turns the page's action runs back into decisions, so each test checks what the page asked for. */
+function runnerFor(
+  onDecide: (decision: ProposalDecision) => Promise<SubmitResult> = async () => ({
+    ok: true,
+    seq: 1,
+    writes: [],
+  }) as unknown as SubmitResult,
+): ActionRunner {
+  const run = async (
+    action: { id: string },
+    args: { proposalId: string; reason?: string },
+  ): Promise<SubmitResult> =>
+    onDecide({ kind: action.id === acceptProposalAction.id ? "accept" : "reject", ...args });
+  return run as unknown as ActionRunner;
+}
 
 function state(patch: Partial<ProjectedState> = {}): ProjectedState {
   return {
@@ -43,7 +67,7 @@ function decidedSection(): HTMLElement {
 
 describe("ProposalsView", () => {
   it("says nothing is open when there is no tournament", () => {
-    render(<ProposalsView state={null} onDecide={vi.fn()} />);
+    render(<ProposalsView state={null} run={runnerFor()} />);
     expect(screen.getByText("Open a tournament to review proposals.")).toBeTruthy();
   });
 
@@ -76,7 +100,7 @@ describe("ProposalsView", () => {
             }),
           ],
         })}
-        onDecide={vi.fn()}
+        run={runnerFor()}
       />,
     );
 
@@ -96,7 +120,7 @@ describe("ProposalsView", () => {
     render(
       <ProposalsView
         state={state({ proposals: [proposal()] })}
-        onDecide={vi.fn()}
+        run={runnerFor()}
       />,
     );
     const card = within(pendingSection()).getByRole("listitem");
@@ -106,7 +130,7 @@ describe("ProposalsView", () => {
     expect(card.querySelector("pre")?.textContent).toContain('"gate": "open"');
   });
 
-  it("accepts a proposal through onDecide", async () => {
+  it("accepts a proposal through its action", async () => {
     const onDecide = vi.fn(async (): Promise<SubmitResult> => ({
       ok: true,
       seq: 4,
@@ -116,7 +140,7 @@ describe("ProposalsView", () => {
     render(
       <ProposalsView
         state={state({ proposals: [proposal()] })}
-        onDecide={onDecide}
+        run={runnerFor(onDecide)}
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Accept" }));
@@ -137,7 +161,7 @@ describe("ProposalsView", () => {
     render(
       <ProposalsView
         state={state({ proposals: [proposal()] })}
-        onDecide={onDecide}
+        run={runnerFor(onDecide)}
       />,
     );
 
@@ -175,7 +199,7 @@ describe("ProposalsView", () => {
     render(
       <ProposalsView
         state={state({ proposals: [proposal()] })}
-        onDecide={onDecide}
+        run={runnerFor(onDecide)}
       />,
     );
 
@@ -202,7 +226,7 @@ describe("ProposalsView", () => {
     render(
       <ProposalsView
         state={state({ proposals: [proposal()] })}
-        onDecide={onDecide}
+        run={runnerFor(onDecide)}
       />,
     );
     fireEvent.click(screen.getByRole("button", { name: "Accept" }));
@@ -219,7 +243,7 @@ describe("ProposalsView", () => {
           permissions: ["results.enter"] as const,
           proposals: [proposal()],
         })}
-        onDecide={vi.fn()}
+        run={runnerFor()}
       />,
     );
     expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
@@ -233,7 +257,7 @@ describe("ProposalsView", () => {
           permissions: [] as const,
           proposals: [proposal()],
         })}
-        onDecide={vi.fn()}
+        run={runnerFor()}
       />,
     );
     expect(screen.queryByRole("button", { name: "Accept" })).toBeNull();
@@ -241,7 +265,7 @@ describe("ProposalsView", () => {
   });
 
   it("explains empty pending and decided lists", () => {
-    render(<ProposalsView state={state()} onDecide={vi.fn()} />);
+    render(<ProposalsView state={state()} run={runnerFor()} />);
     expect(
       screen.getByText("No proposal is waiting for a decision."),
     ).toBeTruthy();

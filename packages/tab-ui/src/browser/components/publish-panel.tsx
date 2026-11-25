@@ -3,6 +3,11 @@ import type {
   PublishStatus,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import {
+  publishNowAction,
+  setLivePublicSiteAction,
+} from "../actions/releases-actions";
 import { t } from "../i18n";
 
 export interface PublishPanelProps {
@@ -10,8 +15,8 @@ export interface PublishPanelProps {
   canManage: boolean;
   onlineSettings: OnlineSettings;
   loadStatus: () => Promise<PublishStatus>;
-  onPublishNow: () => Promise<PublishStatus>;
-  onSetLive: (on: boolean) => Promise<void>;
+  /** Runs the same commands as the palette; the status loader stays a prop. */
+  run: ActionRunner;
   /** Poll interval while the panel is shown; tests pass a small value. */
   pollMs?: number;
 }
@@ -38,8 +43,7 @@ export const PublishPanel: React.FC<PublishPanelProps> = ({
   canManage,
   onlineSettings,
   loadStatus,
-  onPublishNow,
-  onSetLive,
+  run,
   pollMs = 5000,
 }) => {
   const [status, setStatus] = React.useState<PublishStatus | null>(null);
@@ -74,7 +78,8 @@ export const PublishPanel: React.FC<PublishPanelProps> = ({
     setError(null);
     setRequesting(true);
     try {
-      setStatus(await onPublishNow());
+      const result = await run(publishNowAction, {});
+      setStatus(result.status);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -85,7 +90,7 @@ export const PublishPanel: React.FC<PublishPanelProps> = ({
   const toggleLive = async (on: boolean): Promise<void> => {
     setError(null);
     try {
-      await onSetLive(on);
+      await run(setLivePublicSiteAction, { on });
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -135,6 +140,7 @@ export const PublishPanel: React.FC<PublishPanelProps> = ({
         <button
           type="button"
           className="theia-button"
+          data-action={publishNowAction.id}
           disabled={!open || !canManage || busy}
           onClick={() => {
             void publish();

@@ -1,26 +1,29 @@
-import {
-  MOTIONS_STATUSES,
-  motionsStatusOf,
-} from "@simpletab/core/features/tournament/application/motionRelease";
+import { MOTIONS_STATUSES, motionsStatusOf } from "@simpletab/core/features/tournament/application/motionRelease";
 import {
   drawStageOf,
   isDrawPubliclyReleased,
   isDrawReleasedToTeams,
 } from "@simpletab/core/lib/draw/drawStatus";
-import { getPublicSiteSettings } from "@simpletab/core/lib/publicFeatures";
-import { getPublicRelease } from "@simpletab/core/lib/publicRelease";
-import { recordKey, type OpRequest, type OpRound } from "@simpletab/core/ops";
-import type { ReleaseGateName } from "@simpletab/core/ops/releases";
 import type { MotionsStatus } from "@simpletab/core/types";
 import type {
-  HostCancelLongResult,
   HostStatus,
   ProjectedState,
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner, SimpleTabAction } from "../actions/action";
+import {
+  openSetupAction,
+  releaseTabBundleAction,
+  setDrawGateAction,
+  setGateAction,
+  setRoundFlagAction,
+  setRoundMotionsAction,
+  type RoundReleaseField,
+  gateGroups,
+  type GateSpec,
+} from "../actions/releases-actions";
 import { t } from "../i18n";
-import { withFreshVersions } from "../lib/op-versions";
 import { stateHasPermission } from "../lib/permissions";
 import { InlineOpError, type InlineOpErrorData } from "./inline-op-error";
 import { LockBanner } from "./lock-banner";
@@ -28,130 +31,10 @@ import { LockBanner } from "./lock-banner";
 export interface ReleasesViewProps {
   state: ProjectedState | null;
   status: HostStatus;
-  onSubmitOp: (request: OpRequest) => Promise<SubmitResult>;
-  onCancelLock?: (lockId: string) => Promise<HostCancelLongResult | void>;
-  onOpenSetup?: () => void;
+  /** Runs the same commands as the palette; no op building happens here. */
+  run: ActionRunner;
   nowIso?: string;
 }
-
-interface TournamentGateSpec {
-  gate: ReleaseGateName;
-  labelKey: string;
-  isReleased: (state: ProjectedState) => boolean;
-}
-
-const TAB_GATES: readonly TournamentGateSpec[] = [
-  {
-    gate: "tab_team",
-    labelKey: "releases.gateTabTeam",
-    isReleased: (s) => getPublicRelease(s.tournament.preferences).teamTab,
-  },
-  {
-    gate: "tab_speaker",
-    labelKey: "releases.gateTabSpeaker",
-    isReleased: (s) => getPublicRelease(s.tournament.preferences).speakerTab,
-  },
-  {
-    gate: "tab_replies",
-    labelKey: "releases.gateTabReplies",
-    isReleased: (s) => s.tournament.preferences.releaseRepliesTab === true,
-  },
-  {
-    gate: "tab_speaker_categories",
-    labelKey: "releases.gateTabSpeakerCategories",
-    isReleased: (s) =>
-      getPublicRelease(s.tournament.preferences).speakerCategoryTabs,
-  },
-  {
-    gate: "tab_adjudicator",
-    labelKey: "releases.gateTabAdjudicator",
-    isReleased: (s) => getPublicSiteSettings(s.tournament.preferences).adjudicatorTab,
-  },
-  {
-    gate: "tab_break_categories",
-    labelKey: "releases.gateTabBreakCategories",
-    isReleased: (s) =>
-      getPublicSiteSettings(s.tournament.preferences).breakCategoryTabs,
-  },
-  {
-    gate: "tab_motions",
-    labelKey: "releases.gateTabMotions",
-    isReleased: (s) => getPublicSiteSettings(s.tournament.preferences).motionTab,
-  },
-];
-
-const LIST_GATES: readonly TournamentGateSpec[] = [
-  {
-    gate: "public_participants",
-    labelKey: "releases.gatePublicParticipants",
-    isReleased: (s) => getPublicRelease(s.tournament.preferences).participants,
-  },
-  {
-    gate: "public_institutions",
-    labelKey: "releases.gatePublicInstitutions",
-    isReleased: (s) => getPublicRelease(s.tournament.preferences).institutions,
-  },
-  {
-    gate: "public_adjudicator_core",
-    labelKey: "releases.gatePublicAdjudicatorCore",
-    isReleased: (s) => getPublicRelease(s.tournament.preferences).adjudicatorCore,
-  },
-  {
-    gate: "public_breaking_adjudicators",
-    labelKey: "releases.gatePublicBreakingAdjudicators",
-    isReleased: (s) =>
-      getPublicRelease(s.tournament.preferences).breakingAdjudicators,
-  },
-];
-
-const BALLOT_GATES: readonly TournamentGateSpec[] = [
-  {
-    gate: "public_ballots",
-    labelKey: "releases.gatePublicBallots",
-    isReleased: (s) => getPublicSiteSettings(s.tournament.preferences).ballots,
-  },
-  {
-    gate: "public_private_ballots",
-    labelKey: "releases.gatePublicPrivateBallots",
-    isReleased: (s) =>
-      getPublicSiteSettings(s.tournament.preferences).privateBallots,
-  },
-];
-
-const OTHER_PAGE_GATES: readonly TournamentGateSpec[] = [
-  {
-    gate: "public_record_pages",
-    labelKey: "releases.gatePublicRecordPages",
-    isReleased: (s) => getPublicSiteSettings(s.tournament.preferences).recordPages,
-  },
-  {
-    gate: "public_side_allocations",
-    labelKey: "releases.gatePublicSideAllocations",
-    isReleased: (s) =>
-      getPublicSiteSettings(s.tournament.preferences).sideAllocations,
-  },
-  {
-    gate: "public_bracket",
-    labelKey: "releases.gatePublicBracket",
-    isReleased: (s) => getPublicSiteSettings(s.tournament.preferences).bracket,
-  },
-  {
-    gate: "public_diversity",
-    labelKey: "releases.gatePublicDiversity",
-    isReleased: (s) => getPublicSiteSettings(s.tournament.preferences).diversity,
-  },
-  {
-    gate: "public_veto_statistics",
-    labelKey: "releases.gatePublicVetoStatistics",
-    isReleased: (s) => s.tournament.preferences.publicVetoStatistics === true,
-  },
-  {
-    gate: "public_feedback_progress",
-    labelKey: "releases.gatePublicFeedbackProgress",
-    isReleased: (s) =>
-      getPublicSiteSettings(s.tournament.preferences).feedbackProgress,
-  },
-];
 
 function motionsStatusText(statusValue: MotionsStatus): string {
   switch (statusValue) {
@@ -175,18 +58,20 @@ function motionsButtonText(statusValue: MotionsStatus): string {
   }
 }
 
+/**
+ * The Releases page (design section 6): every gate is a command, so a person can use the buttons
+ * here or the palette and get exactly the same op.
+ */
 export const ReleasesView: React.FC<ReleasesViewProps> = ({
   state,
   status,
-  onSubmitOp,
-  onCancelLock,
-  onOpenSetup,
+  run,
   nowIso,
 }) => {
   const baseId = React.useId();
   const [opError, setOpError] = React.useState<InlineOpErrorData | null>(null);
   const [opSuccess, setOpSuccess] = React.useState<string | null>(null);
-  const [lastRequest, setLastRequest] = React.useState<OpRequest | null>(null);
+  const [retryRun, setRetryRun] = React.useState<(() => Promise<boolean>) | null>(null);
   const [bundleDialogOpen, setBundleDialogOpen] = React.useState(false);
 
   React.useEffect(() => {
@@ -210,11 +95,16 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
         </div>
         <div className="simpletab-alert">
           <p>{t("common.noTournamentPrompt")}</p>
-          {onOpenSetup !== undefined ? (
-            <button type="button" className="theia-button" onClick={onOpenSetup}>
-              {t("common.openSetupButton")}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="theia-button"
+            data-action={openSetupAction.id}
+            onClick={() => {
+              void run(openSetupAction, {});
+            }}
+          >
+            {t("common.openSetupButton")}
+          </button>
         </div>
       </div>
     );
@@ -226,11 +116,15 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
   const canManageMotions = stateHasPermission(state, "motions.manage");
   const canManageRounds = stateHasPermission(state, "rounds.manage");
 
-  const runOp = async (request: OpRequest, successText: string): Promise<boolean> => {
+  const runOp = async <A,>(
+    action: SimpleTabAction<A, SubmitResult>,
+    args: A,
+    successText: string,
+  ): Promise<boolean> => {
     setOpError(null);
     setOpSuccess(null);
-    setLastRequest(request);
-    const res = await onSubmitOp(request);
+    setRetryRun(() => () => runOp(action, args, successText));
+    const res = await run(action, args);
     if (!res.ok) {
       setOpError({
         code: res.code,
@@ -244,49 +138,26 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
   };
 
   const handleToggleTournamentGate = async (
-    gate: ReleaseGateName,
+    spec: GateSpec,
     released: boolean,
     label: string,
-    categoryId?: string,
   ): Promise<void> => {
-    const tournamentKey = recordKey("tournament", state.tournament.id);
-    const request: OpRequest = {
-      type: "release.set_gate",
-      expectedVersions: {
-        [tournamentKey]: state.versions[tournamentKey] ?? 0,
-        ...(categoryId !== undefined
-          ? {
-              [recordKey("breakCategory", categoryId)]:
-                state.versions[recordKey("breakCategory", categoryId)] ?? 0,
-            }
-          : {}),
-      },
-      payload: {
-        gate,
+    await runOp(
+      setGateAction,
+      {
+        gate: spec.gate,
         released,
-        ...(categoryId !== undefined ? { categoryId } : {}),
+        labelKey: spec.labelKey,
+        ...(spec.categoryId !== undefined ? { categoryId: spec.categoryId } : {}),
       },
-    };
-    await runOp(request, t("releases.gateUpdated", { gate: label }));
+      t("releases.gateUpdated", { gate: label }),
+    );
   };
 
   const handleConfirmTabBundle = async (): Promise<void> => {
-    const tournamentKey = recordKey("tournament", state.tournament.id);
-    const versions: Record<string, number> = {
-      [tournamentKey]: state.versions[tournamentKey] ?? 0,
-    };
-    for (const cat of state.breakCategories) {
-      const catKey = recordKey("breakCategory", cat.id);
-      versions[catKey] = state.versions[catKey] ?? 0;
-    }
     const ok = await runOp(
-      {
-        type: "release.tab_bundle",
-        expectedVersions: versions,
-        payload: {
-          breakCategoryIds: state.breakCategories.map((cat) => cat.id),
-        },
-      },
+      releaseTabBundleAction,
+      {},
       t("releases.bundleSuccess"),
     );
     if (ok) {
@@ -295,72 +166,71 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
   };
 
   const handleRoundDrawAction = async (
-    round: OpRound,
-    opType: "draw.release_teams" | "draw.release" | "draw.unrelease",
+    roundId: string,
+    roundName: string,
+    scope: "teams" | "public",
+    released: boolean,
   ): Promise<void> => {
-    const roundKey = recordKey("round", round.id);
+    const opType =
+      scope === "teams"
+        ? released
+          ? "draw.unrelease"
+          : "draw.release_teams"
+        : released
+          ? "draw.unrelease"
+          : "draw.release";
     await runOp(
-      {
-        type: opType,
-        expectedVersions: { [roundKey]: state.versions[roundKey] ?? 0 },
-        payload: { roundId: round.id },
-      },
-      t("releases.gateUpdated", { gate: `${round.name} (${opType})` }),
+      setDrawGateAction,
+      { roundId, scope, released },
+      t("releases.gateUpdated", { gate: `${roundName} (${opType})` }),
     );
   };
 
   const handleRoundMotionsStatus = async (
-    round: OpRound,
+    roundId: string,
+    roundName: string,
     nextStatus: MotionsStatus,
   ): Promise<void> => {
-    const roundKey = recordKey("round", round.id);
     await runOp(
+      setRoundMotionsAction,
       {
-        type: "motion.set_round_status",
-        expectedVersions: { [roundKey]: state.versions[roundKey] ?? 0 },
-        payload: {
-          roundId: round.id,
-          status: nextStatus,
-          now: nowIso ?? new Date().toISOString(),
-        },
+        roundId,
+        status: nextStatus,
+        ...(nowIso !== undefined ? { now: nowIso } : {}),
       },
-      t("releases.gateUpdated", { gate: `${round.name} (${nextStatus})` }),
+      t("releases.gateUpdated", { gate: `${roundName} (${nextStatus})` }),
     );
   };
 
   const handleRoundFlagToggle = async (
-    round: OpRound,
-    field: "resultsReleased" | "teamSpeaksReleased" | "adjudicatorsRevealed",
+    roundId: string,
+    roundName: string,
+    field: RoundReleaseField,
     nextValue: boolean,
   ): Promise<void> => {
-    const roundKey = recordKey("round", round.id);
-    const updatedRound: OpRound = {
-      ...round,
-      [field]: nextValue,
-    };
     await runOp(
-      {
-        type: "round.update",
-        expectedVersions: { [roundKey]: state.versions[roundKey] ?? 0 },
-        payload: { round: updatedRound },
-      },
-      t("releases.gateUpdated", { gate: `${round.name} (${field})` }),
+      setRoundFlagAction,
+      { roundId, field, released: nextValue },
+      t("releases.gateUpdated", { gate: `${roundName} (${field})` }),
     );
   };
 
   const renderTournamentGateGroup = (
     title: string,
-    specs: readonly TournamentGateSpec[],
-    extraRows?: React.ReactNode,
+    specs: readonly GateSpec[],
   ): React.ReactNode => (
     <section className="simpletab-section">
       <h2 className="simpletab-subtitle">{title}</h2>
       <div className="simpletab-gate-list">
         {specs.map((spec) => {
           const released = spec.isReleased(state);
-          const label = t(spec.labelKey);
+          const label = spec.categoryId === undefined
+            ? t(spec.labelKey)
+            : t(spec.labelKey, {
+                name: sortedBreakCategories.find((cat) => cat.id === spec.categoryId)?.name ?? spec.categoryId,
+              });
           return (
-            <div key={spec.gate} className="simpletab-gate-row">
+            <div key={`${spec.gate}:${spec.categoryId ?? ""}`} className="simpletab-gate-row">
               <span>{label}</span>
               <span
                 className={`simpletab-badge ${
@@ -372,10 +242,11 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
               <button
                 type="button"
                 className={released ? "theia-button secondary" : "theia-button"}
+                data-action={setGateAction.id}
                 disabled={!canManageReleases}
                 aria-label={`${released ? t("releases.actionUnrelease") : t("releases.actionRelease")} ${label}`}
                 onClick={() => {
-                  void handleToggleTournamentGate(spec.gate, !released, label);
+                  void handleToggleTournamentGate(spec, !released, label);
                 }}
               >
                 {released ? t("releases.actionUnrelease") : t("releases.actionRelease")}
@@ -383,7 +254,6 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
             </div>
           );
         })}
-        {extraRows}
       </div>
     </section>
   );
@@ -391,10 +261,10 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
   const activeRounds = state.rounds
     .filter((round) => round.cancelled !== true)
     .sort((left, right) => left.seq - right.seq || left.id.localeCompare(right.id));
-  const publicRelease = getPublicRelease(state.tournament.preferences);
   const sortedBreakCategories = [...state.breakCategories].sort(
     (left, right) => left.seq - right.seq || left.name.localeCompare(right.name),
   );
+  const groups = gateGroups(state);
 
   const bundlePublicItems: string[] = [
     t("releases.gateTabTeam"),
@@ -424,6 +294,7 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
         <button
           type="button"
           className="theia-button"
+          data-view-only
           disabled={!canManageReleases}
           onClick={() => setBundleDialogOpen(true)}
         >
@@ -435,7 +306,7 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
         locks={status.locks}
         rounds={state.rounds}
         isHostOwner={isHostOwner}
-        onCancelLock={onCancelLock}
+        run={run}
       />
 
       <div className="simpletab-hint">{t("releases.bundleHint")}</div>
@@ -449,12 +320,9 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
         <InlineOpError
           error={opError}
           onRetry={
-            lastRequest !== null
+            retryRun !== null
               ? () => {
-                  void runOp(
-                    withFreshVersions(lastRequest, state.versions),
-                    t("releases.bundleSuccess"),
-                  );
+                  void retryRun();
                 }
               : undefined
           }
@@ -506,12 +374,15 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
                       className={
                         teamsReleased ? "theia-button secondary" : "theia-button"
                       }
+                      data-action={setDrawGateAction.id}
                       disabled={!canReleaseDraw || drawStage === "none"}
                       aria-label={`${round.name} ${t("releases.gateDrawTeams")}`}
                       onClick={() => {
                         void handleRoundDrawAction(
-                          round,
-                          teamsReleased ? "draw.unrelease" : "draw.release_teams",
+                          round.id,
+                          round.name,
+                          "teams",
+                          !teamsReleased,
                         );
                       }}
                     >
@@ -533,12 +404,15 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
                     <button
                       type="button"
                       className={drawPublic ? "theia-button secondary" : "theia-button"}
+                      data-action={setDrawGateAction.id}
                       disabled={!canReleaseDraw || drawStage === "none"}
                       aria-label={`${round.name} ${t("releases.gateDrawPublic")}`}
                       onClick={() => {
                         void handleRoundDrawAction(
-                          round,
-                          drawPublic ? "draw.unrelease" : "draw.release",
+                          round.id,
+                          round.name,
+                          "public",
+                          !drawPublic,
                         );
                       }}
                     >
@@ -571,10 +445,15 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
                               ? "theia-button"
                               : "theia-button secondary"
                           }
+                          data-action={setRoundMotionsAction.id}
                           disabled={!canManageMotions}
                           aria-pressed={motionsStatus === statusOption}
                           onClick={() => {
-                            void handleRoundMotionsStatus(round, statusOption);
+                            void handleRoundMotionsStatus(
+                              round.id,
+                              round.name,
+                              statusOption,
+                            );
                           }}
                         >
                           {motionsButtonText(statusOption)}
@@ -601,11 +480,13 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
                           ? "theia-button secondary"
                           : "theia-button"
                       }
+                      data-action={setRoundFlagAction.id}
                       disabled={!canManageRounds}
                       aria-label={`${round.name} ${t("releases.gateResults")}`}
                       onClick={() => {
                         void handleRoundFlagToggle(
-                          round,
+                          round.id,
+                          round.name,
                           "resultsReleased",
                           !round.resultsReleased,
                         );
@@ -635,11 +516,13 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
                           ? "theia-button secondary"
                           : "theia-button"
                       }
+                      data-action={setRoundFlagAction.id}
                       disabled={!canManageRounds}
                       aria-label={`${round.name} ${t("releases.gateSpeaks")}`}
                       onClick={() => {
                         void handleRoundFlagToggle(
-                          round,
+                          round.id,
+                          round.name,
                           "teamSpeaksReleased",
                           !(round.teamSpeaksReleased === true),
                         );
@@ -669,11 +552,13 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
                           ? "theia-button secondary"
                           : "theia-button"
                       }
+                      data-action={setRoundFlagAction.id}
                       disabled={!canManageRounds}
                       aria-label={`${round.name} ${t("releases.gateAdjudicators")}`}
                       onClick={() => {
                         void handleRoundFlagToggle(
-                          round,
+                          round.id,
+                          round.name,
                           "adjudicatorsRevealed",
                           !(round.adjudicatorsRevealed === true),
                         );
@@ -691,60 +576,16 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
         )}
       </section>
 
-      {renderTournamentGateGroup(t("releases.tabsSectionTitle"), TAB_GATES)}
-
+      {renderTournamentGateGroup(t("releases.tabsSectionTitle"), groups[0] ?? [])}
       {renderTournamentGateGroup(
         t("releases.resultsBreakSectionTitle"),
-        [
-          {
-            gate: "results_all_rounds",
-            labelKey: "releases.gateResultsAllRounds",
-            isReleased: (s) => getPublicRelease(s.tournament.preferences).allResults,
-          },
-        ],
-        sortedBreakCategories.map((cat) => {
-          const released = publicRelease.breakCategoryIds.has(cat.id);
-          const label = t("releases.gateBreakCategory", { name: cat.name });
-          return (
-            <div key={cat.id} className="simpletab-gate-row">
-              <span>{label}</span>
-              <span
-                className={`simpletab-badge ${
-                  released ? "simpletab-badge-add" : ""
-                }`}
-              >
-                {released
-                  ? t("releases.stateReleased")
-                  : t("releases.stateUnreleased")}
-              </span>
-              <button
-                type="button"
-                className={released ? "theia-button secondary" : "theia-button"}
-                disabled={!canManageReleases}
-                aria-label={`${released ? t("releases.actionUnrelease") : t("releases.actionRelease")} ${label}`}
-                onClick={() => {
-                  void handleToggleTournamentGate(
-                    "break_category_published",
-                    !released,
-                    label,
-                    cat.id,
-                  );
-                }}
-              >
-                {released
-                  ? t("releases.actionUnrelease")
-                  : t("releases.actionRelease")}
-              </button>
-            </div>
-          );
-        }),
+        groups[1] ?? [],
       )}
-
-      {renderTournamentGateGroup(t("releases.listsSectionTitle"), LIST_GATES)}
-      {renderTournamentGateGroup(t("releases.ballotsSectionTitle"), BALLOT_GATES)}
+      {renderTournamentGateGroup(t("releases.listsSectionTitle"), groups[2] ?? [])}
+      {renderTournamentGateGroup(t("releases.ballotsSectionTitle"), groups[3] ?? [])}
       {renderTournamentGateGroup(
         t("releases.otherPagesSectionTitle"),
-        OTHER_PAGE_GATES,
+        groups[4] ?? [],
       )}
 
       {bundleDialogOpen ? (
@@ -774,6 +615,7 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
               <button
                 type="button"
                 className="theia-button"
+                data-action={releaseTabBundleAction.id}
                 onClick={() => {
                   void handleConfirmTabBundle();
                 }}
@@ -783,6 +625,7 @@ export const ReleasesView: React.FC<ReleasesViewProps> = ({
               <button
                 type="button"
                 className="theia-button secondary"
+                data-view-only
                 onClick={() => setBundleDialogOpen(false)}
               >
                 {t("common.cancel")}
