@@ -7,6 +7,7 @@ import type {
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "react";
+import { runnerFor } from "../actions/test-context";
 import { DrawView } from "./draw-view";
 
 function makeDrawState(
@@ -213,15 +214,18 @@ const EMPTY_STATUS: HostStatus = {
 
 describe("DrawView", () => {
   it("renders BP and two-team fixtures with the correct side labels", () => {
-    const onSubmitOp = vi.fn<() => Promise<SubmitResult>>();
-    const onUndoOp = vi.fn<() => Promise<SubmitResult>>();
+    const submit = async (): Promise<SubmitResult> => ({
+      ok: true,
+      seq: 11,
+      writes: [],
+      committedPayload: null,
+    });
 
     const { rerender } = render(
       <DrawView
         state={makeDrawState("bp")}
         status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
-        onUndoOp={onUndoOp}
+        run={runnerFor({ state: makeDrawState("bp"), submit })}
       />,
     );
 
@@ -231,12 +235,12 @@ describe("DrawView", () => {
     expect(screen.getByRole("columnheader", { name: "CO" })).toBeTruthy();
     expect(screen.getByText("Team Alpha")).toBeTruthy();
 
+    const twoTeamState = makeDrawState("uadc");
     rerender(
       <DrawView
-        state={makeDrawState("uadc")}
+        state={twoTeamState}
         status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
-        onUndoOp={onUndoOp}
+        run={runnerFor({ state: twoTeamState, submit })}
       />,
     );
 
@@ -251,7 +255,8 @@ describe("DrawView", () => {
 
   it("keyboard move of a team submits draw.move_team with expected versions", async () => {
     const submitted: OpRequest[] = [];
-    const onSubmitOp = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
+    const state = makeDrawState("bp");
+    const submit = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
       submitted.push(req);
       return {
         ok: true,
@@ -263,10 +268,9 @@ describe("DrawView", () => {
 
     render(
       <DrawView
-        state={makeDrawState("bp")}
+        state={state}
         status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
-        onUndoOp={vi.fn()}
+        run={runnerFor({ state, submit })}
       />,
     );
 
@@ -311,18 +315,23 @@ describe("DrawView", () => {
         },
       ],
     };
-    const onCancelLock = vi.fn(async (lockId: string) => ({
+    const cancelLong = vi.fn(async (lockId: string) => ({
       ok: true as const,
       lockId,
     }));
+    const submit = async (): Promise<SubmitResult> => ({
+      ok: true,
+      seq: 11,
+      writes: [],
+      committedPayload: null,
+    });
+    const ownerState = makeDrawState("bp", { roleId: "host_owner" });
 
     const { rerender } = render(
       <DrawView
-        state={makeDrawState("bp", { roleId: "host_owner" })}
+        state={ownerState}
         status={lockedStatus}
-        onSubmitOp={vi.fn()}
-        onUndoOp={vi.fn()}
-        onCancelLock={onCancelLock}
+        run={runnerFor({ state: ownerState, submit, cancelLong })}
       />,
     );
 
@@ -330,16 +339,15 @@ describe("DrawView", () => {
     const cancelBtn = screen.getByRole("button", { name: "Cancel" });
     fireEvent.click(cancelBtn);
     await waitFor(() => {
-      expect(onCancelLock).toHaveBeenCalledWith("lock-r3");
+      expect(cancelLong).toHaveBeenCalledWith("lock-r3");
     });
 
+    const directorState = makeDrawState("bp", { roleId: "tab_director" });
     rerender(
       <DrawView
-        state={makeDrawState("bp", { roleId: "tab_director" })}
+        state={directorState}
         status={lockedStatus}
-        onSubmitOp={vi.fn()}
-        onUndoOp={vi.fn()}
-        onCancelLock={onCancelLock}
+        run={runnerFor({ state: directorState, submit, cancelLong })}
       />,
     );
 
@@ -349,7 +357,7 @@ describe("DrawView", () => {
 
   it("renders inline VERSION_CONFLICT error next to affected room with current value and Retry", async () => {
     const calls: OpRequest[] = [];
-    const onSubmitOp = vi
+    const submit = vi
       .fn<(req: OpRequest) => Promise<SubmitResult>>()
       .mockImplementationOnce(async (req) => {
         calls.push(req);
@@ -371,13 +379,10 @@ describe("DrawView", () => {
       });
 
     const initial = makeDrawState("uadc");
+    let liveState: ProjectedState = initial;
+    const run = runnerFor({ state: () => liveState, submit });
     const { rerender } = render(
-      <DrawView
-        state={initial}
-        status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
-        onUndoOp={vi.fn()}
-      />,
+      <DrawView state={initial} status={EMPTY_STATUS} run={run} />,
     );
 
     fireEvent.click(
@@ -393,16 +398,10 @@ describe("DrawView", () => {
     ).toBeTruthy();
 
     // Simulate store refreshing latest version 8 before Retry is clicked
-    rerender(
-      <DrawView
-        state={makeDrawState("uadc", {
-          versions: { ...initial.versions, "debate:d1": 8 },
-        })}
-        status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
-        onUndoOp={vi.fn()}
-      />,
-    );
+    liveState = makeDrawState("uadc", {
+      versions: { ...initial.versions, "debate:d1": 8 },
+    });
+    rerender(<DrawView state={liveState} status={EMPTY_STATUS} run={run} />);
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
     await waitFor(() => {
@@ -413,7 +412,7 @@ describe("DrawView", () => {
 
   it("submits stage transitions, restore undo with blockers, and swing team creation", async () => {
     const submitted: OpRequest[] = [];
-    const onSubmitOp = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
+    const submit = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
       submitted.push(req);
       return {
         ok: true,
@@ -422,20 +421,20 @@ describe("DrawView", () => {
         committedPayload: req.payload,
       };
     });
-    const onUndoOp = vi.fn(async (): Promise<SubmitResult> => ({
+    const undo = vi.fn(async (): Promise<SubmitResult> => ({
       ok: false,
       code: "CANNOT_UNDO",
       errors: ["Operation 9 is blocked by later operations: 10."],
       blockingSeqs: [10],
     }));
+    const state = makeDrawState("bp");
 
     render(
       <DrawView
-        state={makeDrawState("bp")}
+        state={state}
         status={EMPTY_STATUS}
         lastGenerateSeq={9}
-        onSubmitOp={onSubmitOp}
-        onUndoOp={onUndoOp}
+        run={runnerFor({ state, submit, undo })}
       />,
     );
 
@@ -453,7 +452,7 @@ describe("DrawView", () => {
       screen.getByRole("button", { name: "Restore previous draw" }),
     );
     await waitFor(() => {
-      expect(onUndoOp).toHaveBeenCalledWith(9);
+      expect(undo).toHaveBeenCalledWith(9);
       expect(screen.getByText("Cannot undo")).toBeTruthy();
       expect(screen.getByText(/Blocked by later operation\(s\): #10/)).toBeTruthy();
     });

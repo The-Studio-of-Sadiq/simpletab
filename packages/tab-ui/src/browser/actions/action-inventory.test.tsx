@@ -11,7 +11,11 @@ import * as React from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { ActionResult, ActionRunner } from "./action";
 import { ALL_ACTION_IDS } from "./all-actions";
+import { AllocationView } from "../components/allocation-view";
+import { CheckinView } from "../components/checkin-view";
 import { DevicesView } from "../components/devices-view";
+import { DrawView } from "../components/draw-view";
+import { MotionsView } from "../components/motions-view";
 import { ProposalsView } from "../components/proposals-view";
 import { ReleasesView } from "../components/releases-view";
 
@@ -22,20 +26,16 @@ import { ReleasesView } from "../components/releases-view";
  * requires the list to be empty.
  */
 const PENDING_COMPONENTS: ReadonlySet<string> = new Set([
-  "allocation-view.tsx",
   "assistant-view.tsx",
   "ballot-form.tsx",
   "break-view.tsx",
   "changelog-view.tsx",
-  "checkin-view.tsx",
   "credentials-view.tsx",
   "csv-import-panel.tsx",
   "device-banner.tsx",
-  "draw-view.tsx",
   "feedback-view.tsx",
   "join-host-panel.tsx",
   "links-view.tsx",
-  "motions-view.tsx",
   "participants-view.tsx",
   "projector-control-view.tsx",
   "projector-view.tsx",
@@ -79,6 +79,47 @@ function expectRegisteredButtons(container: HTMLElement): void {
   for (const button of buttons) {
     expect(button.hasAttribute("data-action") || button.hasAttribute("data-view-only")).toBe(true);
   }
+}
+
+/** Minimal state that renders action buttons on all four newly converted pages. */
+function inventoryState(): ProjectedState {
+  return {
+    seq: 1,
+    roleId: "host_owner",
+    permissions: [
+      "draw.generate",
+      "draw.release",
+      "allocation.edit",
+      "checkins.edit",
+      "motions.manage",
+      "rounds.manage",
+    ],
+    versions: {},
+    tournament: {
+      id: "t1",
+      format: "bp",
+      simpletab: { timeZone: "UTC" },
+      preferences: { substantiveSpeakers: 2, teamsInDebate: 4 },
+    },
+    rounds: [
+      {
+        id: "r1",
+        seq: 1,
+        name: "Round 1",
+        stage: "preliminary",
+        drawStatus: "draft",
+      },
+    ],
+    teams: [{ id: "t1", name: "Team One", speakers: [], checkedIn: true }],
+    adjudicators: [{ id: "a1", name: "Judge One" }],
+    venues: [{ id: "v1", name: "Room One" }],
+    debates: [],
+    motions: [],
+    ballots: [],
+    feedback: [],
+    institutions: [],
+    breakCategories: [],
+  } as unknown as ProjectedState;
 }
 
 describe("M8 action inventory", () => {
@@ -149,6 +190,46 @@ describe("M8 action inventory", () => {
     const run = vi.fn(async (): Promise<ActionResult> => ({ ok: true }));
     const { container } = render(
       <ReleasesView state={state} status={status} run={run as unknown as ActionRunner} />,
+    );
+    expectRegisteredButtons(container);
+  });
+
+  it("points every rendered action button of the Draw page at a registered command", () => {
+    const state = inventoryState();
+    const status: HostStatus = { open: true, locks: [] };
+    const run = vi.fn(async (): Promise<ActionResult> => ({ ok: true }));
+    const { container } = render(
+      <DrawView state={state} status={status} run={run as unknown as ActionRunner} />,
+    );
+    expectRegisteredButtons(container);
+  });
+
+  it("points every rendered action button of the Allocation page at a registered command", () => {
+    const state = inventoryState();
+    const status: HostStatus = { open: true, locks: [] };
+    const run = vi.fn(async (): Promise<ActionResult> => ({ ok: true }));
+    const { container } = render(
+      <AllocationView state={state} status={status} run={run as unknown as ActionRunner} />,
+    );
+    expectRegisteredButtons(container);
+  });
+
+  it("points every rendered action button of the Check-in page at a registered command", () => {
+    const state = inventoryState();
+    const status: HostStatus = { open: true, locks: [] };
+    const run = vi.fn(async (): Promise<ActionResult> => ({ ok: true }));
+    const { container } = render(
+      <CheckinView state={state} status={status} run={run as unknown as ActionRunner} />,
+    );
+    expectRegisteredButtons(container);
+  });
+
+  it("points every rendered action button of the Motions page at a registered command", () => {
+    const state = inventoryState();
+    const status: HostStatus = { open: true, locks: [] };
+    const run = vi.fn(async (): Promise<ActionResult> => ({ ok: true }));
+    const { container } = render(
+      <MotionsView state={state} status={status} run={run as unknown as ActionRunner} />,
     );
     expectRegisteredButtons(container);
   });

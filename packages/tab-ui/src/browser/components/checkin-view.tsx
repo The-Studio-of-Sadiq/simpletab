@@ -1,15 +1,16 @@
 import { getEligibleTeamsForRound } from "@simpletab/core/lib/draw/generator";
 import { isAvailableForRound } from "@simpletab/core/lib/roundAvailability";
 import { isVenueCheckedIn } from "@simpletab/core/lib/venues/venues";
-import { recordKey, type OpRequest, type RecordKey } from "@simpletab/core/ops";
 import type { Adjudicator, Team, Venue } from "@simpletab/core/types";
 import type {
-  HostCancelLongResult,
   HostStatus,
   ProjectedState,
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner, SimpleTabAction } from "../actions/action";
+import { setParticipantAction, setVenueAction } from "../actions/checkin-actions";
+import { openSetupAction } from "../actions/releases-actions";
 import { t } from "../i18n";
 import { InlineOpError, type InlineOpErrorData } from "./inline-op-error";
 import { LockBanner } from "./lock-banner";
@@ -25,35 +26,17 @@ export interface CheckinViewProps {
   status: HostStatus;
   selectedRoundId?: string;
   onSelectRound?: (roundId: string) => void;
-  onSubmitOp: (request: OpRequest) => Promise<SubmitResult>;
-  onCancelLock?: (lockId: string) => Promise<HostCancelLongResult | void>;
-  onOpenSetup?: () => void;
+  /** Runs the same commands as the palette; no op building happens here. */
+  run: ActionRunner;
 }
 
 interface RowErrorState {
   error: InlineOpErrorData;
-  retryRequest: OpRequest;
+  retry: (runner: ActionRunner) => Promise<SubmitResult>;
 }
 
 function buildRowKey(tab: CheckinTabId, id: string): string {
   return `${tab}:${id}`;
-}
-
-function withFreshVersions(
-  request: OpRequest,
-  versions: Record<RecordKey, number>,
-): OpRequest {
-  if (request.expectedVersions === undefined) {
-    return request;
-  }
-  const nextVersions: Record<RecordKey, number> = {};
-  for (const key of Object.keys(request.expectedVersions) as RecordKey[]) {
-    nextVersions[key] = versions[key] ?? 0;
-  }
-  return {
-    ...request,
-    expectedVersions: nextVersions,
-  };
 }
 
 export const CheckinView: React.FC<CheckinViewProps> = ({
@@ -61,9 +44,7 @@ export const CheckinView: React.FC<CheckinViewProps> = ({
   status,
   selectedRoundId: controlledRoundId,
   onSelectRound,
-  onSubmitOp,
-  onCancelLock,
-  onOpenSetup,
+  run,
 }) => {
   const baseId = React.useId();
   const [activeTab, setActiveTab] = React.useState<CheckinTabId>("teams");
@@ -134,11 +115,16 @@ export const CheckinView: React.FC<CheckinViewProps> = ({
         </div>
         <div className="simpletab-alert">
           <p>{t("common.noTournamentPrompt")}</p>
-          {onOpenSetup !== undefined ? (
-            <button type="button" className="theia-button" onClick={onOpenSetup}>
-              {t("common.openSetupButton")}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="theia-button"
+            data-action={openSetupAction.id}
+            onClick={() => {
+              void run(openSetupAction, {});
+            }}
+          >
+            {t("common.openSetupButton")}
+          </button>
         </div>
       </div>
     );
@@ -252,39 +238,6 @@ export const CheckinView: React.FC<CheckinViewProps> = ({
     tabRefs.current[nextTab]?.focus();
   };
 
-  const buildToggleRequest = (
-    tab: CheckinTabId,
-    id: string,
-    targetAvailable: boolean,
-  ): OpRequest | null => {
-    if (tab === "venues") {
-      const key = recordKey("venue", id);
-      return {
-        type: "checkin.set_venue",
-        expectedVersions: { [key]: state.versions[key] ?? 0 },
-        payload: {
-          venueId: id,
-          checkedIn: targetAvailable,
-        },
-      };
-    }
-    if (selectedRound === undefined) {
-      return null;
-    }
-    const entityType = tab === "teams" ? "team" : "adjudicator";
-    const key = recordKey(entityType, id);
-    return {
-      type: "checkin.set_participant",
-      expectedVersions: { [key]: state.versions[key] ?? 0 },
-      payload: {
-        entityType,
-        entityId: id,
-        roundId: selectedRound.id,
-        available: targetAvailable,
-      },
-    };
-  };
-
   const describeCurrentRowValue = (tab: CheckinTabId, id: string): string => {
     if (tab === "teams") {
       const item = state.teams.find((tm) => tm.id === id);
@@ -307,11 +260,13 @@ export const CheckinView: React.FC<CheckinViewProps> = ({
     return `${venue.name}: ${isVenueReady(venue) ? t("checkin.statusCheckedIn") : t("checkin.statusNotCheckedIn")}`;
   };
 
-  const submitRowToggle = async (
+  const submitRowToggleResult = async <A,>(
+    runner: ActionRunner,
+    action: SimpleTabAction<A, SubmitResult>,
+    args: A,
     tab: CheckinTabId,
     id: string,
-    request: OpRequest,
-  ): Promise<boolean> => {
+  ): Promise<SubmitResult> => {
     const rKey = buildRowKey(tab, id);
     setRowErrors((prev) => {
       if (!(rKey in prev)) {
@@ -322,7 +277,7 @@ export const CheckinView: React.FC<CheckinViewProps> = ({
       return next;
     });
 
-    const result = await onSubmitOp(request);
+    const result = await runner(action, args);
     if (!result.ok) {
       setRowErrors((prev) => ({
         ...prev,
@@ -333,12 +288,53 @@ export const CheckinView: React.FC<CheckinViewProps> = ({
             current: result.current,
             currentSummary: describeCurrentRowValue(tab, id),
           },
-          retryRequest: request,
+          retry: (currentRun) =>
+            submitRowToggleResult(currentRun, action, args, tab, id),
         },
       }));
+      return result;
+    }
+    return result;
+  };
+
+  const submitRowToggle = async <A,>(
+    runner: ActionRunner,
+    action: SimpleTabAction<A, SubmitResult>,
+    args: A,
+    tab: CheckinTabId,
+    id: string,
+  ): Promise<boolean> =>
+    (await submitRowToggleResult(runner, action, args, tab, id)).ok;
+
+  const handleToggleVenue = async (venue: Venue): Promise<boolean> =>
+    submitRowToggle(
+      run,
+      setVenueAction,
+      { venueId: venue.id, checkedIn: !isVenueReady(venue) },
+      "venues",
+      venue.id,
+    );
+
+  const handleToggleParticipant = async (
+    tab: "teams" | "adjudicators",
+    id: string,
+    targetAvailable: boolean,
+  ): Promise<boolean> => {
+    if (selectedRound === undefined) {
       return false;
     }
-    return true;
+    return submitRowToggle(
+      run,
+      setParticipantAction,
+      {
+        entityType: tab === "teams" ? "team" : "adjudicator",
+        entityId: id,
+        roundId: selectedRound.id,
+        available: targetAvailable,
+      },
+      tab,
+      id,
+    );
   };
 
   const handleBulkToggle = async (targetAvailable: boolean): Promise<void> => {
@@ -374,11 +370,13 @@ export const CheckinView: React.FC<CheckinViewProps> = ({
     let failed = 0;
     try {
       for (const id of idsToUpdate) {
-        const req = buildToggleRequest(activeTab, id, targetAvailable);
-        if (req === null) {
-          continue;
+        let ok: boolean;
+        if (activeTab === "venues") {
+          const venue = state.venues.find((item) => item.id === id);
+          ok = venue === undefined ? false : await handleToggleVenue(venue);
+        } else {
+          ok = await handleToggleParticipant(activeTab, id, targetAvailable);
         }
-        const ok = await submitRowToggle(activeTab, id, req);
         if (ok) {
           succeeded += 1;
         } else {
@@ -404,8 +402,7 @@ export const CheckinView: React.FC<CheckinViewProps> = ({
           currentSummary: describeCurrentRowValue(tab, id),
         }}
         onRetry={() => {
-          const fresh = withFreshVersions(entry.retryRequest, state.versions);
-          void submitRowToggle(tab, id, fresh);
+          void entry.retry(run);
         }}
         onDismiss={() => {
           setRowErrors((prev) => {
@@ -462,7 +459,7 @@ export const CheckinView: React.FC<CheckinViewProps> = ({
         locks={status.locks}
         rounds={state.rounds}
         isHostOwner={isHostOwner}
-        onCancelLock={onCancelLock}
+        run={run}
       />
 
       {selectedRound === undefined ? (
@@ -486,6 +483,7 @@ export const CheckinView: React.FC<CheckinViewProps> = ({
                   }}
                   id={`${baseId}-tab-${tab}`}
                   type="button"
+                  data-view-only
                   role="tab"
                   aria-selected={selected}
                   aria-controls={`${baseId}-panel-${tab}`}
@@ -509,6 +507,11 @@ export const CheckinView: React.FC<CheckinViewProps> = ({
                 <button
                   type="button"
                   className="theia-button"
+                  data-action={
+                    activeTab === "venues"
+                      ? setVenueAction.id
+                      : setParticipantAction.id
+                  }
                   disabled={bulkBusy}
                   onClick={() => {
                     void handleBulkToggle(true);
@@ -519,6 +522,11 @@ export const CheckinView: React.FC<CheckinViewProps> = ({
                 <button
                   type="button"
                   className="theia-button secondary"
+                  data-action={
+                    activeTab === "venues"
+                      ? setVenueAction.id
+                      : setParticipantAction.id
+                  }
                   disabled={bulkBusy}
                   onClick={() => {
                     void handleBulkToggle(false);
@@ -634,19 +642,17 @@ export const CheckinView: React.FC<CheckinViewProps> = ({
                               <button
                                 type="button"
                                 className="theia-button secondary"
+                                data-action={setParticipantAction.id}
                                 aria-pressed={available}
                                 aria-label={t("checkin.toggleAria", {
                                   name: team.name,
                                 })}
                                 onClick={() => {
-                                  const req = buildToggleRequest(
+                                  void handleToggleParticipant(
                                     "teams",
                                     team.id,
                                     !available,
                                   );
-                                  if (req !== null) {
-                                    void submitRowToggle("teams", team.id, req);
-                                  }
                                 }}
                               >
                                 {available
@@ -734,23 +740,17 @@ export const CheckinView: React.FC<CheckinViewProps> = ({
                               <button
                                 type="button"
                                 className="theia-button secondary"
+                                data-action={setParticipantAction.id}
                                 aria-pressed={available}
                                 aria-label={t("checkin.toggleAria", {
                                   name: adj.name,
                                 })}
                                 onClick={() => {
-                                  const req = buildToggleRequest(
+                                  void handleToggleParticipant(
                                     "adjudicators",
                                     adj.id,
                                     !available,
                                   );
-                                  if (req !== null) {
-                                    void submitRowToggle(
-                                      "adjudicators",
-                                      adj.id,
-                                      req,
-                                    );
-                                  }
                                 }}
                               >
                                 {available
@@ -822,19 +822,13 @@ export const CheckinView: React.FC<CheckinViewProps> = ({
                               <button
                                 type="button"
                                 className="theia-button secondary"
+                                data-action={setVenueAction.id}
                                 aria-pressed={checkedIn}
                                 aria-label={t("checkin.toggleAria", {
                                   name: venue.name,
                                 })}
                                 onClick={() => {
-                                  const req = buildToggleRequest(
-                                    "venues",
-                                    venue.id,
-                                    !checkedIn,
-                                  );
-                                  if (req !== null) {
-                                    void submitRowToggle("venues", venue.id, req);
-                                  }
+                                  void handleToggleVenue(venue);
                                 }}
                               >
                                 {checkedIn

@@ -3,10 +3,11 @@ import { Message } from "@theia/core/lib/browser";
 import { ReactWidget } from "@theia/core/lib/browser/widgets/react-widget";
 import { inject, injectable, postConstruct } from "@theia/core/shared/inversify";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import { commandActionRunner } from "../actions/action-runner";
 import { CheckinView } from "../components/checkin-view";
 import { onLocaleChange, t } from "../i18n";
 import { TournamentStore } from "../store/tournament-store";
-import { SIMPLETAB_OPEN_SETUP_COMMAND_ID } from "./participants-widget";
 
 @injectable()
 export class CheckinWidget extends ReactWidget {
@@ -14,11 +15,14 @@ export class CheckinWidget extends ReactWidget {
 
   private readonly disposables = new DisposableCollection();
 
+  private readonly run: ActionRunner;
+
   constructor(
     @inject(TournamentStore) private readonly store: TournamentStore,
-    @inject(CommandService) private readonly commandService: CommandService,
+    @inject(CommandService) commands: CommandService,
   ) {
     super();
+    this.run = commandActionRunner(commands);
     this.id = CheckinWidget.ID;
     this.title.label = t("checkin.widgetLabel");
     this.title.caption = t("checkin.widgetLabel");
@@ -57,11 +61,7 @@ export class CheckinWidget extends ReactWidget {
         status={snapshot.status}
         selectedRoundId={this.store.getSelectedRoundId() ?? undefined}
         onSelectRound={(roundId) => this.store.setSelectedRoundId(roundId)}
-        onSubmitOp={(request) => this.store.submit(request)}
-        onCancelLock={(lockId) => this.store.cancelLong(lockId)}
-        onOpenSetup={() => {
-          void this.commandService.executeCommand(SIMPLETAB_OPEN_SETUP_COMMAND_ID);
-        }}
+        run={this.run}
       />
     );
   }

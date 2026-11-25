@@ -49,6 +49,10 @@ export interface FakeStoreOptions {
   devicesStatus?: DevicesStatus;
   cancelLongResult?: HostCancelLongResult;
   exportCopyFile?: string;
+  /** Result returned by `undo`; defaults to the result passed to `fakeStore`. */
+  undoResult?: SubmitResult;
+  /** Live state for action `run` methods; defaults to the state passed to `fakeStore`. */
+  getState?: () => ProjectedState | null;
 }
 
 export interface FakeStoreCalls {
@@ -70,12 +74,14 @@ export interface FakeStoreCalls {
   successionOrders: string[][];
   promoteParams: PromoteParams[];
   exportDirectories: string[];
+  undoneSeqs: number[];
 }
 
 export interface FakeStore {
   submitted: OpRequest[];
   calls: FakeStoreCalls;
   store: TournamentStore;
+  undoneSeqs: number[];
 }
 
 const OK = { ok: true, seq: 1, writes: [] } as unknown as SubmitResult;
@@ -116,6 +122,7 @@ export function fakeStore(
     successionOrders: [],
     promoteParams: [],
     exportDirectories: [],
+    undoneSeqs: [],
   };
   const status: HostStatus = {
     open: state !== null,
@@ -138,7 +145,7 @@ export function fakeStore(
 
   const store = {
     getSnapshot: () => snapshot,
-    getState: () => state,
+    getState: () => options.getState?.() ?? state,
     getStatus: () => {
       calls.statusReads += 1;
       return status;
@@ -146,6 +153,10 @@ export function fakeStore(
     submit: async (request: OpRequest) => {
       calls.submitted.push(request);
       return result;
+    },
+    undo: async (seq: number): Promise<SubmitResult> => {
+      calls.undoneSeqs.push(seq);
+      return options.undoResult ?? result;
     },
     getPublishStatus: async () => {
       calls.publishStatusReads += 1;
@@ -211,7 +222,7 @@ export function fakeStore(
       return options.exportCopyFile ?? "";
     },
   } as unknown as TournamentStore;
-  return { submitted: calls.submitted, calls, store };
+  return { submitted: calls.submitted, calls, store, undoneSeqs: calls.undoneSeqs };
 }
 
 export function testContext(
@@ -233,4 +244,27 @@ export function directRunner(
     args: A,
   ): Promise<R> => action.run(ctx, args);
   return run as unknown as ActionRunner;
+}
+
+export interface RunnerOptions {
+  /** Fixed state, or a live getter so retries see fresh versions. */
+  state: ProjectedState | null | (() => ProjectedState | null);
+  submit: (request: OpRequest) => Promise<SubmitResult>;
+  undo?: (seq: number) => Promise<SubmitResult>;
+  cancelLong?: (lockId: string) => Promise<HostCancelLongResult | void>;
+}
+
+/** Adapts a page's old op callbacks to the action runner it now receives. */
+export function runnerFor(options: RunnerOptions): ActionRunner {
+  const getState =
+    typeof options.state === "function" ? options.state : () => options.state;
+  const store = {
+    getState,
+    submit: options.submit,
+    undo: options.undo ?? (async () => OK),
+    cancelLong:
+      options.cancelLong ??
+      (async (lockId: string) => ({ ok: true, lockId })),
+  } as unknown as TournamentStore;
+  return directRunner(store);
 }

@@ -7,6 +7,7 @@ import type {
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "react";
+import { runnerFor } from "../actions/test-context";
 import { AllocationView } from "./allocation-view";
 
 function makeAllocationState(
@@ -224,7 +225,7 @@ const EMPTY_STATUS: HostStatus = {
 describe("AllocationView", () => {
   it("flags adjudicator conflicts with a visible text label and submits swap-rooms as ONE op", async () => {
     const submitted: OpRequest[] = [];
-    const onSubmitOp = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
+    const submit = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
       submitted.push(req);
       return {
         ok: true,
@@ -233,13 +234,13 @@ describe("AllocationView", () => {
         committedPayload: req.payload,
       };
     });
+    const state = makeAllocationState();
 
     render(
       <AllocationView
-        state={makeAllocationState()}
+        state={state}
         status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
-        onUndoOp={vi.fn()}
+        run={runnerFor({ state, submit })}
       />,
     );
 
@@ -273,7 +274,7 @@ describe("AllocationView", () => {
 
   it("renders inline VERSION_CONFLICT error for manual assign with Retry and supports preformed panels", async () => {
     const submitted: OpRequest[] = [];
-    const onSubmitOp = vi
+    const submit = vi
       .fn<(req: OpRequest) => Promise<SubmitResult>>()
       .mockImplementationOnce(async (req) => {
         submitted.push(req);
@@ -295,13 +296,10 @@ describe("AllocationView", () => {
       });
 
     const initial = makeAllocationState();
+    let liveState: ProjectedState = initial;
+    const run = runnerFor({ state: () => liveState, submit });
     const { rerender } = render(
-      <AllocationView
-        state={initial}
-        status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
-        onUndoOp={vi.fn()}
-      />,
+      <AllocationView state={initial} status={EMPTY_STATUS} run={run} />,
     );
 
     // Edit Room 1 manually
@@ -319,15 +317,11 @@ describe("AllocationView", () => {
       screen.getByText(/Current value: Room 1 panel: Chair: Judge Oxford/),
     ).toBeTruthy();
 
+    liveState = makeAllocationState({
+      versions: { ...initial.versions, "debate:d1": 6 },
+    });
     rerender(
-      <AllocationView
-        state={makeAllocationState({
-          versions: { ...initial.versions, "debate:d1": 6 },
-        })}
-        status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
-        onUndoOp={vi.fn()}
-      />,
+      <AllocationView state={liveState} status={EMPTY_STATUS} run={run} />,
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Retry" }));
@@ -361,7 +355,7 @@ describe("AllocationView", () => {
 
   it("submits allocation.auto and shows lock banner with Cancel for host owner only", async () => {
     const submitted: OpRequest[] = [];
-    const onSubmitOp = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
+    const submit = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
       submitted.push(req);
       return {
         ok: true,
@@ -370,6 +364,10 @@ describe("AllocationView", () => {
         committedPayload: { warnings: [] },
       };
     });
+    const cancelLong = vi.fn(async (lockId: string) => ({
+      ok: true as const,
+      lockId,
+    }));
 
     const lockedStatus: HostStatus = {
       ...EMPTY_STATUS,
@@ -384,13 +382,12 @@ describe("AllocationView", () => {
       ],
     };
 
+    const state = makeAllocationState();
     render(
       <AllocationView
-        state={makeAllocationState()}
+        state={state}
         status={lockedStatus}
-        onSubmitOp={onSubmitOp}
-        onUndoOp={vi.fn()}
-        onCancelLock={vi.fn()}
+        run={runnerFor({ state, submit, cancelLong })}
       />,
     );
 

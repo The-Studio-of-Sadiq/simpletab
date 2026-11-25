@@ -6,6 +6,7 @@ import type {
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "react";
+import { runnerFor } from "../actions/test-context";
 import { CheckinView } from "./checkin-view";
 
 function makeState(overrides: Partial<ProjectedState> = {}): ProjectedState {
@@ -178,7 +179,7 @@ const EMPTY_STATUS: HostStatus = {
 describe("CheckinView", () => {
   it("defaults to current round, displays availability counts, and toggles team/venue with expectedVersions", async () => {
     const submitted: OpRequest[] = [];
-    const onSubmitOp = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
+    const submit = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
       submitted.push(req);
       return {
         ok: true,
@@ -187,12 +188,13 @@ describe("CheckinView", () => {
         committedPayload: req.payload,
       };
     });
+    const state = makeState();
 
     render(
       <CheckinView
-        state={makeState()}
+        state={state}
         status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
+        run={runnerFor({ state, submit })}
       />,
     );
 
@@ -238,7 +240,7 @@ describe("CheckinView", () => {
 
   it("filters rows by search and status and bulk marks only unavailable filtered items", async () => {
     const submitted: OpRequest[] = [];
-    const onSubmitOp = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
+    const submit = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
       submitted.push(req);
       return {
         ok: true,
@@ -247,12 +249,13 @@ describe("CheckinView", () => {
         committedPayload: req.payload,
       };
     });
+    const state = makeState();
 
     render(
       <CheckinView
-        state={makeState()}
+        state={state}
         status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
+        run={runnerFor({ state, submit })}
       />,
     );
 

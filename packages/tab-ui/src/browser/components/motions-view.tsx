@@ -3,15 +3,26 @@ import {
   motionsStatusOf,
 } from "@simpletab/core/features/tournament/application/motionRelease";
 import { hasInfoSlide } from "@simpletab/core/lib/motions/infoSlideMedia";
-import { recordKey, type OpRequest, type RecordKey } from "@simpletab/core/ops";
 import type { Motion, MotionsStatus } from "@simpletab/core/types";
 import type {
-  HostCancelLongResult,
   HostStatus,
   ProjectedState,
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import {
+  createMotionAction,
+  deleteMotionAction,
+  setBallotDeadlineAction,
+  updateMotionAction,
+  type SetBallotDeadlineArgs,
+} from "../actions/motions-actions";
+import {
+  openSetupAction,
+  setRoundMotionsAction,
+  type SetRoundMotionsArgs,
+} from "../actions/releases-actions";
 import { t } from "../i18n";
 import {
   COMMON_TIME_ZONES,
@@ -31,32 +42,25 @@ export interface MotionsViewProps {
   status: HostStatus;
   selectedRoundId?: string;
   onSelectRound?: (roundId: string) => void;
-  onSubmitOp: (request: OpRequest) => Promise<SubmitResult>;
-  onCancelLock?: (lockId: string) => Promise<HostCancelLongResult | void>;
-  onOpenSetup?: () => void;
+  /** Runs the same commands as the palette; no op building happens here. */
+  run: ActionRunner;
   nowIso?: string;
+}
+
+interface RetryEntry {
+  retry: (runner: ActionRunner) => Promise<SubmitResult>;
 }
 
 interface MotionRowErrorEntry {
   error: InlineOpErrorData;
-  retryRequest: OpRequest;
+  retry: (runner: ActionRunner) => Promise<SubmitResult>;
 }
 
-function withFreshVersions(
-  request: OpRequest,
-  versions: Record<RecordKey, number>,
-): OpRequest {
-  if (request.expectedVersions === undefined) {
-    return request;
-  }
-  const next: Record<RecordKey, number> = {};
-  for (const key of Object.keys(request.expectedVersions) as RecordKey[]) {
-    next[key] = versions[key] ?? 0;
-  }
-  return {
-    ...request,
-    expectedVersions: next,
-  };
+interface DeadlineAttempt {
+  args: SetBallotDeadlineArgs;
+  cleared: boolean;
+  displayTime?: string;
+  displayZone?: string;
 }
 
 function motionsStatusLabel(statusValue: MotionsStatus): string {
@@ -81,24 +85,12 @@ function releaseButtonLabel(statusValue: MotionsStatus): string {
   }
 }
 
-function createMotionId(): string {
-  if (
-    typeof globalThis.crypto !== "undefined" &&
-    typeof globalThis.crypto.randomUUID === "function"
-  ) {
-    return `motion-${globalThis.crypto.randomUUID()}`;
-  }
-  return `motion-${Date.now()}-${Math.floor(Math.random() * 100_000)}`;
-}
-
 export const MotionsView: React.FC<MotionsViewProps> = ({
   state,
   status,
   selectedRoundId: controlledRoundId,
   onSelectRound,
-  onSubmitOp,
-  onCancelLock,
-  onOpenSetup,
+  run,
   nowIso,
 }) => {
   const baseId = React.useId();
@@ -110,8 +102,8 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
   const [releaseSuccess, setReleaseSuccess] = React.useState<string | null>(
     null,
   );
-  const [lastReleaseRequest, setLastReleaseRequest] =
-    React.useState<OpRequest | null>(null);
+  const [lastReleaseRetry, setLastReleaseRetry] =
+    React.useState<RetryEntry | null>(null);
 
   // Deadline form state
   const [deadlineDate, setDeadlineDate] = React.useState("");
@@ -122,8 +114,8 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
   const [deadlineSuccess, setDeadlineSuccess] = React.useState<string | null>(
     null,
   );
-  const [lastDeadlineRequest, setLastDeadlineRequest] =
-    React.useState<OpRequest | null>(null);
+  const [lastDeadlineRetry, setLastDeadlineRetry] =
+    React.useState<RetryEntry | null>(null);
 
   // Motion editor state
   const [editingMotionId, setEditingMotionId] = React.useState<string | null>(
@@ -236,11 +228,16 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
         </div>
         <div className="simpletab-alert">
           <p>{t("common.noTournamentPrompt")}</p>
-          {onOpenSetup !== undefined ? (
-            <button type="button" className="theia-button" onClick={onOpenSetup}>
-              {t("common.openSetupButton")}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="theia-button"
+            data-action={openSetupAction.id}
+            onClick={() => {
+              void run(openSetupAction, {});
+            }}
+          >
+            {t("common.openSetupButton")}
+          </button>
         </div>
       </div>
     );
@@ -255,71 +252,76 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
     onSelectRound?.(roundId);
   };
 
-  const submitReleaseStatus = async (
-    nextStatus: MotionsStatus,
-    overrideRequest?: OpRequest,
-  ): Promise<void> => {
-    if (selectedRound === undefined) {
-      return;
-    }
+  const performRelease = async (
+    runner: ActionRunner,
+    args: SetRoundMotionsArgs,
+  ): Promise<SubmitResult> => {
     setReleaseError(null);
     setReleaseSuccess(null);
-    const roundKey = recordKey("round", selectedRound.id);
-    const request: OpRequest = overrideRequest ?? {
-      type: "motion.set_round_status",
-      expectedVersions: {
-        [roundKey]: state.versions[roundKey] ?? 0,
-      },
-      payload: {
-        roundId: selectedRound.id,
-        status: nextStatus,
-        now: nowIso ?? new Date().toISOString(),
-      },
-    };
-    setLastReleaseRequest(request);
-    const result = await onSubmitOp(request);
+    const result = await runner(setRoundMotionsAction, args);
     if (!result.ok) {
       setReleaseError({
         code: result.code,
         errors: result.errors,
         current: result.current,
       });
-      return;
+      return result;
     }
     setReleaseSuccess(
       t("motions.releaseUpdated", {
-        round: selectedRound.name,
-        status: motionsStatusLabel(nextStatus),
+        round: selectedRound?.name ?? "",
+        status: motionsStatusLabel(args.status),
       }),
     );
+    return result;
   };
 
-  const submitDeadlineRequest = async (
-    request: OpRequest,
-    cleared: boolean,
-    displayTime?: string,
-    displayZone?: string,
-  ): Promise<void> => {
+  const submitReleaseStatus = async (nextStatus: MotionsStatus): Promise<void> => {
+    if (selectedRound === undefined) {
+      return;
+    }
+    const args: SetRoundMotionsArgs = {
+      roundId: selectedRound.id,
+      status: nextStatus,
+      now: nowIso ?? new Date().toISOString(),
+    };
+    setLastReleaseRetry(() => ({
+      retry: (currentRun) => performRelease(currentRun, args),
+    }));
+    await performRelease(run, args);
+  };
+
+  const performDeadline = async (
+    runner: ActionRunner,
+    attempt: DeadlineAttempt,
+  ): Promise<SubmitResult> => {
     setDeadlineError(null);
     setDeadlineSuccess(null);
-    setLastDeadlineRequest(request);
-    const result = await onSubmitOp(request);
+    const result = await runner(setBallotDeadlineAction, attempt.args);
     if (!result.ok) {
       setDeadlineError({
         code: result.code,
         errors: result.errors,
         current: result.current,
       });
-      return;
+      return result;
     }
     setDeadlineSuccess(
-      cleared
+      attempt.cleared
         ? t("motions.deadlineCleared")
         : t("motions.deadlineSummary", {
-            time: displayTime ?? "",
-            timeZone: displayZone ?? "",
+            time: attempt.displayTime ?? "",
+            timeZone: attempt.displayZone ?? "",
           }),
     );
+    return result;
+  };
+
+  const submitDeadline = async (attempt: DeadlineAttempt): Promise<void> => {
+    setLastDeadlineRetry(() => ({
+      retry: (currentRun) => performDeadline(currentRun, attempt),
+    }));
+    await performDeadline(run, attempt);
   };
 
   const handleSaveDeadline = async (event: React.FormEvent): Promise<void> => {
@@ -351,46 +353,33 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
       return;
     }
 
-    const roundKey = recordKey("round", selectedRound.id);
-    const request: OpRequest = {
-      type: "round.set_ballot_deadline",
-      expectedVersions: {
-        [roundKey]: state.versions[roundKey] ?? 0,
-      },
-      payload: {
+    await submitDeadline({
+      args: {
         roundId: selectedRound.id,
         ballotDeadline: utcIso,
         timeZone: trimmedZone,
       },
-    };
-    await submitDeadlineRequest(
-      request,
-      false,
-      formatDeadlineTime(utcIso, trimmedZone),
-      trimmedZone,
-    );
+      cleared: false,
+      displayTime: formatDeadlineTime(utcIso, trimmedZone),
+      displayZone: trimmedZone,
+    });
   };
 
   const handleClearDeadline = async (): Promise<void> => {
     if (selectedRound === undefined) {
       return;
     }
-    const roundKey = recordKey("round", selectedRound.id);
     const trimmedZone = isValidIanaTimeZone(deadlineZone.trim())
       ? deadlineZone.trim()
       : defaultTournamentTimeZone(state, selectedRound);
-    const request: OpRequest = {
-      type: "round.set_ballot_deadline",
-      expectedVersions: {
-        [roundKey]: state.versions[roundKey] ?? 0,
-      },
-      payload: {
+    await submitDeadline({
+      args: {
         roundId: selectedRound.id,
         ballotDeadline: null,
         timeZone: trimmedZone,
       },
-    };
-    await submitDeadlineRequest(request, true);
+      cleared: true,
+    });
   };
 
   const handleStartEditMotion = (motion: Motion): void => {
@@ -438,27 +427,11 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
         });
         return;
       }
-      const nextMotion: Motion = {
-        ...existing,
+      const result = await run(updateMotionAction, {
+        motionId: existing.id,
         text: trimmedText,
         ...(trimmedInfo.length > 0 ? { infoSlide: trimmedInfo } : {}),
         ...(trimmedRef.length > 0 ? { reference: trimmedRef } : {}),
-      };
-      if (trimmedInfo.length === 0) {
-        delete nextMotion.infoSlide;
-      }
-      if (trimmedRef.length === 0) {
-        delete nextMotion.reference;
-      }
-      const motionKey = recordKey("motion", existing.id);
-      const result = await onSubmitOp({
-        type: "motion.update",
-        expectedVersions: {
-          [motionKey]: state.versions[motionKey] ?? 0,
-        },
-        payload: {
-          motion: nextMotion,
-        },
       });
       if (!result.ok) {
         setMotionFormError({
@@ -473,27 +446,11 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
       return;
     }
 
-    const nextSeq =
-      roundMotions.reduce(
-        (max, m) => Math.max(max, m.roundSeq?.[selectedRound.id] ?? m.seq ?? 0),
-        0,
-      ) + 1;
-    const created: Motion = {
-      id: createMotionId(),
-      tournamentId: state.tournament.id,
+    const result = await run(createMotionAction, {
+      roundId: selectedRound.id,
       text: trimmedText,
       ...(trimmedInfo.length > 0 ? { infoSlide: trimmedInfo } : {}),
       ...(trimmedRef.length > 0 ? { reference: trimmedRef } : {}),
-      rounds: [selectedRound.id],
-      seq: nextSeq,
-      roundSeq: { [selectedRound.id]: nextSeq },
-      released: motionsStatusOf(selectedRound) === "motions_released",
-    };
-    const result = await onSubmitOp({
-      type: "motion.create",
-      payload: {
-        motion: created,
-      },
     });
     if (!result.ok) {
       setMotionFormError({
@@ -509,29 +466,11 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
     setMotionReference("");
   };
 
-  const submitDeleteMotion = async (
+  const performDeleteMotion = async (
+    runner: ActionRunner,
     motionId: string,
-    overrideRequest?: OpRequest,
-  ): Promise<void> => {
-    setRowErrors((prev) => {
-      if (!(motionId in prev)) {
-        return prev;
-      }
-      const next = { ...prev };
-      delete next[motionId];
-      return next;
-    });
-    const motionKey = recordKey("motion", motionId);
-    const request: OpRequest = overrideRequest ?? {
-      type: "motion.delete",
-      expectedVersions: {
-        [motionKey]: state.versions[motionKey] ?? 0,
-      },
-      payload: {
-        motionId,
-      },
-    };
-    const result = await onSubmitOp(request);
+  ): Promise<SubmitResult> => {
+    const result = await runner(deleteMotionAction, { motionId });
     if (!result.ok) {
       setRowErrors((prev) => ({
         ...prev,
@@ -541,12 +480,25 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
             errors: result.errors,
             current: result.current,
           },
-          retryRequest: request,
+          retry: (currentRun) => performDeleteMotion(currentRun, motionId),
         },
       }));
     } else if (editingMotionId === motionId) {
       handleCancelEditMotion();
     }
+    return result;
+  };
+
+  const submitDeleteMotion = async (motionId: string): Promise<void> => {
+    setRowErrors((prev) => {
+      if (!(motionId in prev)) {
+        return prev;
+      }
+      const next = { ...prev };
+      delete next[motionId];
+      return next;
+    });
+    await performDeleteMotion(run, motionId);
   };
 
   const currentStatus =
@@ -576,7 +528,7 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
         locks={status.locks}
         rounds={state.rounds}
         isHostOwner={isHostOwner}
-        onCancelLock={onCancelLock}
+        run={run}
       />
 
       {selectedRound === undefined ? (
@@ -626,6 +578,7 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
                       className={
                         active ? "theia-button" : "theia-button secondary"
                       }
+                      data-action={setRoundMotionsAction.id}
                       aria-pressed={active}
                       onClick={() => {
                         void submitReleaseStatus(statusOption);
@@ -647,12 +600,9 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
               <InlineOpError
                 error={releaseError}
                 onRetry={
-                  lastReleaseRequest !== null
+                  lastReleaseRetry !== null
                     ? () => {
-                        void submitReleaseStatus(
-                          currentStatus,
-                          withFreshVersions(lastReleaseRequest, state.versions),
-                        );
+                        void lastReleaseRetry.retry(run);
                       }
                     : undefined
                 }
@@ -736,13 +686,18 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
               </div>
 
               <div className="simpletab-actions">
-                <button type="submit" className="theia-button">
+                <button
+                  type="submit"
+                  className="theia-button"
+                  data-action={setBallotDeadlineAction.id}
+                >
                   {t("motions.saveDeadline")}
                 </button>
                 {currentDeadline !== null ? (
                   <button
                     type="button"
                     className="theia-button secondary"
+                    data-action={setBallotDeadlineAction.id}
                     onClick={() => {
                       void handleClearDeadline();
                     }}
@@ -762,12 +717,9 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
               <InlineOpError
                 error={deadlineError}
                 onRetry={
-                  lastDeadlineRequest !== null
+                  lastDeadlineRetry !== null
                     ? () => {
-                        void submitDeadlineRequest(
-                          withFreshVersions(lastDeadlineRequest, state.versions),
-                          false,
-                        );
+                        void lastDeadlineRetry.retry(run);
                       }
                     : undefined
                 }
@@ -821,13 +773,7 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
                               <InlineOpError
                                 error={errEntry.error}
                                 onRetry={() => {
-                                  void submitDeleteMotion(
-                                    motion.id,
-                                    withFreshVersions(
-                                      errEntry.retryRequest,
-                                      state.versions,
-                                    ),
-                                  );
+                                  void errEntry.retry(run);
                                 }}
                                 onDismiss={() => {
                                   setRowErrors((prev) => {
@@ -864,6 +810,7 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
                               <button
                                 type="button"
                                 className="theia-button secondary"
+                                data-view-only
                                 onClick={() => handleStartEditMotion(motion)}
                               >
                                 {t("common.edit")}
@@ -871,6 +818,7 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
                               <button
                                 type="button"
                                 className="theia-button secondary"
+                                data-action={deleteMotionAction.id}
                                 onClick={() => {
                                   void submitDeleteMotion(motion.id);
                                 }}
@@ -943,7 +891,15 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
               ) : null}
 
               <div className="simpletab-actions">
-                <button type="submit" className="theia-button">
+                <button
+                  type="submit"
+                  className="theia-button"
+                  data-action={
+                    editingMotionId !== null
+                      ? updateMotionAction.id
+                      : createMotionAction.id
+                  }
+                >
                   {editingMotionId !== null
                     ? t("motions.saveMotionButton")
                     : t("motions.addMotionButton")}
@@ -952,6 +908,7 @@ export const MotionsView: React.FC<MotionsViewProps> = ({
                   <button
                     type="button"
                     className="theia-button secondary"
+                    data-view-only
                     onClick={handleCancelEditMotion}
                   >
                     {t("common.cancel")}

@@ -6,6 +6,7 @@ import type {
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "react";
+import { runnerFor } from "../actions/test-context";
 import { MotionsView } from "./motions-view";
 
 function makeMotionsState(
@@ -113,7 +114,7 @@ const EMPTY_STATUS: HostStatus = {
 describe("MotionsView", () => {
   it("displays deadline in tournament time zone and submits motion.set_round_status", async () => {
     const submitted: OpRequest[] = [];
-    const onSubmitOp = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
+    const submit = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
       submitted.push(req);
       return {
         ok: true,
@@ -122,12 +123,13 @@ describe("MotionsView", () => {
         committedPayload: req.payload,
       };
     });
+    const state = makeMotionsState();
 
     render(
       <MotionsView
-        state={makeMotionsState()}
+        state={state}
         status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
+        run={runnerFor({ state, submit })}
         nowIso="2026-10-01T07:30:00.000Z"
       />,
     );
@@ -165,7 +167,7 @@ describe("MotionsView", () => {
 
   it("converts local deadline in Asia/Dhaka and Europe/London (DST) to UTC instants", async () => {
     const submitted: OpRequest[] = [];
-    const onSubmitOp = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
+    const submit = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
       submitted.push(req);
       return {
         ok: true,
@@ -174,12 +176,13 @@ describe("MotionsView", () => {
         committedPayload: req.payload,
       };
     });
+    const state = makeMotionsState();
 
     render(
       <MotionsView
-        state={makeMotionsState()}
+        state={state}
         status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
+        run={runnerFor({ state, submit })}
         nowIso="2026-10-01T06:00:00.000Z"
       />,
     );
@@ -248,7 +251,7 @@ describe("MotionsView", () => {
 
   it("supports creating, editing, and deleting motions", async () => {
     const submitted: OpRequest[] = [];
-    const onSubmitOp = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
+    const submit = vi.fn(async (req: OpRequest): Promise<SubmitResult> => {
       submitted.push(req);
       return {
         ok: true,
@@ -257,12 +260,13 @@ describe("MotionsView", () => {
         committedPayload: req.payload,
       };
     });
+    const state = makeMotionsState();
 
     render(
       <MotionsView
-        state={makeMotionsState()}
+        state={state}
         status={EMPTY_STATUS}
-        onSubmitOp={onSubmitOp}
+        run={runnerFor({ state, submit })}
       />,
     );
 

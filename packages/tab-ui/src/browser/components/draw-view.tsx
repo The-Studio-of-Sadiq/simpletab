@@ -16,15 +16,25 @@ import { getEligibleTeamsForRound } from "@simpletab/core/lib/draw/generator";
 import { validateDraw } from "@simpletab/core/lib/draw/validateDraw";
 import { isAvailableForRound } from "@simpletab/core/lib/roundAvailability";
 import { sideLabel } from "@simpletab/core/lib/sideNames";
-import { recordKey, type OpRequest, type RecordKey } from "@simpletab/core/ops";
-import type { Debate, DebateSide, Round, Team } from "@simpletab/core/types";
+import type { Debate, DebateSide, Team } from "@simpletab/core/types";
 import type {
-  HostCancelLongResult,
   HostStatus,
   ProjectedState,
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner, SimpleTabAction } from "../actions/action";
+import {
+  createSwingAction,
+  drawStageActionFor,
+  generateDrawAction,
+  moveTeamAction,
+  restoreDrawAction,
+  swapTeamsAction,
+  toggleSwingRoundAction,
+  updateDebateAction,
+} from "../actions/draw-actions";
+import { openSetupAction } from "../actions/releases-actions";
 import { t } from "../i18n";
 import { InlineOpError, type InlineOpErrorData } from "./inline-op-error";
 import { LockBanner } from "./lock-banner";
@@ -35,17 +45,15 @@ export interface DrawViewProps {
   status: HostStatus;
   selectedRoundId?: string;
   onSelectRound?: (roundId: string) => void;
-  onSubmitOp: (request: OpRequest) => Promise<SubmitResult>;
-  onUndoOp: (seq: number) => Promise<SubmitResult>;
-  onCancelLock?: (lockId: string) => Promise<HostCancelLongResult | void>;
+  /** Runs the same commands as the palette; no op building happens here. */
+  run: ActionRunner;
   onGetChangelog?: () => Promise<PublicChainItem[]>;
   lastGenerateSeq?: number;
-  onOpenSetup?: () => void;
 }
 
 interface RoomErrorEntry {
   error: InlineOpErrorData;
-  retryRequest: OpRequest;
+  retry: (runner: ActionRunner) => Promise<SubmitResult>;
 }
 
 function randomSeedInt(): number {
@@ -82,21 +90,6 @@ function stageActionLabel(action: DrawStageAction): string {
   }
 }
 
-function stageActionOpType(action: DrawStageAction): string {
-  switch (action) {
-    case "lock":
-      return "draw.lock";
-    case "unlock":
-      return "draw.unlock";
-    case "release_teams":
-      return "draw.release_teams";
-    case "release":
-      return "draw.release";
-    case "unrelease":
-      return "draw.unrelease";
-  }
-}
-
 function roomTitle(
   debate: Pick<Debate, "byeTeamId" | "venueName" | "roomRank"> | undefined,
 ): string {
@@ -128,23 +121,6 @@ function summarizeRoom(
   return t("draw.currentRoomSummary", { room, teams: parts.join(", ") });
 }
 
-function withFreshVersions(
-  request: OpRequest,
-  versions: Record<RecordKey, number>,
-): OpRequest {
-  if (request.expectedVersions === undefined) {
-    return request;
-  }
-  const next: Record<RecordKey, number> = {};
-  for (const key of Object.keys(request.expectedVersions) as RecordKey[]) {
-    next[key] = versions[key] ?? 0;
-  }
-  return {
-    ...request,
-    expectedVersions: next,
-  };
-}
-
 function defaultSpeakerInputs(count: number): string[] {
   return Array.from({ length: Math.max(1, count) }, () => "");
 }
@@ -154,12 +130,9 @@ export const DrawView: React.FC<DrawViewProps> = ({
   status,
   selectedRoundId: controlledRoundId,
   onSelectRound,
-  onSubmitOp,
-  onUndoOp,
-  onCancelLock,
+  run,
   onGetChangelog,
   lastGenerateSeq,
-  onOpenSetup,
 }) => {
   const baseId = React.useId();
   const [uncontrolledRoundId, setUncontrolledRoundId] = React.useState("");
@@ -344,11 +317,16 @@ export const DrawView: React.FC<DrawViewProps> = ({
         </div>
         <div className="simpletab-alert">
           <p>{t("common.noTournamentPrompt")}</p>
-          {onOpenSetup !== undefined ? (
-            <button type="button" className="theia-button" onClick={onOpenSetup}>
-              {t("common.openSetupButton")}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="theia-button"
+            data-action={openSetupAction.id}
+            onClick={() => {
+              void run(openSetupAction, {});
+            }}
+          >
+            {t("common.openSetupButton")}
+          </button>
         </div>
       </div>
     );
@@ -388,15 +366,11 @@ export const DrawView: React.FC<DrawViewProps> = ({
 
     setGenerating(true);
     try {
-      const request: OpRequest = {
-        type: "draw.generate",
-        payload: {
-          roundId: selectedRound.id,
-          seed: parsedSeed,
-          ...(discardExisting ? { discardExisting: true } : {}),
-        },
-      };
-      const result = await onSubmitOp(request);
+      const result = await run(generateDrawAction, {
+        roundId: selectedRound.id,
+        seed: parsedSeed,
+        ...(discardExisting ? { discardExisting: true } : {}),
+      });
       if (!result.ok) {
         setBannerError({
           code: result.code,
@@ -448,7 +422,7 @@ export const DrawView: React.FC<DrawViewProps> = ({
       return;
     }
 
-    const result = await onUndoOp(seq);
+    const result = await run(restoreDrawAction, { seq });
     if (!result.ok) {
       setBannerError({
         code: result.code,
@@ -467,17 +441,9 @@ export const DrawView: React.FC<DrawViewProps> = ({
     }
     setBannerError(null);
     setBannerSuccess(null);
-    const roundKey = recordKey("round", selectedRound.id);
-    const request: OpRequest = {
-      type: stageActionOpType(action),
-      expectedVersions: {
-        [roundKey]: state.versions[roundKey] ?? 0,
-      },
-      payload: {
-        roundId: selectedRound.id,
-      },
-    };
-    const result = await onSubmitOp(request);
+    const result = await run(drawStageActionFor(action), {
+      roundId: selectedRound.id,
+    });
     if (!result.ok) {
       setBannerError({
         code: result.code,
@@ -489,11 +455,13 @@ export const DrawView: React.FC<DrawViewProps> = ({
     setBannerSuccess(t("draw.stageUpdated"));
   };
 
-  const submitRoomOp = async (
+  const submitRoomOpResult = async <A,>(
+    runner: ActionRunner,
+    action: SimpleTabAction<A, SubmitResult>,
+    args: A,
     affectedDebateIds: string[],
-    request: OpRequest,
     announcement?: string,
-  ): Promise<boolean> => {
+  ): Promise<SubmitResult> => {
     setRoomErrors((prev) => {
       const next = { ...prev };
       for (const id of affectedDebateIds) {
@@ -502,7 +470,7 @@ export const DrawView: React.FC<DrawViewProps> = ({
       return next;
     });
 
-    const result = await onSubmitOp(request);
+    const result = await runner(action, args);
     if (!result.ok) {
       const targetId = affectedDebateIds[0];
       if (targetId !== undefined) {
@@ -518,7 +486,8 @@ export const DrawView: React.FC<DrawViewProps> = ({
                 ? summarizeRoom(debate, sides, state)
                 : undefined,
             },
-            retryRequest: request,
+            retry: (currentRun) =>
+              submitRoomOpResult(currentRun, action, args, affectedDebateIds),
           },
         }));
       } else {
@@ -528,50 +497,53 @@ export const DrawView: React.FC<DrawViewProps> = ({
           current: result.current,
         });
       }
-      return false;
+      return result;
     }
     if (announcement) {
       setLiveAnnouncement(announcement);
     }
-    return true;
+    return result;
   };
+
+  const submitRoomOp = async <A,>(
+    runner: ActionRunner,
+    action: SimpleTabAction<A, SubmitResult>,
+    args: A,
+    affectedDebateIds: string[],
+    announcement?: string,
+  ): Promise<boolean> =>
+    (
+      await submitRoomOpResult(
+        runner,
+        action,
+        args,
+        affectedDebateIds,
+        announcement,
+      )
+    ).ok;
 
   const executeTeamMove = async (
     pick: PickedTeam,
     target: TeamLocation,
   ): Promise<void> => {
-    const expectedVersions: Record<RecordKey, number> = {};
     const affectedDebateIds: string[] = [];
 
     if (pick.from.kind === "slot") {
-      const key = recordKey("debate", pick.from.debateId);
-      expectedVersions[key] = state.versions[key] ?? 0;
       affectedDebateIds.push(pick.from.debateId);
-    } else {
-      const key = recordKey("team", pick.teamId);
-      expectedVersions[key] = state.versions[key] ?? 0;
     }
 
-    if (target.kind === "slot") {
-      const key = recordKey("debate", target.debateId);
-      expectedVersions[key] = state.versions[key] ?? 0;
-      if (!affectedDebateIds.includes(target.debateId)) {
-        affectedDebateIds.push(target.debateId);
-      }
+    if (
+      target.kind === "slot" &&
+      !affectedDebateIds.includes(target.debateId)
+    ) {
+      affectedDebateIds.push(target.debateId);
     }
-
-    const request: OpRequest = {
-      type: "draw.move_team",
-      expectedVersions,
-      payload: {
-        pick,
-        target,
-      },
-    };
 
     const ok = await submitRoomOp(
+      run,
+      moveTeamAction,
+      { pick, target },
       affectedDebateIds,
-      request,
       `${pick.teamName} moved`,
     );
     if (ok) {
@@ -618,44 +590,19 @@ export const DrawView: React.FC<DrawViewProps> = ({
       return;
     }
     const [sideA, sideB] = sides;
-    const debateKey = recordKey("debate", debate.id);
-    const request: OpRequest = {
-      type: "draw.swap_teams",
-      expectedVersions: {
-        [debateKey]: state.versions[debateKey] ?? 0,
-      },
-      payload: {
-        slotA: { debateId: debate.id, side: sideA },
-        slotB: { debateId: debate.id, side: sideB },
-      },
-    };
-    void submitRoomOp([debate.id], request);
+    void submitRoomOp(run, swapTeamsAction, {
+      slotA: { debateId: debate.id, side: sideA },
+      slotB: { debateId: debate.id, side: sideB },
+    }, [debate.id]);
   };
 
   const handleVenueChange = (debate: Debate, venueId: string): void => {
-    const venue = venueId
-      ? state.venues.find((v) => v.id === venueId)
-      : undefined;
-    const updatedDebate: Debate = {
-      ...debate,
-      ...(venue
-        ? { venueId: venue.id, venueName: venue.name }
-        : {
-            venueId: undefined,
-            venueName: t("draw.roomFallback", { rank: debate.roomRank }),
-          }),
-    };
-    const debateKey = recordKey("debate", debate.id);
-    const request: OpRequest = {
-      type: "draw.update_debate",
-      expectedVersions: {
-        [debateKey]: state.versions[debateKey] ?? 0,
-      },
-      payload: {
-        debate: updatedDebate,
-      },
-    };
-    void submitRoomOp([debate.id], request);
+    void submitRoomOp(
+      run,
+      updateDebateAction,
+      { debateId: debate.id, venueId },
+      [debate.id],
+    );
   };
 
   const handleCreateSwing = async (event: React.FormEvent): Promise<void> => {
@@ -665,18 +612,13 @@ export const DrawView: React.FC<DrawViewProps> = ({
     }
     setSwingError(null);
     setSwingMessage(null);
-    const request: OpRequest = {
-      type: "swing.create",
-      payload: {
-        roundId: selectedRound.id,
-        name: swingName.trim(),
-        speakers: swingSpeakers
-          .map((name) => name.trim())
-          .filter((name) => name.length > 0)
-          .map((name) => ({ name })),
-      },
-    };
-    const result = await onSubmitOp(request);
+    const result = await run(createSwingAction, {
+      roundId: selectedRound.id,
+      name: swingName.trim(),
+      speakers: swingSpeakers
+        .map((name) => name.trim())
+        .filter((name) => name.length > 0),
+    });
     if (!result.ok) {
       setSwingError({
         code: result.code,
@@ -701,17 +643,10 @@ export const DrawView: React.FC<DrawViewProps> = ({
     }
     setSwingError(null);
     setSwingMessage(null);
-    const teamKey = recordKey("team", team.id);
-    const result = await onSubmitOp({
-      type: "swing.toggle_round",
-      expectedVersions: {
-        [teamKey]: state.versions[teamKey] ?? 0,
-      },
-      payload: {
-        teamId: team.id,
-        roundId: selectedRound.id,
-        enabled,
-      },
+    const result = await run(toggleSwingRoundAction, {
+      teamId: team.id,
+      roundId: selectedRound.id,
+      enabled,
     });
     if (!result.ok) {
       setSwingError({
@@ -753,7 +688,7 @@ export const DrawView: React.FC<DrawViewProps> = ({
         locks={status.locks}
         rounds={state.rounds}
         isHostOwner={isHostOwner}
-        onCancelLock={onCancelLock}
+        run={run}
       />
 
       <div className="simpletab-sr-only" aria-live="polite">
@@ -836,6 +771,7 @@ export const DrawView: React.FC<DrawViewProps> = ({
                     <button
                       type="button"
                       className="theia-button secondary"
+                      data-view-only
                       onClick={() => setSeedInput(String(randomSeedInt()))}
                     >
                       {t("draw.randomizeSeed")}
@@ -864,6 +800,7 @@ export const DrawView: React.FC<DrawViewProps> = ({
                 <button
                   type="submit"
                   className="theia-button"
+                  data-action={generateDrawAction.id}
                   disabled={generating}
                 >
                   {generating
@@ -873,6 +810,7 @@ export const DrawView: React.FC<DrawViewProps> = ({
                 <button
                   type="button"
                   className="theia-button secondary"
+                  data-action={restoreDrawAction.id}
                   onClick={() => {
                     void handleRestorePrevious();
                   }}
@@ -884,6 +822,7 @@ export const DrawView: React.FC<DrawViewProps> = ({
                     key={action}
                     type="button"
                     className="theia-button secondary"
+                    data-action={drawStageActionFor(action).id}
                     onClick={() => {
                       void handleStageAction(action);
                     }}
@@ -950,6 +889,7 @@ export const DrawView: React.FC<DrawViewProps> = ({
                     <button
                       type="button"
                       className="theia-button secondary"
+                      data-action={moveTeamAction.id}
                       onClick={() => {
                         void executeTeamMove(pickedTeam, { kind: "pool" });
                       }}
@@ -960,6 +900,7 @@ export const DrawView: React.FC<DrawViewProps> = ({
                   <button
                     type="button"
                     className="theia-button secondary"
+                    data-view-only
                     onClick={() => setPickedTeam(null)}
                   >
                     {t("draw.cancelPick")}
@@ -1062,6 +1003,8 @@ export const DrawView: React.FC<DrawViewProps> = ({
                                 pickedTeam?.from.kind === "slot" &&
                                 pickedTeam.from.debateId === debate.id &&
                                 pickedTeam.from.side === side;
+                              const canMoveToSlot =
+                                pickedTeam !== null && !isSelected;
 
                               const slotAria =
                                 pickedTeam === null
@@ -1096,6 +1039,12 @@ export const DrawView: React.FC<DrawViewProps> = ({
                                       <button
                                         type="button"
                                         draggable={teamId.length > 0}
+                                        data-action={
+                                          canMoveToSlot ? moveTeamAction.id : undefined
+                                        }
+                                        data-view-only={
+                                          canMoveToSlot ? undefined : true
+                                        }
                                         className={`simpletab-slot-btn${
                                           isSelected
                                             ? " simpletab-slot-selected"
@@ -1164,6 +1113,7 @@ export const DrawView: React.FC<DrawViewProps> = ({
                                 <button
                                   type="button"
                                   className="theia-button secondary"
+                                  data-action={swapTeamsAction.id}
                                   aria-label={t("draw.swapSidesAria", {
                                     room: roomLabelText,
                                   })}
@@ -1187,11 +1137,7 @@ export const DrawView: React.FC<DrawViewProps> = ({
                                     ),
                                   }}
                                   onRetry={() => {
-                                    const fresh = withFreshVersions(
-                                      roomError.retryRequest,
-                                      state.versions,
-                                    );
-                                    void submitRoomOp([debate.id], fresh);
+                                    void roomError.retry(run);
                                   }}
                                   onDismiss={() => {
                                     setRoomErrors((prev) => {
@@ -1242,6 +1188,7 @@ export const DrawView: React.FC<DrawViewProps> = ({
                         key={team.id}
                         type="button"
                         draggable
+                        data-view-only
                         className={`simpletab-slot-btn${
                           selected ? " simpletab-slot-selected" : ""
                         }`}
@@ -1340,7 +1287,11 @@ export const DrawView: React.FC<DrawViewProps> = ({
                   ))}
                 </div>
                 <div className="simpletab-actions">
-                  <button type="submit" className="theia-button">
+                  <button
+                    type="submit"
+                    className="theia-button"
+                    data-action={createSwingAction.id}
+                  >
                     {t("draw.swingCreateButton")}
                   </button>
                 </div>
@@ -1373,6 +1324,7 @@ export const DrawView: React.FC<DrawViewProps> = ({
                           <button
                             type="button"
                             className="theia-button secondary"
+                            data-action={toggleSwingRoundAction.id}
                             onClick={() => {
                               void handleToggleSwingRound(team, !included);
                             }}

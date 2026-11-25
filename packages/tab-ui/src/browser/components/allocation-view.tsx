@@ -9,7 +9,6 @@ import {
 } from "@simpletab/core/lib/draw/allocator";
 import { earlierDebates } from "@simpletab/core/lib/draw/validateDraw";
 import { isAvailableForRound } from "@simpletab/core/lib/roundAvailability";
-import { recordKey, type OpRequest, type RecordKey } from "@simpletab/core/ops";
 import type { AdjudicatorPanelRole } from "@simpletab/core/ops/allocation";
 import type {
   Adjudicator,
@@ -18,12 +17,21 @@ import type {
   Team,
 } from "@simpletab/core/types";
 import type {
-  HostCancelLongResult,
   HostStatus,
   ProjectedState,
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner, SimpleTabAction } from "../actions/action";
+import {
+  assignManualAction,
+  autoAllocateAction,
+  autofillPreformedAction,
+  restoreAllocationAction,
+  savePreformedAction,
+  swapRoomsAction,
+} from "../actions/allocation-actions";
+import { openSetupAction } from "../actions/releases-actions";
 import { t } from "../i18n";
 import { InlineOpError, type InlineOpErrorData } from "./inline-op-error";
 import { LockBanner } from "./lock-banner";
@@ -38,17 +46,15 @@ export interface AllocationViewProps {
   status: HostStatus;
   selectedRoundId?: string;
   onSelectRound?: (roundId: string) => void;
-  onSubmitOp: (request: OpRequest) => Promise<SubmitResult>;
-  onUndoOp: (seq: number) => Promise<SubmitResult>;
-  onCancelLock?: (lockId: string) => Promise<HostCancelLongResult | void>;
+  /** Runs the same commands as the palette; no op building happens here. */
+  run: ActionRunner;
   onGetChangelog?: () => Promise<PublicChainItem[]>;
   lastAutoSeq?: number;
-  onOpenSetup?: () => void;
 }
 
 interface RoomErrorEntry {
   error: InlineOpErrorData;
-  retryRequest: OpRequest;
+  retry: (runner: ActionRunner) => Promise<SubmitResult>;
 }
 
 interface MovingAdjudicator {
@@ -83,34 +89,14 @@ function summarizePanel(debate: Debate): string {
   });
 }
 
-function withFreshVersions(
-  request: OpRequest,
-  versions: Record<RecordKey, number>,
-): OpRequest {
-  if (request.expectedVersions === undefined) {
-    return request;
-  }
-  const next: Record<RecordKey, number> = {};
-  for (const key of Object.keys(request.expectedVersions) as RecordKey[]) {
-    next[key] = versions[key] ?? 0;
-  }
-  return {
-    ...request,
-    expectedVersions: next,
-  };
-}
-
 export const AllocationView: React.FC<AllocationViewProps> = ({
   state,
   status,
   selectedRoundId: controlledRoundId,
   onSelectRound,
-  onSubmitOp,
-  onUndoOp,
-  onCancelLock,
+  run,
   onGetChangelog,
   lastAutoSeq,
-  onOpenSetup,
 }) => {
   const baseId = React.useId();
   const [activeTab, setActiveTab] = React.useState<AllocationTabId>("panels");
@@ -297,11 +283,16 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
         </div>
         <div className="simpletab-alert">
           <p>{t("common.noTournamentPrompt")}</p>
-          {onOpenSetup !== undefined ? (
-            <button type="button" className="theia-button" onClick={onOpenSetup}>
-              {t("common.openSetupButton")}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="theia-button"
+            data-action={openSetupAction.id}
+            onClick={() => {
+              void run(openSetupAction, {});
+            }}
+          >
+            {t("common.openSetupButton")}
+          </button>
         </div>
       </div>
     );
@@ -346,10 +337,12 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
     tabRefs.current[nextTab]?.focus();
   };
 
-  const submitRoomOp = async (
+  const submitRoomOpResult = async <A,>(
+    runner: ActionRunner,
+    action: SimpleTabAction<A, SubmitResult>,
+    args: A,
     affectedDebateIds: string[],
-    request: OpRequest,
-  ): Promise<boolean> => {
+  ): Promise<SubmitResult> => {
     setRoomErrors((prev) => {
       const next = { ...prev };
       for (const id of affectedDebateIds) {
@@ -358,7 +351,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
       return next;
     });
 
-    const result = await onSubmitOp(request);
+    const result = await runner(action, args);
     if (!result.ok) {
       const primaryId = affectedDebateIds[0];
       if (primaryId !== undefined) {
@@ -372,7 +365,8 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
               current: result.current,
               currentSummary: debate ? summarizePanel(debate) : undefined,
             },
-            retryRequest: request,
+            retry: (currentRun) =>
+              submitRoomOpResult(currentRun, action, args, affectedDebateIds),
           },
         }));
       } else {
@@ -382,10 +376,18 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
           current: result.current,
         });
       }
-      return false;
+      return result;
     }
-    return true;
+    return result;
   };
+
+  const submitRoomOp = async <A,>(
+    runner: ActionRunner,
+    action: SimpleTabAction<A, SubmitResult>,
+    args: A,
+    affectedDebateIds: string[],
+  ): Promise<boolean> =>
+    (await submitRoomOpResult(runner, action, args, affectedDebateIds)).ok;
 
   const handleAutoAllocate = async (event: React.FormEvent): Promise<void> => {
     event.preventDefault();
@@ -407,12 +409,9 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
 
     setAllocating(true);
     try {
-      const result = await onSubmitOp({
-        type: "allocation.auto",
-        payload: {
-          roundId: selectedRound.id,
-          panelSize,
-        },
+      const result = await run(autoAllocateAction, {
+        roundId: selectedRound.id,
+        panelSize,
       });
       if (!result.ok) {
         setBannerError({
@@ -464,7 +463,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
       return;
     }
 
-    const result = await onUndoOp(seq);
+    const result = await run(restoreAllocationAction, { seq });
     if (!result.ok) {
       setBannerError({
         code: result.code,
@@ -481,20 +480,12 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
     debateIdA: string,
     debateIdB: string,
   ): Promise<void> => {
-    const keyA = recordKey("debate", debateIdA);
-    const keyB = recordKey("debate", debateIdB);
-    const request: OpRequest = {
-      type: "allocation.swap_rooms",
-      expectedVersions: {
-        [keyA]: state.versions[keyA] ?? 0,
-        [keyB]: state.versions[keyB] ?? 0,
-      },
-      payload: {
-        debateIdA,
-        debateIdB,
-      },
-    };
-    const ok = await submitRoomOp([debateIdA, debateIdB], request);
+    const ok = await submitRoomOp(
+      run,
+      swapRoomsAction,
+      { debateIdA, debateIdB },
+      [debateIdA, debateIdB],
+    );
     if (ok) {
       setSwapSourceDebateId(null);
     }
@@ -505,15 +496,10 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
     toDebateId: string,
     toRole: AdjudicatorPanelRole,
   ): Promise<void> => {
-    const keyA = recordKey("debate", move.fromDebateId);
-    const keyB = recordKey("debate", toDebateId);
-    const request: OpRequest = {
-      type: "allocation.swap_rooms",
-      expectedVersions: {
-        [keyA]: state.versions[keyA] ?? 0,
-        [keyB]: state.versions[keyB] ?? 0,
-      },
-      payload: {
+    const ok = await submitRoomOp(
+      run,
+      swapRoomsAction,
+      {
         debateIdA: move.fromDebateId,
         debateIdB: toDebateId,
         moves: [
@@ -525,8 +511,8 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
           },
         ],
       },
-    };
-    const ok = await submitRoomOp([move.fromDebateId, toDebateId], request);
+      [move.fromDebateId, toDebateId],
+    );
     if (ok) {
       setMovingAdj(null);
     }
@@ -542,20 +528,17 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
   };
 
   const handleSaveManual = async (debateId: string): Promise<void> => {
-    const key = recordKey("debate", debateId);
-    const request: OpRequest = {
-      type: "allocation.assign_manual",
-      expectedVersions: {
-        [key]: state.versions[key] ?? 0,
-      },
-      payload: {
+    const ok = await submitRoomOp(
+      run,
+      assignManualAction,
+      {
         debateId,
         ...(manualDraft.chairId ? { chairId: manualDraft.chairId } : {}),
         panellistIds: manualDraft.panellistIds,
         traineeIds: manualDraft.traineeIds,
       },
-    };
-    const ok = await submitRoomOp([debateId], request);
+      [debateId],
+    );
     if (ok) {
       setEditingDebateId(null);
     }
@@ -586,19 +569,17 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
       traineeIds.push(adjId);
     }
 
-    const key = recordKey("debate", debate.id);
-    await submitRoomOp([debate.id], {
-      type: "allocation.assign_manual",
-      expectedVersions: {
-        [key]: state.versions[key] ?? 0,
-      },
-      payload: {
+    await submitRoomOp(
+      run,
+      assignManualAction,
+      {
         debateId: debate.id,
         ...(chairId ? { chairId } : {}),
         panellistIds,
         traineeIds,
       },
-    });
+      [debate.id],
+    );
   };
 
   const handleSavePreformed = async (): Promise<void> => {
@@ -607,16 +588,9 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
     }
     setPreformedError(null);
     setPreformedMessage(null);
-    const roundKey = recordKey("round", selectedRound.id);
-    const result = await onSubmitOp({
-      type: "allocation.preformed_save",
-      expectedVersions: {
-        [roundKey]: state.versions[roundKey] ?? 0,
-      },
-      payload: {
-        roundId: selectedRound.id,
-        panels: preformedDraft,
-      },
+    const result = await run(savePreformedAction, {
+      roundId: selectedRound.id,
+      panels: preformedDraft,
     });
     if (!result.ok) {
       setPreformedError({
@@ -637,12 +611,9 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
     }
     setPreformedError(null);
     setPreformedMessage(null);
-    const result = await onSubmitOp({
-      type: "allocation.preformed_autofill",
-      payload: {
-        roundId: selectedRound.id,
-        panels: preformedDraft,
-      },
+    const result = await run(autofillPreformedAction, {
+      roundId: selectedRound.id,
+      panels: preformedDraft,
     });
     if (!result.ok) {
       setPreformedError({
@@ -710,6 +681,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
             <button
               type="button"
               className="theia-button secondary simpletab-compact-btn"
+              data-view-only
               onClick={() => {
                 if (
                   movingAdj?.adjudicatorId === adjId &&
@@ -795,7 +767,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
         locks={status.locks}
         rounds={state.rounds}
         isHostOwner={isHostOwner}
-        onCancelLock={onCancelLock}
+        run={run}
       />
 
       {selectedRound === undefined ? (
@@ -825,6 +797,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                   }}
                   id={`${baseId}-tab-${tab}`}
                   type="button"
+                  data-view-only
                   role="tab"
                   aria-selected={selected}
                   aria-controls={`${baseId}-panel-${tab}`}
@@ -900,6 +873,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                     <button
                       type="submit"
                       className="theia-button"
+                      data-action={autoAllocateAction.id}
                       disabled={allocating}
                     >
                       {allocating
@@ -909,6 +883,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                     <button
                       type="button"
                       className="theia-button secondary"
+                      data-action={restoreAllocationAction.id}
                       onClick={() => {
                         void handleRestoreAllocation();
                       }}
@@ -933,6 +908,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                     <button
                       type="button"
                       className="theia-button secondary"
+                      data-view-only
                       onClick={() => setSwapSourceDebateId(null)}
                     >
                       {t("allocation.cancelSwap")}
@@ -956,6 +932,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                     <button
                       type="button"
                       className="theia-button secondary"
+                      data-view-only
                       onClick={() => setMovingAdj(null)}
                     >
                       {t("allocation.cancelMove")}
@@ -1013,6 +990,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                                 <button
                                   type="button"
                                   className="theia-button secondary"
+                                  data-view-only
                                   onClick={() =>
                                     setSwapSourceDebateId(debate.id)
                                   }
@@ -1024,6 +1002,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                               <button
                                 type="button"
                                 className="theia-button secondary"
+                                data-view-only
                                 onClick={() => setSwapSourceDebateId(null)}
                               >
                                 {t("allocation.cancelSwap")}
@@ -1032,6 +1011,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                               <button
                                 type="button"
                                 className="theia-button"
+                                data-action={swapRoomsAction.id}
                                 onClick={() => {
                                   void handleSwapPanels(
                                     swapSourceDebate.id,
@@ -1048,6 +1028,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                             <button
                               type="button"
                               className="theia-button secondary"
+                              data-view-only
                               onClick={() =>
                                 isEditing
                                   ? setEditingDebateId(null)
@@ -1067,6 +1048,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                             <button
                               type="button"
                               className="theia-button secondary"
+                              data-action={swapRoomsAction.id}
                               onClick={() => {
                                 void handleMoveAdjToRoom(
                                   movingAdj,
@@ -1082,6 +1064,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                             <button
                               type="button"
                               className="theia-button secondary"
+                              data-action={swapRoomsAction.id}
                               onClick={() => {
                                 void handleMoveAdjToRoom(
                                   movingAdj,
@@ -1097,6 +1080,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                             <button
                               type="button"
                               className="theia-button secondary"
+                              data-action={swapRoomsAction.id}
                               onClick={() => {
                                 void handleMoveAdjToRoom(
                                   movingAdj,
@@ -1270,6 +1254,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                                       key={id}
                                       type="button"
                                       className="theia-button secondary"
+                                      data-view-only
                                       aria-label={t(
                                         "allocation.removeMemberAria",
                                         { name, room: roomName },
@@ -1341,6 +1326,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                                       key={id}
                                       type="button"
                                       className="theia-button secondary"
+                                      data-view-only
                                       aria-label={t(
                                         "allocation.removeMemberAria",
                                         { name, room: roomName },
@@ -1365,6 +1351,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                               <button
                                 type="button"
                                 className="theia-button"
+                                data-action={assignManualAction.id}
                                 onClick={() => {
                                   void handleSaveManual(debate.id);
                                 }}
@@ -1382,11 +1369,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                               currentSummary: summarizePanel(debate),
                             }}
                             onRetry={() => {
-                              const fresh = withFreshVersions(
-                                roomError.retryRequest,
-                                state.versions,
-                              );
-                              void submitRoomOp([debate.id], fresh);
+                              void roomError.retry(run);
                             }}
                             onDismiss={() => {
                               setRoomErrors((prev) => {
@@ -1494,6 +1477,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                                     <button
                                       type="button"
                                       className="theia-button secondary"
+                                      data-action={assignManualAction.id}
                                       onClick={() => {
                                         void handleAssignFromPool(adj.id);
                                       }}
@@ -1558,6 +1542,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                   <button
                     type="button"
                     className="theia-button secondary"
+                    data-view-only
                     onClick={() =>
                       setPreformedDraft((prev) => [
                         ...prev,
@@ -1573,6 +1558,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                   <button
                     type="button"
                     className="theia-button"
+                    data-action={savePreformedAction.id}
                     onClick={() => {
                       void handleSavePreformed();
                     }}
@@ -1582,6 +1568,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                   <button
                     type="button"
                     className="theia-button secondary"
+                    data-action={autofillPreformedAction.id}
                     onClick={() => {
                       void handleAutofillPreformed();
                     }}
@@ -1610,6 +1597,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                         <button
                           type="button"
                           className="theia-button secondary"
+                          data-view-only
                           onClick={() =>
                             setPreformedDraft((prev) =>
                               prev.filter((p) => p.id !== panel.id),
@@ -1736,6 +1724,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                                 key={id}
                                 type="button"
                                 className="theia-button secondary"
+                                data-view-only
                                 onClick={() =>
                                   setPreformedDraft((prev) =>
                                     prev.map((item) =>
@@ -1807,6 +1796,7 @@ export const AllocationView: React.FC<AllocationViewProps> = ({
                                 key={id}
                                 type="button"
                                 className="theia-button secondary"
+                                data-view-only
                                 onClick={() =>
                                   setPreformedDraft((prev) =>
                                     prev.map((item) =>
