@@ -8,18 +8,11 @@ import {
   StatusBarAlignment,
   ViewContainer,
 } from "@theia/core/lib/browser";
-import {
-  Command,
-  CommandRegistry,
-  MessageService,
-} from "@theia/core/lib/common";
+import { CommandRegistry } from "@theia/core/lib/common";
 import { inject, injectable, optional } from "@theia/core/shared/inversify";
 import { formatStatusBarText } from "./components/status-view";
 import { onLocaleChange, t } from "./i18n";
-import {
-  SIMPLETAB_CREATE_DEMO_COMMAND_ID,
-  SimpleTabStatusWidget,
-} from "./simpletab-status-widget";
+import { SimpleTabStatusWidget } from "./simpletab-status-widget";
 import { TournamentStore } from "./store/tournament-store";
 import { AllocationWidget } from "./views/allocation-widget";
 import { BreakWidget } from "./views/break-widget";
@@ -88,19 +81,8 @@ export const SIMPLETAB_CREDENTIALS_TOGGLE_COMMAND_ID =
 export const SIMPLETAB_LINKS_TOGGLE_COMMAND_ID = "simpletab.links.toggle";
 export const SIMPLETAB_PROJECTOR_CONTROL_TOGGLE_COMMAND_ID =
   "simpletab.projectorControl.toggle";
-export const SIMPLETAB_OPEN_PROJECTOR_COMMAND_ID = "simpletab.projector.open";
 
 const STATUS_BAR_ENTRY_ID = "simpletab-status-bar";
-
-export const SIMPLETAB_CREATE_DEMO_COMMAND: Command = {
-  id: SIMPLETAB_CREATE_DEMO_COMMAND_ID,
-  label: t("command.createDemo"),
-};
-
-export const SIMPLETAB_OPEN_PROJECTOR_COMMAND: Command = {
-  id: SIMPLETAB_OPEN_PROJECTOR_COMMAND_ID,
-  label: t("command.openProjector"),
-};
 
 @injectable()
 export class SimpleTabContainerContribution extends AbstractViewContribution<ViewContainer> {
@@ -130,15 +112,6 @@ export class SetupViewContribution extends AbstractViewContribution<SetupWidget>
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_SETUP_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-  }
 }
 
 @injectable()
@@ -154,15 +127,6 @@ export class ParticipantsViewContribution extends AbstractViewContribution<Parti
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_PARTICIPANTS_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-  }
 }
 
 @injectable()
@@ -178,15 +142,6 @@ export class CheckinViewContribution extends AbstractViewContribution<CheckinWid
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_CHECKIN_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-  }
 }
 
 @injectable()
@@ -202,15 +157,6 @@ export class DrawViewContribution extends AbstractViewContribution<DrawWidget> {
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_DRAW_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-  }
 }
 
 @injectable()
@@ -226,15 +172,6 @@ export class AllocationViewContribution extends AbstractViewContribution<Allocat
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_ALLOCATION_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-  }
 }
 
 @injectable()
@@ -250,15 +187,6 @@ export class MotionsViewContribution extends AbstractViewContribution<MotionsWid
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_MOTIONS_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-  }
 }
 
 @injectable()
@@ -274,15 +202,6 @@ export class ResultsViewContribution extends AbstractViewContribution<ResultsWid
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_RESULTS_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-  }
 }
 
 @injectable()
@@ -298,15 +217,6 @@ export class FeedbackViewContribution extends AbstractViewContribution<FeedbackW
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_FEEDBACK_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-  }
 }
 
 @injectable()
@@ -322,15 +232,6 @@ export class StandingsViewContribution extends AbstractViewContribution<Standing
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_STANDINGS_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-  }
 }
 
 @injectable()
@@ -346,15 +247,6 @@ export class BreakViewContribution extends AbstractViewContribution<BreakWidget>
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_BREAK_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-  }
 }
 
 @injectable()
@@ -370,15 +262,6 @@ export class AssistantViewContribution extends AbstractViewContribution<Assistan
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_ASSISTANT_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-  }
 }
 
 @injectable()
@@ -394,15 +277,6 @@ export class DevicesViewContribution extends AbstractViewContribution<DevicesWid
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_DEVICES_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-  }
 }
 
 @injectable()
@@ -418,15 +292,6 @@ export class ProposalsViewContribution extends AbstractViewContribution<Proposal
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_PROPOSALS_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-  }
 }
 
 @injectable()
@@ -442,15 +307,6 @@ export class ReleasesViewContribution extends AbstractViewContribution<ReleasesW
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_RELEASES_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-  }
 }
 
 @injectable()
@@ -466,15 +322,6 @@ export class ChangelogViewContribution extends AbstractViewContribution<Changelo
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_CHANGELOG_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-  }
 }
 
 @injectable()
@@ -490,15 +337,6 @@ export class CredentialsViewContribution extends AbstractViewContribution<Creden
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_CREDENTIALS_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-  }
 }
 
 @injectable()
@@ -514,15 +352,6 @@ export class LinksViewContribution extends AbstractViewContribution<LinksWidget>
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_LINKS_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-  }
 }
 
 @injectable()
@@ -538,15 +367,6 @@ export class ProjectorControlViewContribution extends AbstractViewContribution<P
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_PROJECTOR_CONTROL_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-  }
 }
 
 @injectable()
@@ -565,9 +385,6 @@ export class SimpleTabContribution
 
   @inject(StatusBar)
   protected readonly statusBar!: StatusBar;
-
-  @inject(MessageService)
-  protected readonly messageService!: MessageService;
 
   @inject(CredentialsService)
   @optional()
@@ -591,50 +408,6 @@ export class SimpleTabContribution
     });
   }
 
-  override registerCommands(commands: CommandRegistry): void {
-    super.registerCommands(commands);
-    commands.registerCommand(
-      { id: SIMPLETAB_OPEN_STATUS_COMMAND },
-      {
-        execute: () => this.openView({ activate: true, reveal: true }),
-      },
-    );
-    commands.registerCommand(SIMPLETAB_CREATE_DEMO_COMMAND, {
-      execute: async () => {
-        try {
-          const created = await this.store.createDemoTournament("");
-          this.updateStatusBar(created.status);
-          await this.messageService.info(
-            t("command.demoCreated", {
-              slug: created.status.slug ?? "bp-demo",
-              dbPath: created.dbPath,
-            }),
-          );
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          await this.messageService.error(
-            t("command.demoFailed", { message }),
-          );
-        }
-      },
-    });
-    commands.registerCommand(SIMPLETAB_OPEN_PROJECTOR_COMMAND, {
-      execute: async () => {
-        if (this.projectorService === undefined) {
-          await this.messageService.warn(t("projector.unavailable"));
-          return;
-        }
-        try {
-          const displayState = await this.store.getDisplayState();
-          await this.projectorService.pushDisplayState(displayState);
-          await this.projectorService.openProjector();
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          await this.messageService.error(message);
-        }
-      },
-    });
-  }
 
   async onDidInitializeLayout(): Promise<void> {
     this.updateStatusBar({ open: false, locks: [] });

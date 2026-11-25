@@ -1,12 +1,46 @@
-import type { DeviceModeStatus, JoinProgress } from "@simpletab/host/lib/common/host-protocol";
+import type {
+  DeviceModeStatus,
+  JoinHostParams,
+  JoinProgress,
+} from "@simpletab/host/lib/common/host-protocol";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import * as React from "react";
 import { describe, expect, it, vi } from "vitest";
+import type { ActionRunner } from "../actions/action";
+import {
+  dismissRejectedEditsAction,
+  joinHostAction,
+  leaveHostAction,
+} from "../actions/device-mode-actions";
 import { DeviceBanner } from "./device-banner";
 import { JoinHostPanel } from "./join-host-panel";
 import { PresenceChips } from "./presence-chips";
 
 const WORDS = ["abandon", "ability", "able", "about", "above", "absent"];
+
+interface RunCall {
+  id: string;
+  args: unknown;
+}
+
+function makeRunner(
+  joinHandler?: (params: JoinHostParams) => Promise<{ ok: true; progress: JoinProgress } | { ok: false; errors: string[] }>,
+): { run: ActionRunner; calls: RunCall[] } {
+  const calls: RunCall[] = [];
+  const run = vi.fn(async (action: { id: string }, args: unknown) => {
+    calls.push({ id: action.id, args });
+    if (action.id === joinHostAction.id) {
+      return (
+        joinHandler?.(args as JoinHostParams) ?? {
+          ok: true,
+          progress: { state: "idle" },
+        }
+      );
+    }
+    return { ok: true };
+  });
+  return { run: run as unknown as ActionRunner, calls };
+}
 
 function device(patch: Partial<DeviceModeStatus> = {}): DeviceModeStatus {
   return {
@@ -26,9 +60,9 @@ function device(patch: Partial<DeviceModeStatus> = {}): DeviceModeStatus {
 describe("JoinHostPanel", () => {
   it("sends the address, code and name, then shows the six words while waiting", async () => {
     let progress: JoinProgress = { state: "connecting" };
-    const onStartJoin = vi.fn(async () => progress);
+    const { run, calls } = makeRunner(async () => ({ ok: true, progress }));
     const loadProgress = vi.fn(async () => progress);
-    render(<JoinHostPanel onStartJoin={onStartJoin} loadProgress={loadProgress} pollMs={10} />);
+    render(<JoinHostPanel run={run} loadProgress={loadProgress} pollMs={10} />);
 
     fireEvent.change(screen.getByLabelText("Host address"), { target: { value: "192.168.1.20" } });
     fireEvent.change(screen.getByLabelText("Pairing code"), { target: { value: "1234 5678" } });
@@ -36,7 +70,10 @@ describe("JoinHostPanel", () => {
     fireEvent.click(screen.getByRole("button", { name: "Join" }));
 
     await waitFor(() =>
-      expect(onStartJoin).toHaveBeenCalledWith({ address: "192.168.1.20", code: "1234 5678", deviceName: "Rafi's laptop" }),
+      expect(calls).toContainEqual({
+        id: joinHostAction.id,
+        args: { address: "192.168.1.20", code: "1234 5678", deviceName: "Rafi's laptop" },
+      }),
     );
     expect((screen.getByRole("button", { name: "Joining…" }) as HTMLButtonElement).disabled).toBe(true);
 
@@ -47,17 +84,20 @@ describe("JoinHostPanel", () => {
   });
 
   it("shows a refusal in words", async () => {
-    const onStartJoin = vi.fn(async (): Promise<JoinProgress> => ({ state: "failed", error: "The host did not approve this laptop." }));
-    render(<JoinHostPanel onStartJoin={onStartJoin} loadProgress={vi.fn()} />);
+    const { run } = makeRunner(async () => ({
+      ok: false,
+      errors: ["The host did not approve this laptop."],
+    }));
+    render(<JoinHostPanel run={run} loadProgress={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Join" }));
     expect((await screen.findByRole("alert")).textContent).toContain("did not approve");
   });
 
   it("shows an input error from the backend", async () => {
-    const onStartJoin = vi.fn(async () => {
+    const { run } = makeRunner(async () => {
       throw new Error("The code has 8 digits, as shown on the host's Devices page.");
     });
-    render(<JoinHostPanel onStartJoin={onStartJoin} loadProgress={vi.fn()} />);
+    render(<JoinHostPanel run={run} loadProgress={vi.fn()} />);
     fireEvent.click(screen.getByRole("button", { name: "Join" }));
     expect((await screen.findByRole("alert")).textContent).toContain("8 digits");
   });
@@ -65,7 +105,8 @@ describe("JoinHostPanel", () => {
 
 describe("DeviceBanner", () => {
   it("says it is connected, with the host and role", () => {
-    render(<DeviceBanner device={device()} onLeave={vi.fn()} onDismissRejected={vi.fn()} />);
+    const { run } = makeRunner();
+    render(<DeviceBanner device={device()} run={run} />);
     const status = screen.getByRole("status");
     expect(status.textContent).toContain("Connected to the host.");
     expect(status.textContent).toContain("192.168.1.20:47820");
@@ -73,7 +114,7 @@ describe("DeviceBanner", () => {
   });
 
   it("lists waiting and refused edits and clears the refused list", async () => {
-    const onDismissRejected = vi.fn(async () => undefined);
+    const { run, calls } = makeRunner();
     render(
       <DeviceBanner
         device={device({
@@ -89,8 +130,7 @@ describe("DeviceBanner", () => {
             },
           ],
         })}
-        onLeave={vi.fn()}
-        onDismissRejected={onDismissRejected}
+        run={run}
       />,
     );
     expect(screen.getByRole("status").textContent).toContain("Reconnecting");
@@ -101,18 +141,21 @@ describe("DeviceBanner", () => {
     await act(async () => {
       fireEvent.click(screen.getByRole("button", { name: "Clear this list" }));
     });
-    expect(onDismissRejected).toHaveBeenCalled();
+    expect(calls).toContainEqual({
+      id: dismissRejectedEditsAction.id,
+      args: {},
+    });
   });
 
   it("leaves only after confirmation", async () => {
-    const onLeave = vi.fn(async () => undefined);
+    const { run, calls } = makeRunner();
     const confirmLeave = vi.fn().mockReturnValueOnce(false).mockReturnValueOnce(true);
-    render(<DeviceBanner device={device()} onLeave={onLeave} onDismissRejected={vi.fn()} confirmLeave={confirmLeave} />);
+    render(<DeviceBanner device={device()} run={run} confirmLeave={confirmLeave} />);
     const button = screen.getByRole("button", { name: "Leave the host" });
     fireEvent.click(button);
-    expect(onLeave).not.toHaveBeenCalled();
+    expect(calls).toEqual([]);
     fireEvent.click(button);
-    expect(onLeave).toHaveBeenCalledTimes(1);
+    expect(calls).toEqual([{ id: leaveHostAction.id, args: {} }]);
   });
 });
 

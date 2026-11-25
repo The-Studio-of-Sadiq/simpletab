@@ -1,22 +1,28 @@
 import {
   adjudicatorConflictIds,
-  changeAdjudicatorInstitution,
   extraInstitutionConflictIds,
   teamConflictIds,
 } from "@simpletab/core/lib/adjudicators/conflicts";
-import type { OpRequest } from "@simpletab/core/ops";
-import type {
-  Adjudicator,
-  Institution,
-  Speaker,
-  Team,
-  Venue,
-} from "@simpletab/core/types";
-import type {
-  ProjectedState,
-  SubmitResult,
-} from "@simpletab/host/lib/common/host-protocol";
+import type { ProjectedState } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionResult, ActionRunner } from "../actions/action";
+import {
+  deleteAdjudicatorAction,
+  deleteInstitutionAction,
+  deleteTeamAction,
+  deleteVenueAction,
+  saveAdjudicatorAction,
+  saveAdjudicatorConflictsAction,
+  saveInstitutionAction,
+  saveTeamAction,
+  saveTeamConflictsAction,
+  saveVenueAction,
+  updateAdjudicatorAction,
+  updateInstitutionAction,
+  updateTeamAction,
+  updateVenueAction,
+} from "../actions/participants-actions";
+import { openSetupAction } from "../actions/releases-actions";
 import { t } from "../i18n";
 import { CsvImportPanel } from "./csv-import-panel";
 
@@ -37,14 +43,7 @@ const TAB_ORDER: readonly ParticipantsTabId[] = [
 
 export interface ParticipantsViewProps {
   state: ProjectedState | null;
-  onSubmitOp: (request: OpRequest) => Promise<SubmitResult>;
-  onOpenSetup?: () => void;
-}
-
-let entityIdCounter = 0;
-function makeEntityId(prefix: string): string {
-  entityIdCounter += 1;
-  return `${prefix}-${Date.now()}-${entityIdCounter}`;
+  run: ActionRunner;
 }
 
 interface OpNotice {
@@ -52,12 +51,12 @@ interface OpNotice {
   text: string;
 }
 
-function formatOpError(result: SubmitResult): string {
+function formatOpError(result: ActionResult): string {
   if (result.ok) {
     return "";
   }
   return t("common.errorWithCode", {
-    code: result.code,
+    code: "code" in result ? result.code : "INVALID",
     message: result.errors.join("; "),
   });
 }
@@ -73,8 +72,7 @@ function defaultSpeakerDrafts(count: number): Array<{ id: string; name: string; 
 
 export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
   state,
-  onSubmitOp,
-  onOpenSetup,
+  run,
 }) => {
   const baseId = React.useId();
   const [activeTab, setActiveTab] = React.useState<ParticipantsTabId>("institutions");
@@ -144,11 +142,16 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
         </div>
         <div className="simpletab-alert">
           <p>{t("common.noTournamentPrompt")}</p>
-          {onOpenSetup !== undefined ? (
-            <button type="button" className="theia-button" onClick={onOpenSetup}>
-              {t("common.openSetupButton")}
-            </button>
-          ) : null}
+          <button
+            type="button"
+            className="theia-button"
+            data-action={openSetupAction.id}
+            onClick={() => {
+              void run(openSetupAction, {});
+            }}
+          >
+            {t("common.openSetupButton")}
+          </button>
         </div>
       </div>
     );
@@ -160,7 +163,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
 
   const conflictRows = [
     ...state.adjudicators
-      .filter((adj) => adj.conflicts.length > 0)
+      .filter((adj) => (adj.conflicts?.length ?? 0) > 0)
       .map((adj) => ({
         key: `adj-${adj.id}`,
         id: adj.id,
@@ -231,17 +234,11 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
     const existing = editingInstId
       ? state.institutions.find((item) => item.id === editingInstId)
       : undefined;
-    const institution: Institution = {
-      ...(existing ?? {}),
-      id: existing?.id ?? makeEntityId("inst"),
-      tournamentId: state.tournament.id,
-      name: instName.trim(),
-      code: instCode.trim(),
-      ...(instRegion.trim() ? { region: instRegion.trim() } : { region: undefined }),
-    };
-    const result = await onSubmitOp({
-      type: existing ? "institution.update" : "institution.create",
-      payload: { institution },
+    const result = await run(existing ? updateInstitutionAction : saveInstitutionAction, {
+      ...(existing ? { id: existing.id } : {}),
+      name: instName,
+      code: instCode,
+      region: instRegion,
     });
     if (!result.ok) {
       setNotice({ kind: "error", text: formatOpError(result) });
@@ -266,38 +263,16 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
     const existing = editingTeamId
       ? state.teams.find((item) => item.id === editingTeamId)
       : undefined;
-    const institution = teamInstId ? institutionMap.get(teamInstId) : undefined;
-    const speakers: Speaker[] = teamSpeakers
-      .filter((s) => s.name.trim().length > 0)
-      .map((s) => {
-        const prev = existing?.speakers.find((p) => p.id === s.id);
-        return {
-          ...(prev ?? {}),
-          id: s.id || makeEntityId("spk"),
-          name: s.name.trim(),
-          ...(s.email.trim() ? { email: s.email.trim() } : { email: undefined }),
-        };
-      });
-
-    const team: Team = {
-      ...(existing ?? {}),
-      id: existing?.id ?? makeEntityId("team"),
-      tournamentId: state.tournament.id,
-      name: teamName.trim(),
-      ...(teamCodeName.trim()
-        ? { codeName: teamCodeName.trim() }
-        : { codeName: undefined }),
-      institutionId: institution?.id,
-      institutionName: institution?.name,
-      speakers,
-      breakCategories: existing?.breakCategories ?? [],
-      speakerCategories: existing?.speakerCategories ?? [],
-      checkedIn: existing?.checkedIn ?? true,
-    };
-
-    const result = await onSubmitOp({
-      type: existing ? "team.update" : "team.create",
-      payload: { team },
+    const result = await run(existing ? updateTeamAction : saveTeamAction, {
+      ...(existing ? { id: existing.id } : {}),
+      name: teamName,
+      codeName: teamCodeName,
+      institutionId: teamInstId || undefined,
+      speakers: teamSpeakers.map((speaker) => ({
+        ...(speaker.id ? { id: speaker.id } : {}),
+        name: speaker.name,
+        email: speaker.email,
+      })),
     });
     if (!result.ok) {
       setNotice({ kind: "error", text: formatOpError(result) });
@@ -322,27 +297,14 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
     const existing = editingAdjId
       ? state.adjudicators.find((item) => item.id === editingAdjId)
       : undefined;
-    const parsedScore = Number(adjBaseScore);
-    const institution =
-      !adjIndependent && adjInstId ? institutionMap.get(adjInstId) : undefined;
-
-    const baseAdj: Adjudicator = {
-      ...(existing ?? {}),
-      id: existing?.id ?? makeEntityId("adj"),
-      tournamentId: state.tournament.id,
-      name: adjName.trim(),
-      baseScore: parsedScore,
+    const result = await run(existing ? updateAdjudicatorAction : saveAdjudicatorAction, {
+      ...(existing ? { id: existing.id } : {}),
+      name: adjName,
+      baseScore: Number(adjBaseScore),
+      ...(adjInstId ? { institutionId: adjInstId } : {}),
+      email: adjEmail,
       trainee: adjTrainee,
-      independent: adjIndependent || institution === undefined,
-      ...(adjEmail.trim() ? { email: adjEmail.trim() } : { email: undefined }),
-      conflicts: existing?.conflicts ?? [],
-      checkedIn: existing?.checkedIn ?? true,
-    };
-    const adjudicator = changeAdjudicatorInstitution(baseAdj, institution);
-
-    const result = await onSubmitOp({
-      type: existing ? "adjudicator.update" : "adjudicator.create",
-      payload: { adjudicator },
+      independent: adjIndependent,
     });
     if (!result.ok) {
       setNotice({ kind: "error", text: formatOpError(result) });
@@ -369,32 +331,18 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
     const existing = editingVenueId
       ? state.venues.find((item) => item.id === editingVenueId)
       : undefined;
-    const priority = Number(venuePriority);
     const capacityTrimmed = venueCapacity.trim();
     const capacity = capacityTrimmed.length > 0 ? Number(capacityTrimmed) : undefined;
-    const categoryTrimmed = venueCategory.trim();
-
-    const venue: Venue = {
-      ...(existing ?? {}),
-      id: existing?.id ?? makeEntityId("venue"),
-      tournamentId: state.tournament.id,
-      name: venueName.trim(),
-      priority,
-      ...(categoryTrimmed
-        ? { category: categoryTrimmed, categories: [categoryTrimmed] }
-        : { category: undefined, categories: undefined }),
-      ...(capacity !== undefined && Number.isFinite(capacity)
-        ? { capacity }
-        : { capacity: undefined }),
+    const result = await run(existing ? updateVenueAction : saveVenueAction, {
+      ...(existing ? { id: existing.id } : {}),
+      name: venueName,
+      priority: Number(venuePriority),
+      category: venueCategory,
+      ...(capacity !== undefined && Number.isFinite(capacity) ? { capacity } : {}),
       accessible: venueAccessible,
       online: venueOnline,
       nearTabRoom: venueNearTabRoom,
       available: venueAvailable,
-    };
-
-    const result = await onSubmitOp({
-      type: existing ? "venue.update" : "venue.create",
-      payload: { venue },
     });
     if (!result.ok) {
       setNotice({ kind: "error", text: formatOpError(result) });
@@ -437,14 +385,11 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
       return;
     }
     setNotice(null);
-    const result = await onSubmitOp({
-      type: "conflict.update_adjudicator",
-      payload: {
-        adjudicatorId: conflictAdjId,
-        teamIds: conflictTeamIds,
-        adjudicatorIds: conflictAdjIds,
-        institutionIds: conflictInstIds,
-      },
+    const result = await run(saveAdjudicatorConflictsAction, {
+      adjudicatorId: conflictAdjId,
+      teamIds: conflictTeamIds,
+      adjudicatorIds: conflictAdjIds,
+      institutionIds: conflictInstIds,
     });
     if (!result.ok) {
       setNotice({ kind: "error", text: formatOpError(result) });
@@ -459,13 +404,9 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
       return;
     }
     setNotice(null);
-    const result = await onSubmitOp({
-      type: "conflict.set_team_institutions",
-      payload: {
-        teamId: conflictSubjectTeamId,
-        institutionIds: conflictSubjectTeamInstIds,
-        clearWhenEmpty: true,
-      },
+    const result = await run(saveTeamConflictsAction, {
+      teamId: conflictSubjectTeamId,
+      institutionIds: conflictSubjectTeamInstIds,
     });
     if (!result.ok) {
       setNotice({ kind: "error", text: formatOpError(result) });
@@ -474,9 +415,9 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
     setNotice({ kind: "success", text: t("participants.conflict.saved") });
   };
 
-  const handleDelete = async (request: OpRequest): Promise<void> => {
+  const handleDelete = async (resultPromise: Promise<ActionResult>): Promise<void> => {
     setNotice(null);
-    const result = await onSubmitOp(request);
+    const result = await resultPromise;
     if (!result.ok) {
       setNotice({ kind: "error", text: formatOpError(result) });
     }
@@ -510,6 +451,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
             <button
               type="button"
               className="theia-button secondary"
+              data-view-only
               onClick={() =>
                 setShowCsvFor((prev) => (prev === activeTab ? null : activeTab))
               }
@@ -537,6 +479,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
               }}
               id={`${baseId}-tab-${tab}`}
               type="button"
+              data-view-only
               role="tab"
               aria-selected={selected}
               aria-controls={`${baseId}-panel-${tab}`}
@@ -568,7 +511,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
         <CsvImportPanel
           kind={showCsvFor}
           state={state}
-          onSubmitOp={onSubmitOp}
+          run={run}
           onClose={() => setShowCsvFor(null)}
         />
       ) : null}
@@ -629,13 +572,20 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                 </div>
               </div>
               <div className="simpletab-actions">
-                <button type="submit" className="theia-button">
+                <button
+                  type="submit"
+                  className="theia-button"
+                  data-action={
+                    editingInstId ? updateInstitutionAction.id : saveInstitutionAction.id
+                  }
+                >
                   {editingInstId ? t("common.save") : t("common.add")}
                 </button>
                 {editingInstId ? (
                   <button
                     type="button"
                     className="theia-button secondary"
+                    data-view-only
                     onClick={resetInstForm}
                   >
                     {t("common.cancel")}
@@ -669,6 +619,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                         <button
                           type="button"
                           className="theia-button secondary"
+                          data-view-only
                           aria-label={`${t("common.edit")} ${inst.name}`}
                           onClick={() => {
                             setEditingInstId(inst.id);
@@ -682,12 +633,10 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                         <button
                           type="button"
                           className="theia-button secondary"
+                          data-action={deleteInstitutionAction.id}
                           aria-label={`${t("common.delete")} ${inst.name}`}
                           onClick={() => {
-                            void handleDelete({
-                              type: "institution.delete",
-                              payload: { institutionId: inst.id },
-                            });
+                            void handleDelete(run(deleteInstitutionAction, { id: inst.id }));
                           }}
                         >
                           {t("common.delete")}
@@ -806,6 +755,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                     <button
                       type="button"
                       className="theia-button secondary"
+                      data-view-only
                       disabled={teamSpeakers.length <= 1}
                       onClick={() =>
                         setTeamSpeakers((prev) => prev.filter((_, i) => i !== idx))
@@ -819,6 +769,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                   <button
                     type="button"
                     className="theia-button secondary"
+                    data-view-only
                     onClick={() =>
                       setTeamSpeakers((prev) => [
                         ...prev,
@@ -832,13 +783,18 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
               </fieldset>
 
               <div className="simpletab-actions">
-                <button type="submit" className="theia-button">
+                <button
+                  type="submit"
+                  className="theia-button"
+                  data-action={editingTeamId ? updateTeamAction.id : saveTeamAction.id}
+                >
                   {editingTeamId ? t("common.save") : t("common.add")}
                 </button>
                 {editingTeamId ? (
                   <button
                     type="button"
                     className="theia-button secondary"
+                    data-view-only
                     onClick={resetTeamForm}
                   >
                     {t("common.cancel")}
@@ -877,6 +833,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                         <button
                           type="button"
                           className="theia-button secondary"
+                          data-view-only
                           aria-label={`${t("common.edit")} ${team.name}`}
                           onClick={() => {
                             setEditingTeamId(team.id);
@@ -901,12 +858,10 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                         <button
                           type="button"
                           className="theia-button secondary"
+                          data-action={deleteTeamAction.id}
                           aria-label={`${t("common.delete")} ${team.name}`}
                           onClick={() => {
-                            void handleDelete({
-                              type: "team.delete",
-                              payload: { teamId: team.id },
-                            });
+                            void handleDelete(run(deleteTeamAction, { id: team.id }));
                           }}
                         >
                           {t("common.delete")}
@@ -1022,13 +977,18 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
               </div>
 
               <div className="simpletab-actions">
-                <button type="submit" className="theia-button">
+                <button
+                  type="submit"
+                  className="theia-button"
+                  data-action={editingAdjId ? updateAdjudicatorAction.id : saveAdjudicatorAction.id}
+                >
                   {editingAdjId ? t("common.save") : t("common.add")}
                 </button>
                 {editingAdjId ? (
                   <button
                     type="button"
                     className="theia-button secondary"
+                    data-view-only
                     onClick={resetAdjForm}
                   >
                     {t("common.cancel")}
@@ -1084,6 +1044,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                         <button
                           type="button"
                           className="theia-button secondary"
+                          data-view-only
                           aria-label={`${t("common.edit")} ${adj.name}`}
                           onClick={() => {
                             setEditingAdjId(adj.id);
@@ -1100,12 +1061,10 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                         <button
                           type="button"
                           className="theia-button secondary"
+                          data-action={deleteAdjudicatorAction.id}
                           aria-label={`${t("common.delete")} ${adj.name}`}
                           onClick={() => {
-                            void handleDelete({
-                              type: "adjudicator.delete",
-                              payload: { adjudicatorId: adj.id },
-                            });
+                            void handleDelete(run(deleteAdjudicatorAction, { id: adj.id }));
                           }}
                         >
                           {t("common.delete")}
@@ -1236,13 +1195,18 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
               </div>
 
               <div className="simpletab-actions">
-                <button type="submit" className="theia-button">
+                <button
+                  type="submit"
+                  className="theia-button"
+                  data-action={editingVenueId ? updateVenueAction.id : saveVenueAction.id}
+                >
                   {editingVenueId ? t("common.save") : t("common.add")}
                 </button>
                 {editingVenueId ? (
                   <button
                     type="button"
                     className="theia-button secondary"
+                    data-view-only
                     onClick={resetVenueForm}
                   >
                     {t("common.cancel")}
@@ -1290,6 +1254,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                         <button
                           type="button"
                           className="theia-button secondary"
+                          data-view-only
                           aria-label={`${t("common.edit")} ${venue.name}`}
                           onClick={() => {
                             setEditingVenueId(venue.id);
@@ -1310,12 +1275,10 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                         <button
                           type="button"
                           className="theia-button secondary"
+                          data-action={deleteVenueAction.id}
                           aria-label={`${t("common.delete")} ${venue.name}`}
                           onClick={() => {
-                            void handleDelete({
-                              type: "venue.delete",
-                              payload: { venueId: venue.id },
-                            });
+                            void handleDelete(run(deleteVenueAction, { id: venue.id }));
                           }}
                         >
                           {t("common.delete")}
@@ -1449,6 +1412,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                 <button
                   type="submit"
                   className="theia-button"
+                  data-action={saveAdjudicatorConflictsAction.id}
                   disabled={!conflictAdjId}
                 >
                   {t("participants.conflict.saveAdj")}
@@ -1514,6 +1478,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                 <button
                   type="submit"
                   className="theia-button"
+                  data-action={saveTeamConflictsAction.id}
                   disabled={!conflictSubjectTeamId}
                 >
                   {t("participants.conflict.saveTeam")}
@@ -1554,6 +1519,7 @@ export const ParticipantsView: React.FC<ParticipantsViewProps> = ({
                           <button
                             type="button"
                             className="theia-button secondary"
+                            data-view-only
                             aria-label={`${t("common.edit")} ${row.subject}`}
                             onClick={() => {
                               if (row.kind === "adj") {

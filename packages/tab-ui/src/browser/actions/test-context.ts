@@ -1,10 +1,22 @@
 import type { PublicChainItem } from "@simpletab/core/changelog";
 import type { OpRequest } from "@simpletab/core/ops";
 import type {
+  CredentialName,
+  CredentialStatusEntry,
+  CredentialTestResult,
+  CredentialsService,
+} from "@simpletab/host/lib/common/credentials-protocol";
+import type {
   ArchiveStatus,
+  CreateDemoResult,
+  CreateTournamentParams,
+  CreateTournamentResult,
   DevicesStatus,
   HostCancelLongResult,
+  HostIntegrityCheckResult,
   HostStatus,
+  JoinHostParams,
+  JoinProgress,
   OnlineSettings,
   OpUndoInfo,
   ProjectedState,
@@ -12,8 +24,16 @@ import type {
   PublishStatus,
   QrReceiveResult,
   SubmitResult,
+  SyncStatus,
 } from "@simpletab/host/lib/common/host-protocol";
 import { DEFAULT_ONLINE_SETTINGS } from "@simpletab/host/lib/common/host-protocol";
+import {
+  DEFAULT_PROJECTOR_CONTROL,
+  type ProjectorControlPatch,
+  type ProjectorControlState,
+  type ProjectorService,
+  type ProjectorSyncPayload,
+} from "@simpletab/host/lib/common/projector-protocol";
 import type { IssuedPairingCode } from "@simpletab/host/lib/common/collab-protocol";
 import type { TournamentStore, TournamentStoreSnapshot } from "../store/tournament-store";
 import type {
@@ -21,6 +41,7 @@ import type {
   ActionPrompts,
   ActionResult,
   ActionRunner,
+  ActionServices,
   SimpleTabAction,
 } from "./action";
 
@@ -42,6 +63,8 @@ export function scriptedPrompts(answers: unknown[]): ScriptedPrompts {
       next<T>(placeholder),
     input: async (prompt: string) => next<string>(prompt),
     confirm: async (title: string) => next<boolean>(title) === true,
+    pickFile: async (title: string) => next<string>(title),
+    openTextFile: async (title: string) => next<string>(title),
   };
 }
 
@@ -58,9 +81,18 @@ export interface FakeStoreOptions {
   receiveQrBallot?: (codes: string[]) => Promise<QrReceiveResult>;
   /** Live state for action `run` methods; defaults to the state passed to `fakeStore`. */
   getState?: () => ProjectedState | null;
+  /** Result returned by `createTournament`; defaults to a minimal success result. */
+  createTournamentResult?: (params: CreateTournamentParams) => CreateTournamentResult;
+  /** Status returned by `openTournament`; defaults to the store status. */
+  openTournamentStatus?: (dbPath: string) => HostStatus;
   /** Changelog and undo info for the Changelog undo prompt; default empty. */
   changelog?: PublicChainItem[];
   opUndoInfo?: OpUndoInfo[];
+  fullCheckResult?: HostIntegrityCheckResult;
+  pullNowResult?: SyncStatus;
+  createDemoResult?: (directory: string) => CreateDemoResult;
+  joinProgress?: (params: JoinHostParams) => JoinProgress;
+  displayState?: ProjectedState | null;
 }
 
 export interface FakeStoreCalls {
@@ -84,6 +116,15 @@ export interface FakeStoreCalls {
   exportDirectories: string[];
   undoneSeqs: number[];
   qrCodes: string[][];
+  createTournamentParams: CreateTournamentParams[];
+  openTournamentPaths: string[];
+  fullChecks: number;
+  pulls: number;
+  demoDirectories: string[];
+  joinParams: JoinHostParams[];
+  leftHost: number;
+  dismissedRejected: number;
+  displayStateReads: number;
 }
 
 export interface FakeStore {
@@ -99,6 +140,15 @@ const OK_QR: QrReceiveResult = {
   seq: 1,
   roundId: "",
   debateId: "",
+};
+
+const OK_FULL_CHECK: HostIntegrityCheckResult = { ok: true };
+const OK_SYNC: SyncStatus = {
+  enabled: true,
+  active: true,
+  hostNumber: 1,
+  ackedThrough: 1,
+  consecutiveFailures: 0,
 };
 
 const EMPTY_DEVICES_STATUS: DevicesStatus = {
@@ -139,6 +189,15 @@ export function fakeStore(
     exportDirectories: [],
     undoneSeqs: [],
     qrCodes: [],
+    createTournamentParams: [],
+    openTournamentPaths: [],
+    fullChecks: 0,
+    pulls: 0,
+    demoDirectories: [],
+    joinParams: [],
+    leftHost: 0,
+    dismissedRejected: 0,
+    displayStateReads: 0,
   };
   const status: HostStatus = {
     open: state !== null,
@@ -243,16 +302,180 @@ export function fakeStore(
       calls.qrCodes.push(codes);
       return options.receiveQrBallot?.(codes) ?? OK_QR;
     },
+    createTournament: async (params: CreateTournamentParams): Promise<CreateTournamentResult> => {
+      calls.createTournamentParams.push(params);
+      return options.createTournamentResult?.(params) ?? {
+        dbPath: `${params.directory || "/tmp"}/${params.slug}.db`,
+        workspaceDir: params.directory,
+        status,
+        state: state ?? ({} as ProjectedState),
+      };
+    },
+    openTournament: async (dbPath: string): Promise<HostStatus> => {
+      calls.openTournamentPaths.push(dbPath);
+      return options.openTournamentStatus?.(dbPath) ?? status;
+    },
+    runFullCheck: async (): Promise<HostIntegrityCheckResult> => {
+      calls.fullChecks += 1;
+      return options.fullCheckResult ?? OK_FULL_CHECK;
+    },
+    pullNow: async (): Promise<SyncStatus> => {
+      calls.pulls += 1;
+      return options.pullNowResult ?? OK_SYNC;
+    },
+    createDemoTournament: async (directory: string): Promise<CreateDemoResult> => {
+      calls.demoDirectories.push(directory);
+      return (
+        options.createDemoResult?.(directory) ?? {
+          dbPath: `${directory || "/tmp"}/demo.db`,
+          workspaceDir: directory,
+          status,
+        }
+      );
+    },
+    startJoin: async (params: JoinHostParams): Promise<JoinProgress> => {
+      calls.joinParams.push(params);
+      return options.joinProgress?.(params) ?? { state: "connecting" };
+    },
+    leaveHost: async () => {
+      calls.leftHost += 1;
+    },
+    dismissRejectedEdits: async () => {
+      calls.dismissedRejected += 1;
+    },
+    getDisplayState: async (): Promise<ProjectedState | null> => {
+      calls.displayStateReads += 1;
+      return options.displayState ?? null;
+    },
   } as unknown as TournamentStore;
   return { submitted: calls.submitted, calls, store, undoneSeqs: calls.undoneSeqs };
+}
+
+export interface FakeCredentialsCalls {
+  statusReads: number;
+  sets: Array<{ name: CredentialName; value: string }>;
+  clears: CredentialName[];
+  tests: CredentialName[];
+}
+
+export function fakeCredentialsService(
+  options: {
+    status?: CredentialStatusEntry[];
+    set?: (name: CredentialName, value: string) => Promise<void>;
+    clear?: (name: CredentialName) => Promise<void>;
+    test?: (name: CredentialName) => Promise<CredentialTestResult>;
+  } = {},
+): { service: CredentialsService; calls: FakeCredentialsCalls } {
+  const calls: FakeCredentialsCalls = { statusReads: 0, sets: [], clears: [], tests: [] };
+  const service = {
+    status: async () => {
+      calls.statusReads += 1;
+      return options.status ?? [];
+    },
+    set: async (name: CredentialName, value: string) => {
+      calls.sets.push({ name, value });
+      await options.set?.(name, value);
+    },
+    clear: async (name: CredentialName) => {
+      calls.clears.push(name);
+      await options.clear?.(name);
+    },
+    test: async (name: CredentialName) => {
+      calls.tests.push(name);
+      return options.test?.(name) ?? { ok: true };
+    },
+  } as CredentialsService;
+  return { service, calls };
+}
+
+export interface FakeProjectorCalls {
+  syncPayloadReads: number;
+  opens: number;
+  closes: number;
+  fullscreenToggles: number;
+  updates: ProjectorControlPatch[];
+  starts: Array<number | undefined>;
+  pauses: number;
+  resets: Array<number | undefined>;
+  pushes: Array<ProjectorSyncPayload["displayState"]>;
+}
+
+export function fakeProjectorService(
+  initial: ProjectorControlState = DEFAULT_PROJECTOR_CONTROL,
+): {
+  service: ProjectorService;
+  calls: FakeProjectorCalls;
+  getControl: () => ProjectorControlState;
+} {
+  let control: ProjectorControlState = {
+    ...initial,
+    countdown: { ...initial.countdown },
+  };
+  const calls: FakeProjectorCalls = {
+    syncPayloadReads: 0,
+    opens: 0,
+    closes: 0,
+    fullscreenToggles: 0,
+    updates: [],
+    starts: [],
+    pauses: 0,
+    resets: [],
+    pushes: [],
+  };
+  const service = {
+    getSyncPayload: async () => {
+      calls.syncPayloadReads += 1;
+      return { control, displayState: null };
+    },
+    openProjector: async () => {
+      calls.opens += 1;
+      control = { ...control, open: true };
+      return control;
+    },
+    closeProjector: async () => {
+      calls.closes += 1;
+      control = { ...control, open: false };
+      return control;
+    },
+    toggleFullscreen: async () => {
+      calls.fullscreenToggles += 1;
+      control = { ...control, fullscreen: !control.fullscreen };
+      return control;
+    },
+    updateControl: async (patch: ProjectorControlPatch) => {
+      calls.updates.push(patch);
+      control = { ...control, ...patch };
+      return control;
+    },
+    startCountdown: async (durationSeconds?: number) => {
+      calls.starts.push(durationSeconds);
+      control = { ...control, countdown: { ...control.countdown, running: true } };
+      return control;
+    },
+    pauseCountdown: async () => {
+      calls.pauses += 1;
+      control = { ...control, countdown: { ...control.countdown, running: false } };
+      return control;
+    },
+    resetCountdown: async (durationSeconds?: number) => {
+      calls.resets.push(durationSeconds);
+      control = { ...control, countdown: { ...control.countdown, running: false } };
+      return control;
+    },
+    pushDisplayState: async (displayState: ProjectorSyncPayload["displayState"]) => {
+      calls.pushes.push(displayState);
+    },
+  } as unknown as ProjectorService;
+  return { service, calls, getControl: () => control };
 }
 
 export function testContext(
   store: TournamentStore,
   prompts: ActionPrompts,
   openPage: (widgetId: string) => Promise<void> = async () => undefined,
+  services: ActionServices = {},
 ): ActionContext {
-  return { store, prompts, openPage };
+  return { store, prompts, openPage, services };
 }
 
 /** Runs actions with known arguments, the way a page button does; tests only. */

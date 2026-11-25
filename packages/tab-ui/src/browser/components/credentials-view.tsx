@@ -1,10 +1,7 @@
-import { isValidCdnHost } from "../lib/links-generator";
 import {
   CREDENTIAL_NAMES,
   type CredentialName,
   type CredentialStatusEntry,
-  type CredentialTestResult,
-  type SmtpCredentialPayload,
 } from "@simpletab/host/lib/common/credentials-protocol";
 import {
   DEFAULT_ONLINE_SETTINGS,
@@ -14,79 +11,32 @@ import {
   type ProjectedState,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import {
+  clearCredentialSecretAction,
+  credentialDescription,
+  credentialLabel,
+  EMPTY_SMTP_FORM,
+  serializeSecret,
+  setCredentialSecretAction,
+  testCredentialSecretAction,
+  updateOnlineSettingsAction,
+  type CredentialActionResult,
+  type SecretFormValues,
+  type SmtpFormValues,
+} from "../actions/credentials-actions";
+import type { ActionRunner } from "../actions/action";
 import { t } from "../i18n";
 import { stateHasPermission } from "../lib/permissions";
+
+export { normalizeGithubRepo } from "../actions/credentials-actions";
 
 export interface CredentialsViewProps {
   state: ProjectedState | null;
   status: HostStatus;
   available: boolean;
   credentialsStatus: readonly CredentialStatusEntry[];
-  onRefreshCredentials: () => Promise<CredentialStatusEntry[]>;
-  onSetCredential: (name: CredentialName, value: string) => Promise<void>;
-  onClearCredential: (name: CredentialName) => Promise<void>;
-  onTestCredential: (name: CredentialName) => Promise<CredentialTestResult>;
-  onUpdateOnlineSettings: (
-    patch: Partial<OnlineSettings>,
-  ) => Promise<OnlineSettings>;
-}
-
-interface SmtpFormValues {
-  host: string;
-  port: string;
-  user: string;
-  password: string;
-  from: string;
-}
-
-const EMPTY_SMTP_FORM: SmtpFormValues = {
-  host: "",
-  port: "587",
-  user: "",
-  password: "",
-  from: "",
-};
-
-const EMAIL_RE = /^[^\s<>@]+@[^\s<>@]+\.[^\s<>@]+$/;
-const DISPLAY_EMAIL_RE = /^[^<>]+<\s*([^\s<>@]+@[^\s<>@]+\.[^\s<>@]+)\s*>$/;
-
-function isValidEmail(value: string): boolean {
-  const trimmed = value.trim();
-  if (EMAIL_RE.test(trimmed)) {
-    return true;
-  }
-  const match = DISPLAY_EMAIL_RE.exec(trimmed);
-  return match !== null && EMAIL_RE.test(match[1] ?? "");
-}
-
-function credentialLabel(name: CredentialName): string {
-  switch (name) {
-    case "tournamentKey":
-      return t("credentials.fieldTournamentKey");
-    case "cdnToken":
-      return t("credentials.fieldCdnToken");
-    case "smtp":
-      return t("credentials.fieldSmtp");
-    case "githubToken":
-      return t("credentials.fieldGithubToken");
-    case "ownWorkerToken":
-      return t("credentials.fieldOwnWorkerToken");
-  }
-}
-
-function credentialDescription(name: CredentialName): string {
-  switch (name) {
-    case "tournamentKey":
-      return t("credentials.fieldTournamentKeyDesc");
-    case "cdnToken":
-      return t("credentials.fieldCdnTokenDesc");
-    case "smtp":
-      return t("credentials.fieldSmtpDesc");
-    case "githubToken":
-      return t("credentials.fieldGithubTokenDesc");
-    case "ownWorkerToken":
-      return t("credentials.fieldOwnWorkerTokenDesc");
-  }
+  /** Runs the same commands the palette offers; the page never calls the host itself. */
+  run: ActionRunner;
 }
 
 function formatLastTested(entry: CredentialStatusEntry | undefined): string {
@@ -119,32 +69,12 @@ function stepStateLabel(entry: CredentialStatusEntry | undefined): string {
   return t("credentials.statusSet");
 }
 
-const GITHUB_NAME_RE = /^[A-Za-z0-9_.-]{1,100}$/;
-
-/** "owner/name" from "owner/name" or a github.com address; "" clears it; undefined when invalid. */
-export function normalizeGithubRepo(value: string): string | undefined {
-  const trimmed = value
-    .trim()
-    .replace(/^https?:\/\/(www\.)?github\.com\//i, "")
-    .replace(/\/+$/, "")
-    .replace(/\.git$/i, "");
-  if (trimmed.length === 0) return "";
-  const parts = trimmed.split("/");
-  if (parts.length !== 2) return undefined;
-  const [owner, repo] = parts as [string, string];
-  if (!GITHUB_NAME_RE.test(owner) || !GITHUB_NAME_RE.test(repo) || repo === "." || repo === "..") return undefined;
-  return `${owner}/${repo}`;
-}
-
 export const CredentialsView: React.FC<CredentialsViewProps> = ({
   state,
   status,
   available,
   credentialsStatus,
-  onSetCredential,
-  onClearCredential,
-  onTestCredential,
-  onUpdateOnlineSettings,
+  run,
 }) => {
   const baseId = React.useId();
   const canManage =
@@ -225,49 +155,32 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
     setSmtpForm(EMPTY_SMTP_FORM);
   };
 
+  const reportFailure = (result: CredentialActionResult): void => {
+    if (!result.ok) {
+      setErrorMessage(result.errors.join(" "));
+    }
+  };
+
   const handleSaveSecret = async (name: CredentialName): Promise<void> => {
     setErrorMessage(null);
     setFeedbackMessage(null);
-
-    let serialized = "";
-    if (name === "smtp") {
-      const host = smtpForm.host.trim();
-      const port = Number(smtpForm.port.trim());
-      const user = smtpForm.user.trim();
-      const password = smtpForm.password;
-      const from = smtpForm.from.trim();
-      if (
-        host.length === 0 ||
-        !Number.isInteger(port) ||
-        port < 1 ||
-        port > 65535 ||
-        user.length === 0 ||
-        password.length === 0 ||
-        !isValidEmail(from)
-      ) {
-        setErrorMessage(t("credentials.validationSmtp"));
-        return;
-      }
-      const payload: SmtpCredentialPayload = {
-        host,
-        port,
-        user,
-        password,
-        from,
-      };
-      serialized = JSON.stringify(payload);
-    } else {
-      const trimmed = tokenInput.trim();
-      if (trimmed.length === 0) {
-        setErrorMessage(t("credentials.validationEmpty"));
-        return;
-      }
-      serialized = trimmed;
+    const values: SecretFormValues = {
+      token: tokenInput,
+      smtp: { ...smtpForm },
+    };
+    const serialized = serializeSecret(name, values);
+    if (serialized.errorKey !== undefined) {
+      setErrorMessage(t(serialized.errorKey));
+      return;
     }
 
     setBusyName(name);
     try {
-      await onSetCredential(name, serialized);
+      const result = await run(setCredentialSecretAction, { name, values });
+      if (!result.ok) {
+        reportFailure(result);
+        return;
+      }
       // Clear sensitive inputs immediately after sending to electron-main.
       setTokenInput("");
       setSmtpForm(EMPTY_SMTP_FORM);
@@ -287,7 +200,11 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
     setFeedbackMessage(null);
     setBusyName(name);
     try {
-      await onClearCredential(name);
+      const result = await run(clearCredentialSecretAction, { name });
+      if (!result.ok) {
+        reportFailure(result);
+        return;
+      }
       if (editingName === name) {
         cancelEdit();
       }
@@ -306,20 +223,25 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
     setFeedbackMessage(null);
     setBusyName(name);
     try {
-      const result = await onTestCredential(name);
-      if (result.ok) {
-        setFeedbackMessage(
-          `${credentialLabel(name)}: ${t("credentials.testPassed")}`,
-        );
-      } else {
+      const result = await run(testCredentialSecretAction, { name });
+      if (!result.ok) {
+        reportFailure(result);
+        return;
+      }
+      const test = result.test;
+      if (test !== undefined && !test.ok) {
         setErrorMessage(
           `${credentialLabel(name)}: ${
-            result.error
-              ? t("credentials.testFailed", { error: result.error })
+            test.error
+              ? t("credentials.testFailed", { error: test.error })
               : t("credentials.testFailedGeneric")
           }`,
         );
+        return;
       }
+      setFeedbackMessage(
+        `${credentialLabel(name)}: ${t("credentials.testPassed")}`,
+      );
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
     } finally {
@@ -336,7 +258,11 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
     setErrorMessage(null);
     setOnlineBusy(true);
     try {
-      await onUpdateOnlineSettings(patch);
+      const result = await run(updateOnlineSettingsAction, { patch });
+      if (!result.ok) {
+        reportFailure(result);
+        return;
+      }
       setFeedbackMessage(t("credentials.onlineSaved"));
     } catch (error) {
       setErrorMessage(error instanceof Error ? error.message : String(error));
@@ -349,37 +275,20 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
     event: React.FormEvent,
   ): Promise<void> => {
     event.preventDefault();
-    const trimmed = cdnHostInput.trim().toLowerCase();
-    if (trimmed.length > 0 && !isValidCdnHost(trimmed)) {
-      setErrorMessage(t("credentials.cdnHostInvalid"));
-      return;
-    }
-    await handleOnlinePatch({ cdnHost: trimmed });
+    await handleOnlinePatch({ cdnHost: cdnHostInput.trim().toLowerCase() });
   };
 
   const handleSavePages = async (event: React.FormEvent): Promise<void> => {
     event.preventDefault();
-    const accountId = accountIdInput.trim().toLowerCase();
-    const project = pagesProjectInput.trim().toLowerCase();
-    if (accountId.length > 0 && !/^[0-9a-f]{32}$/.test(accountId)) {
-      setErrorMessage(t("credentials.pagesAccountInvalid"));
-      return;
-    }
-    if (project.length > 0 && !/^[a-z0-9-]{1,58}$/.test(project)) {
-      setErrorMessage(t("credentials.pagesProjectInvalid"));
-      return;
-    }
-    await handleOnlinePatch({ cloudflareAccountId: accountId, pagesProject: project });
+    await handleOnlinePatch({
+      cloudflareAccountId: accountIdInput.trim().toLowerCase(),
+      pagesProject: pagesProjectInput.trim().toLowerCase(),
+    });
   };
 
   const handleSaveGithubRepo = async (event: React.FormEvent): Promise<void> => {
     event.preventDefault();
-    const repo = normalizeGithubRepo(githubRepoInput);
-    if (repo === undefined) {
-      setErrorMessage(t("credentials.githubRepoInvalid"));
-      return;
-    }
-    await handleOnlinePatch({ githubRepo: repo });
+    await handleOnlinePatch({ githubRepo: githubRepoInput.trim() });
   };
 
   const keyEntry = entryMap.get("tournamentKey");
@@ -467,6 +376,7 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
                           <button
                             type="button"
                             className="theia-button"
+                            data-view-only
                             disabled={!available || isBusy}
                             onClick={() => beginEdit(name)}
                           >
@@ -477,6 +387,7 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
                           <button
                             type="button"
                             className="theia-button secondary"
+                            data-action={clearCredentialSecretAction.id}
                             disabled={!available || !isSet || isBusy}
                             onClick={() => {
                               void handleClear(name);
@@ -487,6 +398,7 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
                           <button
                             type="button"
                             className="theia-button secondary"
+                            data-action={testCredentialSecretAction.id}
                             disabled={!available || isBusy}
                             onClick={() => {
                               void handleTest(name);
@@ -624,6 +536,7 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
                               <button
                                 type="submit"
                                 className="theia-button"
+                                data-action={setCredentialSecretAction.id}
                                 disabled={isBusy}
                               >
                                 {isBusy
@@ -633,6 +546,7 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
                               <button
                                 type="button"
                                 className="theia-button secondary"
+                                data-view-only
                                 onClick={cancelEdit}
                               >
                                 {t("credentials.cancelAction")}
@@ -800,6 +714,7 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
               <button
                 type="submit"
                 className="theia-button secondary"
+                data-action={updateOnlineSettingsAction.id}
                 disabled={!status.open || onlineBusy}
               >
                 {t("credentials.cdnHostSave")}
@@ -848,6 +763,7 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
               <button
                 type="submit"
                 className="theia-button secondary"
+                data-action={updateOnlineSettingsAction.id}
                 disabled={!status.open || onlineBusy}
               >
                 {t("credentials.pagesSave")}
@@ -881,6 +797,7 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
               <button
                 type="submit"
                 className="theia-button secondary"
+                data-action={updateOnlineSettingsAction.id}
                 disabled={!status.open || onlineBusy}
               >
                 {t("credentials.githubRepoSave")}
@@ -913,6 +830,7 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
                     <button
                       type="button"
                       className="theia-button secondary"
+                      data-view-only
                       disabled
                       title={t("credentials.stepRequestKeyM3Note")}
                     >
@@ -921,6 +839,7 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
                     <button
                       type="button"
                       className="theia-button secondary"
+                      data-action={testCredentialSecretAction.id}
                       disabled={!available || busyName === "tournamentKey"}
                       onClick={() => {
                         void handleTest("tournamentKey");
@@ -941,6 +860,7 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
                   <button
                     type="button"
                     className="theia-button secondary"
+                    data-action={testCredentialSecretAction.id}
                     disabled={!available || busyName === "cdnToken"}
                     onClick={() => {
                       void handleTest("cdnToken");
@@ -960,6 +880,7 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
                   <button
                     type="button"
                     className="theia-button secondary"
+                    data-action={testCredentialSecretAction.id}
                     disabled={!available || busyName === "smtp"}
                     onClick={() => {
                       void handleTest("smtp");
@@ -979,6 +900,7 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
                   <button
                     type="button"
                     className="theia-button secondary"
+                    data-action={testCredentialSecretAction.id}
                     disabled={!available || busyName === "githubToken"}
                     onClick={() => {
                       void handleTest("githubToken");
@@ -1001,6 +923,7 @@ export const CredentialsView: React.FC<CredentialsViewProps> = ({
                   <button
                     type="button"
                     className="theia-button secondary"
+                    data-action={testCredentialSecretAction.id}
                     disabled={!available || busyName === "cdnToken"}
                     onClick={() => {
                       void handleTest("cdnToken");

@@ -1,5 +1,4 @@
 import {
-  buildImportCommit,
   chosenAction,
   countRowsWithErrors,
   planImport,
@@ -9,41 +8,25 @@ import {
   type PlannedRow,
   type RowAction,
 } from "@simpletab/core/lib/csv/importPlan";
-import type { OpRequest } from "@simpletab/core/ops";
-import type {
-  ProjectedState,
-  SubmitResult,
-} from "@simpletab/host/lib/common/host-protocol";
+import type { ProjectedState } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import {
+  applyCsvImportAction,
+  type CsvApplyInput,
+  type CsvApplyResult,
+  type CsvApplySummary,
+} from "../actions/csv-import-actions";
+import type { ActionRunner } from "../actions/action";
 import { t } from "../i18n";
 
 export interface CsvImportPanelProps {
   kind: ImportKind;
   state: ProjectedState;
-  onSubmitOp: (request: OpRequest) => Promise<SubmitResult>;
+  run: ActionRunner;
   onClose?: () => void;
 }
 
-interface ApplyFailureReport {
-  label: string;
-  opType: string;
-  code: string;
-  errors: string[];
-}
-
-interface ApplySummary {
-  succeeded: number;
-  failures: ApplyFailureReport[];
-  skipped: number;
-}
-
 type RowVisualStatus = "add" | "match" | "conflict" | "error";
-
-let idCounter = 0;
-function createImportId(prefix: string): string {
-  idCounter += 1;
-  return `${prefix}-${Date.now()}-${idCounter}`;
-}
 
 function getRowVisualStatus(row: PlannedRow): RowVisualStatus {
   if (row.issues.some((issue) => issue.severity === "error") || !row.draft) {
@@ -96,7 +79,7 @@ function kindTitle(kind: ImportKind): string {
 export const CsvImportPanel: React.FC<CsvImportPanelProps> = ({
   kind,
   state,
-  onSubmitOp,
+  run,
   onClose,
 }) => {
   const baseId = React.useId();
@@ -105,7 +88,7 @@ export const CsvImportPanel: React.FC<CsvImportPanelProps> = ({
   const [validRowsOnly, setValidRowsOnly] = React.useState(false);
   const [commitErrors, setCommitErrors] = React.useState<string[]>([]);
   const [applying, setApplying] = React.useState(false);
-  const [applySummary, setApplySummary] = React.useState<ApplySummary | null>(null);
+  const [applySummary, setApplySummary] = React.useState<CsvApplySummary | null>(null);
 
   const importContext = React.useMemo(
     () => ({
@@ -198,98 +181,21 @@ export const CsvImportPanel: React.FC<CsvImportPanelProps> = ({
     }
     setCommitErrors([]);
     setApplySummary(null);
-
-    const built = buildImportCommit(plan, choices, {
-      ...importContext,
-      tournamentId: state.tournament.id,
-      createId: createImportId,
-    });
-
-    if (built.errors.length > 0 || built.commit === undefined) {
-      setCommitErrors(built.errors);
-      return;
-    }
-
-    const { commit } = built;
-    const ops: Array<{ label: string; request: OpRequest }> = [
-      ...commit.institutionsCreated.map((institution) => ({
-        label: institution.name,
-        request: {
-          type: "institution.create",
-          payload: { institution },
-        },
-      })),
-      ...commit.institutionsUpdated.map((institution) => ({
-        label: institution.name,
-        request: {
-          type: "institution.update",
-          payload: { institution },
-        },
-      })),
-      ...commit.teamsCreated.map((team) => ({
-        label: team.name,
-        request: {
-          type: "team.create",
-          payload: { team },
-        },
-      })),
-      ...commit.teamsUpdated.map((team) => ({
-        label: team.name,
-        request: {
-          type: "team.update",
-          payload: { team },
-        },
-      })),
-      ...commit.adjudicatorsCreated.map((adjudicator) => ({
-        label: adjudicator.name,
-        request: {
-          type: "adjudicator.create",
-          payload: { adjudicator },
-        },
-      })),
-      ...commit.adjudicatorsUpdated.map((adjudicator) => ({
-        label: adjudicator.name,
-        request: {
-          type: "adjudicator.update",
-          payload: { adjudicator },
-        },
-      })),
-    ];
-
-    if (commit.speakerCategories !== undefined) {
-      ops.push({
-        label: "Speaker categories",
-        request: {
-          type: "settings.update",
-          payload: {
-            preferences: { speakerCategories: commit.speakerCategories },
-          },
-        },
-      });
-    }
-
     setApplying(true);
-    let succeeded = 0;
-    const failures: ApplyFailureReport[] = [];
     try {
-      for (const item of ops) {
-        const result = await onSubmitOp(item.request);
-        if (result.ok) {
-          succeeded += 1;
-        } else {
-          failures.push({
-            label: item.label,
-            opType: item.request.type,
-            code: result.code,
-            errors: result.errors,
-          });
-        }
-      }
-      setApplySummary({
-        succeeded,
-        failures,
-        skipped: commit.skipped,
+      const result = await run<CsvApplyInput, CsvApplyResult>(applyCsvImportAction, {
+        kind,
+        csvText,
+        choices,
       });
+      if (!result.ok) {
+        // A partial import shows its summary (which rows failed), as before.
+        if (result.code === "PARTIAL") setApplySummary(result.summary);
+        else setCommitErrors(result.errors);
+        return;
+      }
+      setCommitErrors(result.commitErrors);
+      setApplySummary(result.summary);
     } finally {
       setApplying(false);
     }
@@ -309,6 +215,7 @@ export const CsvImportPanel: React.FC<CsvImportPanelProps> = ({
           <button
             type="button"
             className="theia-button secondary"
+            data-view-only
             onClick={onClose}
           >
             {t("common.close")}
@@ -479,6 +386,7 @@ export const CsvImportPanel: React.FC<CsvImportPanelProps> = ({
             <button
               type="button"
               className="theia-button"
+              data-action={applyCsvImportAction.id}
               disabled={applying}
               onClick={() => {
                 void handleApply();

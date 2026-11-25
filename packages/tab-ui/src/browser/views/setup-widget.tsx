@@ -87,10 +87,7 @@ export class SetupWidget extends ReactWidget {
     return uri?.path.fsPath();
   }
 
-  private readonly startJoin = (params: Parameters<TournamentStore["startJoin"]>[0]) => this.store.startJoin(params);
   private readonly loadJoinProgress = () => this.store.getJoinProgress();
-  private readonly leaveHost = () => this.store.leaveHost();
-  private readonly dismissRejected = () => this.store.dismissRejectedEdits();
   private async pickCopyFile(): Promise<string | undefined> {
     if (this.fileDialogService === undefined) {
       return undefined;
@@ -112,7 +109,7 @@ export class SetupWidget extends ReactWidget {
       <>
         {snapshot.status.replacedBy !== undefined ? <ReplacedBanner info={snapshot.status.replacedBy} /> : null}
         {device !== undefined ? (
-          <DeviceBanner device={device} onLeave={this.leaveHost} onDismissRejected={this.dismissRejected} />
+          <DeviceBanner device={device} run={this.run} />
         ) : null}
         {device !== undefined ? (
           <PromotePanel
@@ -126,9 +123,7 @@ export class SetupWidget extends ReactWidget {
       <SetupView
         state={snapshot.state}
         status={snapshot.status}
-        onCreateTournament={(params) => this.store.createTournament(params)}
-        onOpenTournament={(dbPath) => this.store.openTournament(dbPath)}
-        onSubmitOp={(request) => this.store.submit(request)}
+        run={this.run}
         onPickDirectory={
           this.fileDialogService ? () => this.pickDirectory() : undefined
         }
@@ -137,7 +132,7 @@ export class SetupWidget extends ReactWidget {
         }
       />
         {!snapshot.status.open && device === undefined ? (
-          <JoinHostPanel onStartJoin={this.startJoin} loadProgress={this.loadJoinProgress} />
+          <JoinHostPanel run={this.run} loadProgress={this.loadJoinProgress} />
         ) : null}
       </>
     );

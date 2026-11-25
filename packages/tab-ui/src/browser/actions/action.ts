@@ -1,3 +1,5 @@
+import type { CredentialsService } from "@simpletab/host/lib/common/credentials-protocol";
+import type { ProjectorService } from "@simpletab/host/lib/common/projector-protocol";
 import type { SubmitResult } from "@simpletab/host/lib/common/host-protocol";
 import type { TournamentStore, TournamentStoreSnapshot } from "../store/tournament-store";
 
@@ -21,8 +23,18 @@ export interface ActionPrompts {
     items: ReadonlyArray<{ label: string; description?: string; detail?: string; value: T }>,
     placeholder: string,
   ): Promise<T | undefined>;
-  input(prompt: string, options?: { value?: string; optional?: boolean }): Promise<string | undefined>;
+  input(prompt: string, options?: { value?: string; optional?: boolean; password?: boolean }): Promise<string | undefined>;
   confirm(title: string, message: string): Promise<boolean>;
+  /** Lets the person choose an existing file; returns its path, or undefined when cancelled. */
+  pickFile(title: string, extensions: readonly string[]): Promise<string | undefined>;
+  /** Lets the person choose a text file (a CSV, say) and returns its contents; undefined cancels. */
+  openTextFile(title: string, extensions: readonly string[]): Promise<string | undefined>;
+}
+
+/** Optional host services an action may need; absent when the add-on is unavailable. */
+export interface ActionServices {
+  credentials?: CredentialsService;
+  projector?: ProjectorService;
 }
 
 export interface ActionContext {
@@ -30,6 +42,7 @@ export interface ActionContext {
   prompts: ActionPrompts;
   /** Opens (and reveals) a SimpleTab page by its widget id. */
   openPage(widgetId: string): Promise<void>;
+  services?: ActionServices;
 }
 
 /**

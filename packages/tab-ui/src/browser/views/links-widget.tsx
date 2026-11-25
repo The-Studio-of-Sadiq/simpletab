@@ -3,13 +3,11 @@ import { Message } from "@theia/core/lib/browser";
 import { ReactWidget } from "@theia/core/lib/browser/widgets/react-widget";
 import { inject, injectable, postConstruct } from "@theia/core/shared/inversify";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import { commandActionRunner } from "../actions/action-runner";
 import { LinksView } from "../components/links-view";
 import { onLocaleChange, t } from "../i18n";
 import { TournamentStore } from "../store/tournament-store";
-import {
-  SIMPLETAB_OPEN_CREDENTIALS_COMMAND,
-  SIMPLETAB_OPEN_SETUP_COMMAND,
-} from "./simpletab-nav-widget";
 
 @injectable()
 export class LinksWidget extends ReactWidget {
@@ -17,11 +15,14 @@ export class LinksWidget extends ReactWidget {
 
   private readonly disposables = new DisposableCollection();
 
+  private readonly run: ActionRunner;
+
   constructor(
     @inject(TournamentStore) private readonly store: TournamentStore,
     @inject(CommandService) private readonly commandService: CommandService,
   ) {
     super();
+    this.run = commandActionRunner(commandService);
     this.id = LinksWidget.ID;
     this.title.label = t("links.widgetLabel");
     this.title.caption = t("links.widgetLabel");
@@ -63,15 +64,7 @@ export class LinksWidget extends ReactWidget {
       <LinksView
         state={snapshot.state}
         status={snapshot.status}
-        onSubmitOp={(op) => this.store.submit(op)}
-        onOpenSetup={() => {
-          void this.commandService.executeCommand(SIMPLETAB_OPEN_SETUP_COMMAND);
-        }}
-        onOpenCredentials={() => {
-          void this.commandService.executeCommand(
-            SIMPLETAB_OPEN_CREDENTIALS_COMMAND,
-          );
-        }}
+        run={this.run}
       />
     );
   }

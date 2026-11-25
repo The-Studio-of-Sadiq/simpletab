@@ -1,10 +1,5 @@
-import {
-  CredentialsService,
-  type CredentialName,
-  type CredentialStatusEntry,
-  type CredentialTestResult,
-} from "@simpletab/host/lib/common/credentials-protocol";
-import { DisposableCollection } from "@theia/core/lib/common";
+import { CredentialsService, type CredentialStatusEntry } from "@simpletab/host/lib/common/credentials-protocol";
+import { CommandService, DisposableCollection } from "@theia/core/lib/common";
 import { Message } from "@theia/core/lib/browser";
 import { ReactWidget } from "@theia/core/lib/browser/widgets/react-widget";
 import {
@@ -14,6 +9,8 @@ import {
   postConstruct,
 } from "@theia/core/shared/inversify";
 import * as React from "@theia/core/shared/react";
+import type { ActionResult, ActionRunner, SimpleTabAction } from "../actions/action";
+import { commandActionRunner } from "../actions/action-runner";
 import { CredentialsView } from "../components/credentials-view";
 import { onLocaleChange, t } from "../i18n";
 import { TournamentStore } from "../store/tournament-store";
@@ -24,14 +21,25 @@ export class CredentialsWidget extends ReactWidget {
 
   private readonly disposables = new DisposableCollection();
   private credentialsStatus: CredentialStatusEntry[] = [];
+  private readonly run: ActionRunner;
 
   constructor(
     @inject(TournamentStore) private readonly store: TournamentStore,
+    @inject(CommandService) commands: CommandService,
     @inject(CredentialsService)
     @optional()
     private readonly credentialsService?: CredentialsService,
   ) {
     super();
+    const commandRunner = commandActionRunner(commands);
+    this.run = async <A, R extends ActionResult>(
+      action: SimpleTabAction<A, R>,
+      args: A,
+    ): Promise<R> => {
+      const result = await commandRunner(action, args);
+      await this.refreshCredentials();
+      return result;
+    };
     this.id = CredentialsWidget.ID;
     this.title.label = t("credentials.widgetLabel");
     this.title.caption = t("credentials.widgetLabel");
@@ -64,44 +72,12 @@ export class CredentialsWidget extends ReactWidget {
     this.update();
   }
 
-  private async refreshCredentials(): Promise<CredentialStatusEntry[]> {
+  private async refreshCredentials(): Promise<void> {
     if (this.credentialsService === undefined) {
-      return [];
+      return;
     }
-    const entries = await this.credentialsService.status();
-    this.credentialsStatus = entries;
+    this.credentialsStatus = await this.credentialsService.status();
     this.update();
-    return entries;
-  }
-
-  private async handleSetCredential(
-    name: CredentialName,
-    value: string,
-  ): Promise<void> {
-    if (this.credentialsService === undefined) {
-      throw new Error(t("credentials.unavailable"));
-    }
-    await this.credentialsService.set(name, value);
-    await this.refreshCredentials();
-  }
-
-  private async handleClearCredential(name: CredentialName): Promise<void> {
-    if (this.credentialsService === undefined) {
-      throw new Error(t("credentials.unavailable"));
-    }
-    await this.credentialsService.clear(name);
-    await this.refreshCredentials();
-  }
-
-  private async handleTestCredential(
-    name: CredentialName,
-  ): Promise<CredentialTestResult> {
-    if (this.credentialsService === undefined) {
-      return { ok: false, error: t("credentials.unavailable") };
-    }
-    const result = await this.credentialsService.test(name);
-    await this.refreshCredentials();
-    return result;
   }
 
   protected override render(): React.ReactNode {
@@ -112,13 +88,7 @@ export class CredentialsWidget extends ReactWidget {
         status={snapshot.status}
         available={this.credentialsService !== undefined}
         credentialsStatus={this.credentialsStatus}
-        onRefreshCredentials={() => this.refreshCredentials()}
-        onSetCredential={(name, value) => this.handleSetCredential(name, value)}
-        onClearCredential={(name) => this.handleClearCredential(name)}
-        onTestCredential={(name) => this.handleTestCredential(name)}
-        onUpdateOnlineSettings={(patch) =>
-          this.store.updateOnlineSettings(patch)
-        }
+        run={this.run}
       />
     );
   }

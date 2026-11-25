@@ -292,7 +292,7 @@ describe("results actions", () => {
     const ok = await importQrBallotAction.run(testContext(store, scriptedPrompts([])), {
       codes: ["ST1.a.1.2", "ST1.b.2.3"],
     });
-    expect(ok).toEqual({ ok: true });
+    expect(ok).toEqual({ ok: true, seq: 1, roundId: "", debateId: "" });
     expect(calls.qrCodes).toEqual([["ST1.a.1.2", "ST1.b.2.3"]]);
 
     const failing = fakeStore(resultsState(), SUBMIT, {
@@ -304,7 +304,7 @@ describe("results actions", () => {
     );
     expect(result.ok).toBe(false);
     if (!result.ok) {
-      expect(result.errors.join(" ")).toContain("private links");
+      expect(result.kind).toBe("needs_links");
     }
     expect(
       await importQrBallotAction.prompt(

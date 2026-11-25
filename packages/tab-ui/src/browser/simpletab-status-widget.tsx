@@ -1,4 +1,7 @@
-import type { HostStatus } from "@simpletab/host/lib/common/host-protocol";
+import type {
+  CreateDemoResult,
+  HostStatus,
+} from "@simpletab/host/lib/common/host-protocol";
 import {
   CommandService,
   DisposableCollection,
@@ -6,9 +9,17 @@ import {
   type Event,
 } from "@theia/core/lib/common";
 import { Message } from "@theia/core/lib/browser";
+import { MessageService } from "@theia/core/lib/common/message-service";
 import { ReactWidget } from "@theia/core/lib/browser/widgets/react-widget";
 import { inject, injectable, postConstruct } from "@theia/core/shared/inversify";
 import * as React from "@theia/core/shared/react";
+import type {
+  ActionResult,
+  ActionRunner,
+  SimpleTabAction,
+} from "./actions/action";
+import { commandActionRunner } from "./actions/action-runner";
+import { createDemoTournamentAction } from "./actions/status-actions";
 import { DeviceBanner } from "./components/device-banner";
 import { ReplacedBanner } from "./components/promote-panel";
 import { StatusView } from "./components/status-view";
@@ -19,23 +30,48 @@ import {
 } from "./store/tournament-store";
 import "./style/simpletab-status.css";
 
-export const SIMPLETAB_CREATE_DEMO_COMMAND_ID = "simpletab.createDemoTournament";
-
 @injectable()
 export class SimpleTabStatusWidget extends ReactWidget {
   static readonly ID = "simpletab-status-widget";
 
   private readonly disposables = new DisposableCollection();
   private readonly onDidUpdateStatusEmitter = new Emitter<HostStatus>();
+  private readonly run: ActionRunner;
 
   readonly onDidUpdateStatus: Event<HostStatus> =
     this.onDidUpdateStatusEmitter.event;
 
   constructor(
     @inject(TournamentStore) private readonly store: TournamentStore,
-    @inject(CommandService) private readonly commandService: CommandService,
+    @inject(CommandService) commands: CommandService,
+    @inject(MessageService) private readonly messages: MessageService,
   ) {
     super();
+    const commandRunner = commandActionRunner(commands);
+    this.run = async <A, R extends ActionResult>(
+      action: SimpleTabAction<A, R>,
+      args: A,
+    ): Promise<R> => {
+      const result = await commandRunner(action, args);
+      if (action.id === createDemoTournamentAction.id) {
+        if (result.ok && "result" in result) {
+          const created = (result as { result: CreateDemoResult }).result;
+          void this.messages.info(
+            t("command.demoCreated", {
+              slug: created.status.slug ?? "bp-demo",
+              dbPath: created.dbPath,
+            }),
+          );
+        } else if (!result.ok) {
+          void this.messages.error(
+            t("command.demoFailed", {
+              message: (result as { errors: string[] }).errors.join(" "),
+            }),
+          );
+        }
+      }
+      return result;
+    };
     this.id = SimpleTabStatusWidget.ID;
     this.title.label = t("status.widgetLabel");
     this.title.caption = t("status.widgetLabel");
@@ -84,11 +120,7 @@ export class SimpleTabStatusWidget extends ReactWidget {
       <>
         {snapshot.status.replacedBy !== undefined ? <ReplacedBanner info={snapshot.status.replacedBy} /> : null}
         {device !== undefined ? (
-          <DeviceBanner
-            device={device}
-            onLeave={() => this.store.leaveHost()}
-            onDismissRejected={() => this.store.dismissRejectedEdits()}
-          />
+          <DeviceBanner device={device} run={this.run} />
         ) : null}
       <StatusView
         status={snapshot.status}
@@ -96,13 +128,8 @@ export class SimpleTabStatusWidget extends ReactWidget {
         loading={snapshot.loading}
         error={snapshot.error}
         onRefresh={() => this.refresh()}
-        onRunFullCheck={() => this.store.runFullCheck()}
-        onPullNow={() => this.store.pullNow()}
-        onCreateDemo={() => {
-          void this.commandService.executeCommand(
-            SIMPLETAB_CREATE_DEMO_COMMAND_ID,
-          );
-        }}
+        run={this.run}
+        canPullNow={true}
       />
       </>
     );

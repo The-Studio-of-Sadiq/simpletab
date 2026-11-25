@@ -1,11 +1,16 @@
 import type { DeviceModeStatus } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import {
+  dismissRejectedEditsAction,
+  leaveHostAction,
+} from "../actions/device-mode-actions";
 import { t } from "../i18n";
 
 export interface DeviceBannerProps {
   device: DeviceModeStatus;
-  onLeave: () => Promise<void>;
-  onDismissRejected: () => Promise<void>;
+  /** Runs the same commands the palette offers; the page never calls the host itself. */
+  run: ActionRunner;
   confirmLeave?: () => boolean;
 }
 
@@ -20,8 +25,7 @@ function formatTime(iso: string): string {
  */
 export const DeviceBanner: React.FC<DeviceBannerProps> = ({
   device,
-  onLeave,
-  onDismissRejected,
+  run,
   confirmLeave = () => window.confirm(t("deviceMode.leaveConfirm")),
 }) => {
   const connectionText = t(`deviceMode.connection.${device.connection}`);
@@ -62,8 +66,9 @@ export const DeviceBanner: React.FC<DeviceBannerProps> = ({
           <button
             type="button"
             className="theia-button secondary"
+            data-action={dismissRejectedEditsAction.id}
             onClick={() => {
-              void onDismissRejected();
+              void run(dismissRejectedEditsAction, {});
             }}
           >
             {t("deviceMode.dismissRejected")}
@@ -74,8 +79,9 @@ export const DeviceBanner: React.FC<DeviceBannerProps> = ({
         <button
           type="button"
           className="theia-button secondary"
+          data-action={leaveHostAction.id}
           onClick={() => {
-            if (confirmLeave()) void onLeave();
+            if (confirmLeave()) void run(leaveHostAction, {});
           }}
         >
           {t("deviceMode.leave")}

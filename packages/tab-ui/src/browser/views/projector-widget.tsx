@@ -3,7 +3,7 @@ import {
   ProjectorService,
   type ProjectorControlState,
 } from "@simpletab/host/lib/common/projector-protocol";
-import { DisposableCollection } from "@theia/core/lib/common";
+import { CommandService, DisposableCollection } from "@theia/core/lib/common";
 import { Message } from "@theia/core/lib/browser";
 import { ReactWidget } from "@theia/core/lib/browser/widgets/react-widget";
 import {
@@ -13,6 +13,12 @@ import {
   postConstruct,
 } from "@theia/core/shared/inversify";
 import * as React from "@theia/core/shared/react";
+import type {
+  ActionResult,
+  ActionRunner,
+  SimpleTabAction,
+} from "../actions/action";
+import { commandActionRunner } from "../actions/action-runner";
 import { ProjectorControlView } from "../components/projector-control-view";
 import { onLocaleChange, t } from "../i18n";
 import { ProjectorServiceClientDispatcher } from "../store/projector-service-client";
@@ -23,6 +29,7 @@ export class ProjectorControlWidget extends ReactWidget {
   static readonly ID = "simpletab-projector-control-widget";
 
   private readonly disposables = new DisposableCollection();
+  private readonly run: ActionRunner;
   private control: ProjectorControlState = {
     ...DEFAULT_PROJECTOR_CONTROL,
     countdown: { ...DEFAULT_PROJECTOR_CONTROL.countdown },
@@ -30,6 +37,7 @@ export class ProjectorControlWidget extends ReactWidget {
 
   constructor(
     @inject(TournamentStore) private readonly store: TournamentStore,
+    @inject(CommandService) commands: CommandService,
     @inject(ProjectorService)
     @optional()
     private readonly projectorService?: ProjectorService,
@@ -38,6 +46,18 @@ export class ProjectorControlWidget extends ReactWidget {
     private readonly projectorClient?: ProjectorServiceClientDispatcher,
   ) {
     super();
+    const commandRunner = commandActionRunner(commands);
+    this.run = async <A, R extends ActionResult>(
+      action: SimpleTabAction<A, R>,
+      args: A,
+    ): Promise<R> => {
+      const result = await commandRunner(action, args);
+      if (result.ok && "control" in result) {
+        this.control = (result as { control: ProjectorControlState }).control;
+        this.update();
+      }
+      return result;
+    };
     this.id = ProjectorControlWidget.ID;
     this.title.label = t("projector.widgetLabel");
     this.title.caption = t("projector.widgetLabel");
@@ -90,63 +110,14 @@ export class ProjectorControlWidget extends ReactWidget {
     this.update();
   }
 
-  private async syncDisplayAndOpen(): Promise<ProjectorControlState | void> {
-    if (this.projectorService === undefined) {
-      return undefined;
-    }
-    const displayState = await this.store.getDisplayState();
-    await this.projectorService.pushDisplayState(displayState);
-    const next = await this.projectorService.openProjector();
-    this.control = next;
-    this.update();
-    return next;
-  }
-
   protected override render(): React.ReactNode {
     const snapshot = this.store.getSnapshot();
-    const svc = this.projectorService;
     return (
       <ProjectorControlView
         state={snapshot.state}
-        available={svc !== undefined}
+        available={this.projectorService !== undefined}
         control={this.control}
-        onOpenProjector={() => this.syncDisplayAndOpen()}
-        onCloseProjector={async () => {
-          if (svc === undefined) return;
-          this.control = await svc.closeProjector();
-          this.update();
-          return this.control;
-        }}
-        onToggleFullscreen={async () => {
-          if (svc === undefined) return;
-          this.control = await svc.toggleFullscreen();
-          this.update();
-          return this.control;
-        }}
-        onUpdateControl={async (patch) => {
-          if (svc === undefined) return;
-          this.control = await svc.updateControl(patch);
-          this.update();
-          return this.control;
-        }}
-        onStartCountdown={async (durationSeconds) => {
-          if (svc === undefined) return;
-          this.control = await svc.startCountdown(durationSeconds);
-          this.update();
-          return this.control;
-        }}
-        onPauseCountdown={async () => {
-          if (svc === undefined) return;
-          this.control = await svc.pauseCountdown();
-          this.update();
-          return this.control;
-        }}
-        onResetCountdown={async (durationSeconds) => {
-          if (svc === undefined) return;
-          this.control = await svc.resetCountdown(durationSeconds);
-          this.update();
-          return this.control;
-        }}
+        run={this.run}
       />
     );
   }

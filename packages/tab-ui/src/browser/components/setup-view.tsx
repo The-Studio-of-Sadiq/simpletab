@@ -1,51 +1,38 @@
 import {
-  buildBreakCategories,
   getRulesPreset,
   RULES_PRESETS,
   slugify,
-  validateSlug,
   type RulesPreset,
 } from "@simpletab/core/lib/setup/presets";
 import { SIDE_NAME_OPTIONS, SIDE_NAME_SETS } from "@simpletab/core/lib/sideNames";
-import type { OpRequest } from "@simpletab/core/ops";
+import type { SideNames } from "@simpletab/core/types";
 import type {
-  BreakCategory,
-  SideNames,
-  TournamentPreferences,
-} from "@simpletab/core/types";
-import type {
-  CreateTournamentParams,
-  CreateTournamentResult,
   HostStatus,
   ProjectedState,
   SimpleTabFormatChoice,
-  SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import {
+  createTournamentAction,
+  openTournamentAction,
+  saveSettingsAction,
+  validateCreateInput,
+  type CreateTournamentActionResult,
+  type CreateTournamentInput,
+  type SaveSettingsInput,
+  type SaveSettingsResult,
+  type SettingsFieldKey,
+} from "../actions/setup-actions";
 import { t } from "../i18n";
 
 export interface SetupViewProps {
   state: ProjectedState | null;
   status: HostStatus;
-  onCreateTournament: (
-    params: CreateTournamentParams,
-  ) => Promise<CreateTournamentResult>;
-  onOpenTournament: (dbPath: string) => Promise<HostStatus>;
-  onSubmitOp: (request: OpRequest) => Promise<SubmitResult>;
+  run: ActionRunner;
   onPickDirectory?: () => Promise<string | undefined>;
   onPickDbFile?: () => Promise<string | undefined>;
 }
-
-type SettingsFieldKey =
-  | "name"
-  | "minSpeakerScore"
-  | "maxSpeakerScore"
-  | "stepSpeakerScore"
-  | "minReplyScore"
-  | "maxReplyScore"
-  | "sideNames"
-  | "prelimRounds"
-  | "breakSize";
 
 function presetsForFormat(format: SimpleTabFormatChoice): RulesPreset[] {
   return RULES_PRESETS.filter((preset) => {
@@ -56,49 +43,9 @@ function presetsForFormat(format: SimpleTabFormatChoice): RulesPreset[] {
   });
 }
 
-function mapSettingsErrorToField(
-  message: string,
-  target: Partial<Record<SettingsFieldKey, string[]>>,
-): void {
-  const lower = message.toLowerCase();
-  const add = (field: SettingsFieldKey, text: string): void => {
-    target[field] = [...(target[field] ?? []), text];
-  };
-
-  if (lower.includes("tournament name")) {
-    add("name", message);
-  }
-  if (lower.includes("minspeakerscore")) {
-    add("minSpeakerScore", message);
-  }
-  if (lower.includes("maxspeakerscore")) {
-    add("maxSpeakerScore", message);
-  }
-  if (lower.includes("stepspeakerscore")) {
-    add("stepSpeakerScore", message);
-  }
-  if (lower.includes("minreplyscore")) {
-    add("minReplyScore", message);
-  }
-  if (lower.includes("maxreplyscore")) {
-    add("maxReplyScore", message);
-  }
-  if (lower.includes("sidenames")) {
-    add("sideNames", message);
-  }
-  if (lower.includes("preliminary round")) {
-    add("prelimRounds", message);
-  }
-  if (lower.includes("break size") || lower.includes("break sizes")) {
-    add("breakSize", message);
-  }
-}
-
 export const SetupView: React.FC<SetupViewProps> = ({
   state,
-  onCreateTournament,
-  onOpenTournament,
-  onSubmitOp,
+  run,
   onPickDirectory,
   onPickDbFile,
 }) => {
@@ -230,9 +177,12 @@ export const SetupView: React.FC<SetupViewProps> = ({
     setCreateError(null);
     setCreateSuccess(null);
     try {
-      const opened = await onOpenTournament(picked);
+      const opened = await run<{ dbPath: string }, { ok: true; status: HostStatus }>(
+        openTournamentAction,
+        { dbPath: picked },
+      );
       setCreateSuccess(
-        t("setup.openedSuccess", { slug: opened.slug ?? picked }),
+        t("setup.openedSuccess", { slug: opened.status.slug ?? picked }),
       );
     } catch (error) {
       setCreateError(error instanceof Error ? error.message : String(error));
@@ -244,28 +194,16 @@ export const SetupView: React.FC<SetupViewProps> = ({
     setCreateError(null);
     setCreateSuccess(null);
 
-    const nextFieldErrors: {
-      name?: string;
-      slug?: string;
-      prelimRounds?: string;
-    } = {};
-
-    if (createName.trim().length === 0) {
-      nextFieldErrors.name = t("setup.nameRequired");
-    }
-    const slugErr = validateSlug(createSlug.trim());
-    if (slugErr.length > 0) {
-      nextFieldErrors.slug = slugErr;
-    }
     const prelimNum = Number(createPrelimRounds);
-    if (
-      !Number.isInteger(prelimNum) ||
-      prelimNum < 0 ||
-      prelimNum > 20
-    ) {
-      nextFieldErrors.prelimRounds = t("setup.prelimRoundsError");
-    }
-
+    const params = {
+      name: createName.trim(),
+      slug: createSlug.trim(),
+      format: createFormat,
+      presetId: selectedPreset.id,
+      prelimRounds: prelimNum,
+      directory: createDirectory.trim(),
+    };
+    const nextFieldErrors = validateCreateInput(params);
     setCreateFieldErrors(nextFieldErrors);
     if (Object.keys(nextFieldErrors).length > 0) {
       return;
@@ -273,19 +211,19 @@ export const SetupView: React.FC<SetupViewProps> = ({
 
     setCreating(true);
     try {
-      const result = await onCreateTournament({
-        name: createName.trim(),
-        slug: createSlug.trim(),
-        format: createFormat,
-        presetId: selectedPreset.id,
-        prelimRounds: prelimNum,
-        directory: createDirectory.trim(),
-      });
+      const result = await run<CreateTournamentInput, CreateTournamentActionResult>(
+        createTournamentAction,
+        params,
+      );
+      if (!result.ok) {
+        setCreateError(result.errors.join("; "));
+        return;
+      }
       setCreateSuccess(
         t("setup.createdSuccess", {
-          name: result.state.tournament.name,
-          slug: result.state.tournament.slug,
-          dbPath: result.dbPath,
+          name: result.result.state.tournament.name,
+          slug: result.result.state.tournament.slug,
+          dbPath: result.result.dbPath,
         }),
       );
     } catch (error) {
@@ -306,22 +244,16 @@ export const SetupView: React.FC<SetupViewProps> = ({
     setSettingsBannerSuccess(null);
 
     const fieldErrors: Partial<Record<SettingsFieldKey, string[]>> = {};
-    const parseFinite = (
-      raw: string,
-      field: SettingsFieldKey,
-    ): number | null => {
+    const parseFinite = (raw: string, field: SettingsFieldKey): number | undefined => {
       const trimmed = raw.trim();
-      if (trimmed.length === 0) {
-        fieldErrors[field] = [t("setup.invalidNumber")];
-        return null;
-      }
       const value = Number(trimmed);
-      if (!Number.isFinite(value)) {
+      if (trimmed.length === 0 || !Number.isFinite(value)) {
         fieldErrors[field] = [t("setup.invalidNumber")];
-        return null;
+        return undefined;
       }
       return value;
     };
+    const asNumber = (value: number | undefined): number => value ?? 0;
 
     const nextMinSpeaker = parseFinite(minSpeakerScore, "minSpeakerScore");
     const nextMaxSpeaker = parseFinite(maxSpeakerScore, "maxSpeakerScore");
@@ -336,121 +268,30 @@ export const SetupView: React.FC<SetupViewProps> = ({
       return;
     }
 
-    const prefs = state.tournament.preferences;
-    const partialPrefs: Partial<TournamentPreferences> = {};
-    if (nextMinSpeaker !== null && nextMinSpeaker !== prefs.minSpeakerScore) {
-      partialPrefs.minSpeakerScore = nextMinSpeaker;
-    }
-    if (nextMaxSpeaker !== null && nextMaxSpeaker !== prefs.maxSpeakerScore) {
-      partialPrefs.maxSpeakerScore = nextMaxSpeaker;
-    }
-    if (nextStepSpeaker !== null && nextStepSpeaker !== prefs.stepSpeakerScore) {
-      partialPrefs.stepSpeakerScore = nextStepSpeaker;
-    }
-    if (state.tournament.format !== "bp") {
-      if (replyScoresEnabled !== prefs.replyScoresEnabled) {
-        partialPrefs.replyScoresEnabled = replyScoresEnabled;
-      }
-      if (nextMinReply !== null && nextMinReply !== prefs.minReplyScore) {
-        partialPrefs.minReplyScore = nextMinReply;
-      }
-      if (nextMaxReply !== null && nextMaxReply !== prefs.maxReplyScore) {
-        partialPrefs.maxReplyScore = nextMaxReply;
-      }
-      if (sideNames !== (prefs.sideNames ?? "aff-neg")) {
-        partialPrefs.sideNames = sideNames;
-      }
-    }
-
-    const nameChanged = settingsName !== state.tournament.name;
-    const prefsChanged = Object.keys(partialPrefs).length > 0;
-    const prelimChanged = nextPrelim !== null && nextPrelim !== currentPrelimCount;
-    const breakChanged =
-      nextBreakSize !== null &&
-      nextBreakSize !== currentBreakCategory?.breakSize;
-
-    if (!nameChanged && !prefsChanged && !prelimChanged && !breakChanged) {
-      setSettingsBannerSuccess(t("setup.settingsUnchanged"));
-      return;
-    }
-
     setSavingSettings(true);
     try {
-      let lastSeq = state.seq;
-      const errors: string[] = [];
-
-      if (nameChanged || prefsChanged) {
-        const result = await onSubmitOp({
-          type: "settings.update",
-          payload: {
-            ...(nameChanged ? { name: settingsName } : {}),
-            preferences: partialPrefs,
-          },
-        });
-        if (!result.ok) {
-          for (const err of result.errors) {
-            mapSettingsErrorToField(err, fieldErrors);
-            errors.push(`${result.code}: ${err}`);
-          }
-        } else {
-          lastSeq = result.seq;
-        }
+      const result = await run<SaveSettingsInput, SaveSettingsResult>(saveSettingsAction, {
+        name: settingsName,
+        minSpeakerScore: asNumber(nextMinSpeaker),
+        maxSpeakerScore: asNumber(nextMaxSpeaker),
+        stepSpeakerScore: asNumber(nextStepSpeaker),
+        minReplyScore: asNumber(nextMinReply),
+        maxReplyScore: asNumber(nextMaxReply),
+        replyScoresEnabled,
+        sideNames,
+        prelimRounds: asNumber(nextPrelim),
+        breakSize: asNumber(nextBreakSize),
+      });
+      if (!result.ok) {
+        setSettingsFieldErrors(result.fieldErrors);
+        setSettingsBannerError(result.errors.join(" | "));
+        return;
       }
-
-      if (prelimChanged && nextPrelim !== null) {
-        const result = await onSubmitOp({
-          type: "round.set_prelim_count",
-          payload: { count: nextPrelim },
-        });
-        if (!result.ok) {
-          for (const err of result.errors) {
-            mapSettingsErrorToField(err, fieldErrors);
-            errors.push(`${result.code}: ${err}`);
-          }
-        } else {
-          lastSeq = result.seq;
-        }
-      }
-
-      if (breakChanged && nextBreakSize !== null) {
-        let nextCategories: BreakCategory[];
-        if (currentBreakCategory !== undefined) {
-          nextCategories = state.breakCategories.map((cat) =>
-            cat.id === currentBreakCategory.id
-              ? { ...cat, breakSize: nextBreakSize }
-              : cat,
-          );
-        } else {
-          nextCategories = buildBreakCategories(state.tournament.id, [
-            {
-              key: "open",
-              name: "Open",
-              breakSize: nextBreakSize,
-              reserveSize: 0,
-              isGeneral: true,
-            },
-          ]);
-        }
-        const result = await onSubmitOp({
-          type: "break.categories_save",
-          payload: { categories: nextCategories },
-        });
-        if (!result.ok) {
-          for (const err of result.errors) {
-            mapSettingsErrorToField(err, fieldErrors);
-            errors.push(`${result.code}: ${err}`);
-          }
-        } else {
-          lastSeq = result.seq;
-        }
-      }
-
-      if (errors.length > 0) {
-        setSettingsFieldErrors(fieldErrors);
-        setSettingsBannerError(errors.join(" | "));
-      } else {
-        setSettingsBannerSuccess(t("setup.settingsSaved", { seq: lastSeq }));
-      }
+      setSettingsBannerSuccess(
+        result.unchanged
+          ? t("setup.settingsUnchanged")
+          : t("setup.settingsSaved", { seq: result.seq }),
+      );
     } finally {
       setSavingSettings(false);
     }
@@ -476,6 +317,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
           <button
             type="button"
             className="theia-button secondary"
+            data-action={openTournamentAction.id}
             onClick={() => {
               void handleOpenExisting();
             }}
@@ -676,6 +518,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
               <button
                 type="button"
                 className="theia-button secondary"
+                data-view-only
                 onClick={() => {
                   void handleBrowseDirectory();
                 }}
@@ -692,6 +535,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
             <button
               type="submit"
               className="theia-button"
+              data-action={createTournamentAction.id}
               disabled={creating}
             >
               {creating ? t("setup.creating") : t("setup.createButton")}
@@ -942,6 +786,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
               <button
                 type="submit"
                 className="theia-button"
+                data-action={saveSettingsAction.id}
                 disabled={savingSettings}
               >
                 {savingSettings ? t("setup.savingSettings") : t("setup.saveSettings")}

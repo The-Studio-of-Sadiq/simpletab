@@ -38,6 +38,7 @@ import {
 import type { Debate, DebateSide, Speaker } from "@simpletab/core/types";
 import type {
   ProjectedState,
+  QrReceiveResult,
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import { t } from "../i18n";
@@ -50,7 +51,7 @@ import { defineAction, type ActionContext } from "./action";
 /** Widget id of the Results page. */
 export const RESULTS_PAGE = "simpletab-results-widget";
 
-type QrResult = { ok: true } | { ok: false; errors: string[] };
+type QrResult = QrReceiveResult;
 
 function stateOf(ctx: ActionContext): ProjectedState {
   const state = ctx.store.getState();
@@ -711,13 +712,15 @@ export const importQrBallotAction = defineAction<ImportQrArgs, QrResult>({
   },
   async run(ctx, { codes }) {
     if (codes.length === 0) {
-      return { ok: false, errors: [t("results.qrEmptyError")] };
+      return {
+        ok: false,
+        kind: "empty",
+        errors: [t("results.qrEmptyError")],
+      };
     }
     const result = await ctx.store.receiveQrBallot(codes);
-    if (!result.ok) {
-      return { ok: false, errors: [qrFailureMessage(result)] };
-    }
-    return { ok: true };
+    // Keep the failure kind for the pages, with a message the palette can show as it is.
+    return result.ok ? result : { ...result, errors: [qrFailureMessage(result)] };
   },
 });
 

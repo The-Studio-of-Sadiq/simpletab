@@ -222,6 +222,7 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({
             <button
               type="button"
               className="simpletab-projector-btn"
+              data-view-only
               onClick={onToggleFullscreen}
             >
               {t("projector.toggleFullscreen")}
@@ -270,6 +271,7 @@ export const ProjectorView: React.FC<ProjectorViewProps> = ({
             <button
               type="button"
               className="simpletab-projector-btn"
+              data-view-only
               onClick={onToggleFullscreen}
             >
               {t("projector.toggleFullscreen")}

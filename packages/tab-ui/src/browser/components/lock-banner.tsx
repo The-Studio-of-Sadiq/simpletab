@@ -1,8 +1,5 @@
 import type { Round } from "@simpletab/core/types";
-import type {
-  HostCancelLongResult,
-  HostLockInfo,
-} from "@simpletab/host/lib/common/host-protocol";
+import type { HostLockInfo } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
 import type { ActionRunner } from "../actions/action";
 import { cancelLockAction, lockLabel } from "../actions/releases-actions";
@@ -12,16 +9,14 @@ export interface LockBannerProps {
   locks: readonly HostLockInfo[];
   rounds: readonly Round[];
   isHostOwner: boolean;
-  onCancelLock?: (lockId: string) => Promise<HostCancelLongResult | void>;
-  /** Pages converted to M8 pass the runner; older pages still pass onCancelLock. */
-  run?: ActionRunner;
+  /** Cancelling runs the "cancel a long operation" command. */
+  run: ActionRunner;
 }
 
 export const LockBanner: React.FC<LockBannerProps> = ({
   locks,
   rounds,
   isHostOwner,
-  onCancelLock,
   run,
 }) => {
   const [cancellingId, setCancellingId] = React.useState<string | null>(null);
@@ -35,11 +30,8 @@ export const LockBanner: React.FC<LockBannerProps> = ({
     setCancelError(null);
     setCancellingId(lockId);
     try {
-      const result =
-        run !== undefined
-          ? await run(cancelLockAction, { lockId })
-          : await onCancelLock?.(lockId);
-      if (result && !result.ok) {
+      const result = await run(cancelLockAction, { lockId });
+      if (!result.ok) {
         setCancelError(
           t("common.errorWithCode", {
             code: result.code,
@@ -62,7 +54,7 @@ export const LockBanner: React.FC<LockBannerProps> = ({
             <span className="simpletab-lock-text">
               {lockLabel(lock, rounds)}
             </span>
-            {isHostOwner && (run !== undefined || onCancelLock !== undefined) ? (
+            {isHostOwner ? (
               <button
                 type="button"
                 className="theia-button secondary"

@@ -7,6 +7,9 @@ import {
   type SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "react";
+import type { ActionRunner } from "../actions/action";
+import { openCredentialsPageAction } from "../actions/navigation-actions";
+import { runnerFor } from "../actions/test-context";
 import { LinksView } from "./links-view";
 
 function makeLinksState(
@@ -114,8 +117,10 @@ describe("LinksView", () => {
       <LinksView
         state={makeLinksState(BUILT_IN_ROLES.tab_assistant)}
         status={makeStatus("wudc2027.pages.dev")}
-        onSubmitOp={vi.fn(async () => ({ ok: true as const, seq: 9, writes: [], committedPayload: null }))}
-        onOpenSetup={vi.fn()}
+        run={runnerFor({
+          state: makeLinksState(),
+          submit: async () => ({ ok: true as const, seq: 9, writes: [], committedPayload: null }),
+        })}
       />,
     );
 
@@ -124,14 +129,12 @@ describe("LinksView", () => {
   });
 
   it("warns and disables link generation when cdnHost is not configured", () => {
-    const openCredentials = vi.fn();
+    const run = vi.fn(async () => ({ ok: true as const }));
     render(
       <LinksView
         state={makeLinksState()}
         status={makeStatus(undefined)}
-        onSubmitOp={vi.fn(async () => ({ ok: true as const, seq: 9, writes: [], committedPayload: null }))}
-        onOpenSetup={vi.fn()}
-        onOpenCredentials={openCredentials}
+        run={run as unknown as ActionRunner}
       />,
     );
 
@@ -144,7 +147,7 @@ describe("LinksView", () => {
     expect(generateBtn.disabled).toBe(true);
 
     fireEvent.click(screen.getByRole("button", { name: "Open Credentials settings" }));
-    expect(openCredentials).toHaveBeenCalledTimes(1);
+    expect(run).toHaveBeenCalledWith(openCredentialsPageAction, {});
   });
 
   it("generates private_urls.regenerate links for all participants and renders printable QR slips", async () => {
@@ -171,8 +174,7 @@ describe("LinksView", () => {
         <LinksView
           state={state}
           status={makeStatus("wudc2027.pages.dev")}
-          onSubmitOp={handleSubmit}
-          onOpenSetup={vi.fn()}
+          run={runnerFor({ state: () => state, submit: handleSubmit })}
         />
       );
     };

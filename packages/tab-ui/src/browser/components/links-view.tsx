@@ -1,15 +1,17 @@
 import type { LinkRole } from "@simpletab/core/crypto";
-import type { OpRequest } from "@simpletab/core/ops";
-import type {
-  HostStatus,
-  ProjectedState,
-  SubmitResult,
-} from "@simpletab/host/lib/common/host-protocol";
+import type { HostStatus, ProjectedState } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import {
+  buildRegenerateLinksRequest,
+  generateLinksAction,
+  regenerateLinksAction,
+} from "../actions/links-actions";
+import { openCredentialsPageAction } from "../actions/navigation-actions";
+import { openSetupAction } from "../actions/releases-actions";
 import { t } from "../i18n";
 import { stateHasPermission } from "../lib/permissions";
 import {
-  buildPrivateUrlsRegeneratePayload,
   collectParticipantTargets,
   isValidCdnHost,
   renderQrSvgData,
@@ -22,9 +24,7 @@ import { InlineOpError, type InlineOpErrorData } from "./inline-op-error";
 export interface LinksViewProps {
   state: ProjectedState | null;
   status: HostStatus;
-  onSubmitOp: (op: OpRequest) => Promise<SubmitResult>;
-  onOpenSetup: () => void;
-  onOpenCredentials?: () => void;
+  run: ActionRunner;
 }
 
 function roleLabel(role: LinkRole): string {
@@ -41,9 +41,7 @@ function roleLabel(role: LinkRole): string {
 export const LinksView: React.FC<LinksViewProps> = ({
   state,
   status,
-  onSubmitOp,
-  onOpenSetup,
-  onOpenCredentials,
+  run,
 }) => {
   const [busy, setBusy] = React.useState(false);
   const [showQrSlips, setShowQrSlips] = React.useState(false);
@@ -66,7 +64,10 @@ export const LinksView: React.FC<LinksViewProps> = ({
           <button
             type="button"
             className="theia-button"
-            onClick={onOpenSetup}
+            data-action={openSetupAction.id}
+            onClick={() => {
+              void run(openSetupAction, {});
+            }}
           >
             {t("common.openSetupButton")}
           </button>
@@ -124,20 +125,13 @@ export const LinksView: React.FC<LinksViewProps> = ({
     setLocalError(null);
     setErrorData(null);
     try {
-      const payload = buildPrivateUrlsRegeneratePayload(
-        state,
-        cdnHost,
-        ballotsOrigin,
-        force,
-      );
-      if (payload.links.length === 0) {
+      const args = { cdnHost, ballotsOrigin, force };
+      const request = buildRegenerateLinksRequest(state, args);
+      if (request.payload.links.length === 0) {
         setFeedback(t("links.noneMissing"));
         return;
       }
-      const result = await onSubmitOp({
-        type: "private_urls.regenerate",
-        payload,
-      });
+      const result = await run(force ? regenerateLinksAction : generateLinksAction, args);
       if (!result.ok) {
         setErrorData({
           code: result.code,
@@ -150,7 +144,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
         return;
       }
       setFeedback(
-        t("links.generatedCount", { count: payload.links.length }),
+        t("links.generatedCount", { count: request.payload.links.length }),
       );
     } finally {
       setBusy(false);
@@ -179,6 +173,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
           <button
             type="button"
             className="theia-button"
+            data-action={generateLinksAction.id}
             disabled={busy || !cdnValid || targets.length === 0 || (!missingCount && (state.links?.length ?? 0) > 0)}
             onClick={() => {
               void handleGenerate(false);
@@ -190,6 +185,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
             <button
               type="button"
               className="theia-button secondary"
+              data-action={regenerateLinksAction.id}
               disabled={busy || !cdnValid || targets.length === 0}
               onClick={() => {
                 void handleGenerate(true);
@@ -203,6 +199,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
               <button
                 type="button"
                 className="theia-button secondary"
+                data-view-only
                 onClick={() => {
                   setShowQrSlips((prev) => !prev);
                 }}
@@ -215,6 +212,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
                 <button
                   type="button"
                   className="theia-button secondary"
+                  data-view-only
                   onClick={() => {
                     window.print();
                   }}
@@ -230,18 +228,17 @@ export const LinksView: React.FC<LinksViewProps> = ({
       {!cdnValid ? (
         <div className="simpletab-alert simpletab-alert-warning" role="note">
           <span>{t("links.missingCdnHost")}</span>
-          {onOpenCredentials ? (
-            <>
-              {" "}
-              <button
-                type="button"
-                className="theia-button secondary"
-                onClick={onOpenCredentials}
-              >
-                {t("links.openCredentialsAction")}
-              </button>
-            </>
-          ) : null}
+          {" "}
+          <button
+            type="button"
+            className="theia-button secondary"
+            data-action={openCredentialsPageAction.id}
+            onClick={() => {
+              void run(openCredentialsPageAction, {});
+            }}
+          >
+            {t("links.openCredentialsAction")}
+          </button>
         </div>
       ) : (
         <div className="simpletab-hint" style={{ marginBottom: "10px" }}>
@@ -354,6 +351,7 @@ export const LinksView: React.FC<LinksViewProps> = ({
                         <button
                           type="button"
                           className="theia-button secondary"
+                          data-view-only
                           onClick={() => {
                             void handleCopy(entry);
                           }}

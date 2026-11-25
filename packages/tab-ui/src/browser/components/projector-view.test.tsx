@@ -8,6 +8,8 @@ import {
   type ProjectorControlState,
 } from "@simpletab/host/lib/common/projector-protocol";
 import * as React from "react";
+import type { ActionRunner } from "../actions/action";
+import { resetProjectorCountdownAction } from "../actions/projector-actions";
 import { ProjectorControlView } from "./projector-control-view";
 import { ProjectorView } from "./projector-view";
 
@@ -305,9 +307,7 @@ describe("ProjectorView & ProjectorControlView", () => {
     expect(screen.getByText("13:55")).toBeTruthy();
     expect(screen.getByText("Running")).toBeTruthy();
 
-    const onStart = vi.fn(async () => runningControl);
-    const onPause = vi.fn(async () => DEFAULT_PROJECTOR_CONTROL);
-    const onReset = vi.fn(async () => DEFAULT_PROJECTOR_CONTROL);
+    const run = vi.fn(async () => ({ ok: true }));
 
     rerender(
       <ProjectorControlView
@@ -315,13 +315,7 @@ describe("ProjectorView & ProjectorControlView", () => {
         available={true}
         control={runningControl}
         nowMs={66_000}
-        onOpenProjector={vi.fn(async () => runningControl)}
-        onCloseProjector={vi.fn(async () => DEFAULT_PROJECTOR_CONTROL)}
-        onToggleFullscreen={vi.fn(async () => runningControl)}
-        onUpdateControl={vi.fn(async () => runningControl)}
-        onStartCountdown={onStart}
-        onPauseCountdown={onPause}
-        onResetCountdown={onReset}
+        run={run as unknown as ActionRunner}
       />,
     );
 
@@ -329,8 +323,9 @@ describe("ProjectorView & ProjectorControlView", () => {
     fireEvent.click(screen.getByRole("button", { name: "Pause" }));
     fireEvent.click(screen.getByRole("button", { name: "Reset" }));
 
-    expect(onStart).toHaveBeenCalledTimes(1);
-    expect(onPause).toHaveBeenCalledTimes(1);
-    expect(onReset).toHaveBeenCalledWith(900);
+    expect(run).toHaveBeenCalledTimes(3);
+    expect(run).toHaveBeenCalledWith(resetProjectorCountdownAction, {
+      durationSeconds: 900,
+    });
   });
 });

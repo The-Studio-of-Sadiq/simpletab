@@ -1,30 +1,46 @@
 import type { PublicChainItem } from "@simpletab/core/changelog";
 import type { ProposalRecord } from "@simpletab/core/ops";
-import type {
-  DevicesStatus,
-  HostStatus,
-  ProjectedState,
+import {
+  DEFAULT_ONLINE_SETTINGS,
+  type DevicesStatus,
+  type HostStatus,
+  type ProjectedState,
 } from "@simpletab/host/lib/common/host-protocol";
-import { render, waitFor } from "@testing-library/react";
+import { DEFAULT_PROJECTOR_CONTROL } from "@simpletab/host/lib/common/projector-protocol";
+import { fireEvent, render, waitFor } from "@testing-library/react";
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import * as React from "react";
 import { describe, expect, it, vi } from "vitest";
 import type { ActionResult, ActionRunner } from "./action";
 import { ALL_ACTION_IDS } from "./all-actions";
+import { t } from "../i18n";
+import { NAVIGATION_ACTIONS } from "./navigation-actions";
 import { runnerFor } from "./test-context";
 import { AllocationView } from "../components/allocation-view";
+import { AssistantView } from "../components/assistant-view";
 import { BreakView } from "../components/break-view";
 import { ChangelogView } from "../components/changelog-view";
 import { CheckinView } from "../components/checkin-view";
+import { CredentialsView } from "../components/credentials-view";
+import { CsvImportPanel } from "../components/csv-import-panel";
+import { DeviceBanner } from "../components/device-banner";
 import { DevicesView } from "../components/devices-view";
 import { DrawView } from "../components/draw-view";
 import { FeedbackView } from "../components/feedback-view";
+import { JoinHostPanel } from "../components/join-host-panel";
+import { LinksView } from "../components/links-view";
 import { MotionsView } from "../components/motions-view";
+import { ParticipantsView } from "../components/participants-view";
+import { ProjectorControlView } from "../components/projector-control-view";
+import { ProjectorView } from "../components/projector-view";
 import { ProposalsView } from "../components/proposals-view";
+import { QrScanner } from "../components/qr-scanner";
 import { ReleasesView } from "../components/releases-view";
 import { ResultsView } from "../components/results-view";
+import { SetupView } from "../components/setup-view";
 import { StandingsView } from "../components/standings-view";
+import { StatusView } from "../components/status-view";
 
 /**
  * M8 inventory: every button on a SimpleTab page is either an action, which is also a command
@@ -32,20 +48,7 @@ import { StandingsView } from "../components/standings-view";
  * in steps; the ones still to do are listed below, and the M8 checkpoint (`e2e:commands`)
  * requires the list to be empty.
  */
-const PENDING_COMPONENTS: ReadonlySet<string> = new Set([
-  "assistant-view.tsx",
-  "credentials-view.tsx",
-  "csv-import-panel.tsx",
-  "device-banner.tsx",
-  "join-host-panel.tsx",
-  "links-view.tsx",
-  "participants-view.tsx",
-  "projector-control-view.tsx",
-  "projector-view.tsx",
-  "qr-scanner.tsx",
-  "setup-view.tsx",
-  "status-view.tsx",
-]);
+const PENDING_COMPONENTS: ReadonlySet<string> = new Set();
 
 const COMPONENTS_DIR = path.resolve(__dirname, "../components");
 
@@ -70,16 +73,29 @@ function buttonElements(source: string): string[] {
   return elements;
 }
 
-function expectRegisteredButtons(container: HTMLElement): void {
+function expectTaggedButtons(
+  container: HTMLElement,
+  requireAction = true,
+  name = "component",
+): void {
   const buttons = Array.from(container.querySelectorAll("button"));
   const actions = buttons
     .map((button) => button.getAttribute("data-action"))
     .filter((id) => id !== null);
-  expect(actions.length).toBeGreaterThan(0);
+  if (requireAction) {
+    expect(actions.length, `${name}: no action button rendered`).toBeGreaterThan(0);
+  }
   for (const id of actions) expect(ALL_ACTION_IDS.has(id!), id!).toBe(true);
   for (const button of buttons) {
-    expect(button.hasAttribute("data-action") || button.hasAttribute("data-view-only")).toBe(true);
+    expect(
+      button.hasAttribute("data-action") || button.hasAttribute("data-view-only"),
+      `${name}: a button is neither an action nor view-only`,
+    ).toBe(true);
   }
+}
+
+function expectRegisteredButtons(container: HTMLElement): void {
+  expectTaggedButtons(container);
 }
 
 /** Minimal state that renders action buttons on the converted pages. */
@@ -464,5 +480,179 @@ describe("M8 action inventory", () => {
       <StandingsView state={state} status={status} run={inventoryRunner(state)} />,
     );
     expectRegisteredButtons(container);
+  });
+
+  it("points every rendered action button of the Participants page at a registered command", () => {
+    const state = inventoryState();
+    const { container } = render(
+      <ParticipantsView state={state} run={inventoryRunner(state)} />,
+    );
+    expectRegisteredButtons(container);
+  });
+
+  it("points every rendered action button of the CSV import panel at a registered command", () => {
+    const state = inventoryState();
+    const { container } = render(
+      <CsvImportPanel kind="teams" state={state} run={inventoryRunner(state)} />,
+    );
+    fireEvent.change(container.querySelector("textarea")!, {
+      target: { value: "name,speaker1\nExample Team,Alice" },
+    });
+    expectRegisteredButtons(container);
+  });
+
+  it("points every rendered action button of the Links page at a registered command", () => {
+    const base = inventoryState();
+    const state = {
+      ...base,
+      permissions: [...(base.permissions ?? []), "links.manage"],
+    } as unknown as ProjectedState;
+    const status: HostStatus = {
+      open: true,
+      locks: [],
+      onlineSettings: { ...DEFAULT_ONLINE_SETTINGS, cdnHost: "example.pages.dev" },
+    };
+    const { container } = render(
+      <LinksView state={state} status={status} run={inventoryRunner(state)} />,
+    );
+    expectRegisteredButtons(container);
+  });
+
+  it("points every rendered action button of the Setup page at a registered command", () => {
+    const status: HostStatus = { open: false, locks: [] };
+    const run = vi.fn(async (): Promise<ActionResult> => ({ ok: true }));
+    const { container } = render(
+      <SetupView state={null} status={status} run={run as unknown as ActionRunner} />,
+    );
+    expectRegisteredButtons(container);
+  });
+
+  it("points every rendered action button of the converted pages at a registered command", () => {
+    const run = vi.fn(async (): Promise<ActionResult> => ({ ok: true })) as unknown as ActionRunner;
+    const state = {
+      ...inventoryState(),
+      permissions: [...(inventoryState().permissions ?? []), "credentials.manage"],
+    } as unknown as ProjectedState;
+    const status: HostStatus = { open: true, locks: [] };
+
+    const cases: Array<{
+      name: string;
+      element: React.ReactElement;
+      requireAction?: boolean;
+    }> = [
+      {
+        name: "assistant",
+        element: <AssistantView state={state} canScan run={run} renderScanner={() => null} />,
+      },
+      {
+        name: "credentials",
+        element: (
+          <CredentialsView
+            state={state}
+            status={status}
+            available
+            credentialsStatus={[]}
+            run={run}
+          />
+        ),
+      },
+      {
+        name: "device banner",
+        element: (
+          <DeviceBanner
+            device={{
+              connection: "connected",
+              deviceId: "dev-1",
+              hostAddress: "127.0.0.1:47820",
+              deviceName: "Test laptop",
+              roleId: "tab_director",
+              roleName: "Tab director",
+              queued: [],
+              rejected: [],
+              presence: [],
+            }}
+            run={run}
+            confirmLeave={() => true}
+          />
+        ),
+      },
+      {
+        name: "join host",
+        element: <JoinHostPanel run={run} loadProgress={async () => ({ state: "idle" })} />,
+      },
+      {
+        name: "projector control",
+        element: (
+          <ProjectorControlView
+            state={state}
+            available
+            control={DEFAULT_PROJECTOR_CONTROL}
+            run={run}
+          />
+        ),
+      },
+      {
+        name: "projector",
+        element: <ProjectorView displayState={null} control={DEFAULT_PROJECTOR_CONTROL} />,
+        requireAction: false,
+      },
+      {
+        name: "QR scanner",
+        requireAction: false,
+        element: (
+          <QrScanner
+            onCodes={() => undefined}
+            labels={{
+              start: t("assistant.start"),
+              stop: t("assistant.stop"),
+              starting: t("assistant.starting"),
+              scanning: t("assistant.scanning"),
+              partial: (have, of) => t("assistant.partial", { have, of }),
+              cameraDenied: t("assistant.cameraDenied"),
+              noCamera: t("assistant.noCamera"),
+              cameraFailed: t("assistant.cameraFailed"),
+              videoLabel: t("assistant.videoLabel"),
+            }}
+          />
+        ),
+      },
+      {
+        name: "status",
+        element: (
+          <StatusView
+            status={status}
+            state={state}
+            loading={false}
+            error={null}
+            onRefresh={async () => null}
+            run={run}
+            canPullNow
+          />
+        ),
+      },
+    ];
+
+    for (const { name, element, requireAction = true } of cases) {
+      const { container, unmount } = render(element);
+      expectTaggedButtons(container, requireAction, name);
+      unmount();
+    }
+  });
+
+  it("registers every navigation button command as an action", () => {
+    const source = readFileSync(
+      path.resolve(__dirname, "../views/simpletab-nav-widget.tsx"),
+      "utf8",
+    );
+    const commands = Array.from(
+      source.matchAll(/export const (SIMPLETAB_OPEN_\w+_COMMAND) =\s*"([^"]+)"/g),
+    );
+    expect(commands).toHaveLength(NAVIGATION_ACTIONS.length);
+    for (const [, constant, id] of commands) {
+      expect(ALL_ACTION_IDS.has(id!), id!).toBe(true);
+      expect(source, `${constant} must have data-action`).toContain(
+        `data-action={${constant}}`,
+      );
+    }
   });
 });

@@ -2,12 +2,31 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { BUILT_IN_ROLES } from "@simpletab/core/permissions";
 import {
   DEFAULT_ONLINE_SETTINGS,
-  type HostIntegrityCheckResult,
   type HostStatus,
   type ProjectedState,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "react";
+import type { ActionRunner } from "../actions/action";
+import {
+  createDemoTournamentAction,
+  pullNowAction,
+  runFullCheckAction,
+} from "../actions/status-actions";
 import { formatStatusBarText, StatusView } from "./status-view";
+
+interface RunCall {
+  id: string;
+  args: unknown;
+}
+
+function makeRunner(): { run: ActionRunner; calls: RunCall[] } {
+  const calls: RunCall[] = [];
+  const run = vi.fn(async (action: { id: string }, args: unknown) => {
+    calls.push({ id: action.id, args });
+    return { ok: true };
+  });
+  return { run: run as unknown as ActionRunner, calls };
+}
 
 function makeStatusState(): ProjectedState {
   return {
@@ -199,12 +218,7 @@ describe("StatusView & formatStatusBarText", () => {
       onlineSettings: { ...DEFAULT_ONLINE_SETTINGS, ballotPortal: true },
     };
 
-    const runFullCheck = vi.fn(
-      async (): Promise<HostIntegrityCheckResult> => ({
-        ok: true,
-        checkedAt: "2026-11-24T05:00:00.000Z",
-      }),
-    );
+    const { run, calls } = makeRunner();
 
     const { rerender } = render(
       <StatusView
@@ -213,8 +227,7 @@ describe("StatusView & formatStatusBarText", () => {
         loading={false}
         error={null}
         onRefresh={vi.fn(async () => baseStatus)}
-        onRunFullCheck={runFullCheck}
-        onCreateDemo={vi.fn()}
+        run={run}
       />,
     );
 
@@ -240,7 +253,18 @@ describe("StatusView & formatStatusBarText", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Run full check" }));
     await waitFor(() => {
-      expect(runFullCheck).toHaveBeenCalledTimes(1);
+      expect(calls).toContainEqual({
+        id: runFullCheckAction.id,
+        args: {},
+      });
+    });
+
+    fireEvent.click(screen.getByRole("button", { name: "Create demo tournament" }));
+    await waitFor(() => {
+      expect(calls).toContainEqual({
+        id: createDemoTournamentAction.id,
+        args: { directory: "" },
+      });
     });
 
     // Integrity failed state renders explicit failure label
@@ -268,8 +292,7 @@ describe("StatusView & formatStatusBarText", () => {
         loading={false}
         error={null}
         onRefresh={vi.fn(async () => baseStatus)}
-        onRunFullCheck={runFullCheck}
-        onCreateDemo={vi.fn()}
+        run={run}
       />,
     );
 
@@ -301,13 +324,7 @@ describe("StatusView & formatStatusBarText", () => {
       }),
     ).toBe("SimpleTab: wudc · seq 42 · Integrity OK · Online: OK");
 
-    const pullNow = vi.fn(async () => ({
-      enabled: true,
-      active: true,
-      hostNumber: 2,
-      ackedThrough: 20,
-      consecutiveFailures: 0,
-    }));
+    const { run, calls } = makeRunner();
 
     const { rerender } = render(
       <StatusView
@@ -339,9 +356,8 @@ describe("StatusView & formatStatusBarText", () => {
         loading={false}
         error={null}
         onRefresh={vi.fn(async () => undefined)}
-        onRunFullCheck={vi.fn(async () => ({ ok: true }))}
-        onPullNow={pullNow}
-        onCreateDemo={vi.fn()}
+        run={run}
+        canPullNow
       />,
     );
 
@@ -355,7 +371,7 @@ describe("StatusView & formatStatusBarText", () => {
 
     fireEvent.click(screen.getByRole("button", { name: "Pull now" }));
     await waitFor(() => {
-      expect(pullNow).toHaveBeenCalledTimes(1);
+      expect(calls).toContainEqual({ id: pullNowAction.id, args: {} });
     });
 
     rerender(
@@ -383,9 +399,8 @@ describe("StatusView & formatStatusBarText", () => {
         loading={false}
         error={null}
         onRefresh={vi.fn(async () => undefined)}
-        onRunFullCheck={vi.fn(async () => ({ ok: true }))}
-        onPullNow={pullNow}
-        onCreateDemo={vi.fn()}
+        run={run}
+        canPullNow
       />,
     );
 

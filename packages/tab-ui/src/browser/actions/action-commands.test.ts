@@ -1,17 +1,13 @@
 import type { ProjectedState, SubmitResult } from "@simpletab/host/lib/common/host-protocol";
-import { describe, expect, it, vi } from "vitest";
+import { describe, expect, it } from "vitest";
 import { t } from "../i18n";
 import en from "../locales/en/actions.json";
 
-// The real shell, dialogs and widget manager load CSS, which Node cannot import in tests.
-vi.mock("@theia/core/lib/browser/shell/application-shell", () => ({ ApplicationShell: class {} }));
-vi.mock("@theia/core/lib/browser/dialogs", () => ({ ConfirmDialog: class {} }));
-vi.mock("@theia/core/lib/browser/widget-manager", () => ({ WidgetManager: class {} }));
-
-const { executeAction } = await import("./action-commands");
-const { ALL_ACTIONS } = await import("./all-actions");
-const { acceptProposalAction } = await import("./proposals-actions");
-const { fakeStore, scriptedPrompts, testContext } = await import("./test-context");
+import { ALL_ACTIONS } from "./all-actions";
+import { executeAction } from "./execute-action";
+import { acceptProposalAction } from "./proposals-actions";
+import { openProjectorAction } from "./projector-actions";
+import { fakeStore, scriptedPrompts, testContext } from "./test-context";
 
 const english: Record<string, string> = en;
 const director = { roleId: "tab_director", permissions: ["x"], proposals: [] } as unknown as ProjectedState;
@@ -38,7 +34,8 @@ describe("action commands", () => {
     const ids = ALL_ACTIONS.map((action) => action.id);
     expect(new Set(ids).size).toBe(ids.length);
     for (const action of ALL_ACTIONS) {
-      expect(action.id).toMatch(/^simpletab\.[a-z-]+\.[a-z-]+$/);
+      // "projectorControl" keeps the shell's long-standing "open the Projector page" command id.
+      expect(action.id).toMatch(/^simpletab\.([a-z-]+|projectorControl)\.[a-z-]+$/);
       expect(english[action.labelKey], action.labelKey).toBeTruthy();
     }
   });
@@ -85,5 +82,19 @@ describe("action commands", () => {
     expect(submitted).toEqual([]);
     expect(errors).toEqual([]);
     expect(infos).toEqual([]);
+  });
+
+  it("report an error thrown from the palette instead of failing silently", async () => {
+    // No projector service: the action throws, and the palette shows why.
+    const { store } = fakeStore(director);
+    const { errors, notify } = notifier();
+    const result = await executeAction(
+      openProjectorAction,
+      testContext(store, scriptedPrompts([])),
+      undefined,
+      notify,
+    );
+    expect(result).toBeUndefined();
+    expect(errors).toEqual([t("projector.unavailable")]);
   });
 });

@@ -292,6 +292,7 @@ export const QrScanner: React.FC<QrScannerProps> = ({
         <button
           type="button"
           className="theia-button"
+          data-view-only
           onClick={() => {
             if (phase === "idle") {
               void handleStart();

@@ -5,6 +5,7 @@ import type {
   SubmitResult,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "react";
+import { runnerFor } from "../actions/test-context";
 import { CsvImportPanel } from "./csv-import-panel";
 
 function makeState(overrides: Partial<ProjectedState> = {}): ProjectedState {
@@ -75,7 +76,7 @@ describe("CsvImportPanel", () => {
       <CsvImportPanel
         kind="teams"
         state={makeState()}
-        onSubmitOp={onSubmitOp}
+        run={runnerFor({ state: makeState(), submit: onSubmitOp })}
       />,
     );
 
@@ -126,7 +127,7 @@ describe("CsvImportPanel", () => {
       <CsvImportPanel
         kind="teams"
         state={makeState()}
-        onSubmitOp={onSubmitOp}
+        run={runnerFor({ state: makeState(), submit: onSubmitOp })}
       />,
     );
 
@@ -180,7 +181,7 @@ describe("CsvImportPanel", () => {
       <CsvImportPanel
         kind="teams"
         state={existingState}
-        onSubmitOp={onSubmitOp}
+        run={runnerFor({ state: existingState, submit: onSubmitOp })}
       />,
     );
 

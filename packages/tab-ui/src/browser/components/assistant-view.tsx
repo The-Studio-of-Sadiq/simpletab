@@ -1,5 +1,8 @@
-import type { ProjectedState, QrReceiveResult } from "@simpletab/host/lib/common/host-protocol";
+import type { ProjectedState } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import { openCheckinPageAction, openResultsPageAction } from "../actions/navigation-actions";
+import { importQrBallotAction } from "../actions/results-actions";
 import { t } from "../i18n";
 import { qrFailureMessage } from "../lib/qr-messages";
 import { QrScanner } from "./qr-scanner";
@@ -7,9 +10,8 @@ import { QrScanner } from "./qr-scanner";
 export interface AssistantViewProps {
   state: ProjectedState | null;
   canScan: boolean;
-  onReceiveQrBallot: (codes: string[]) => Promise<QrReceiveResult>;
-  onOpenResults: () => void;
-  onOpenCheckin: () => void;
+  /** Runs the same commands the palette offers; the page never calls the host itself. */
+  run: ActionRunner;
   /** Lets tests replace the webcam scanner. */
   renderScanner?: (onCodes: (codes: string[]) => void) => React.ReactNode;
 }
@@ -36,9 +38,7 @@ function roomName(state: ProjectedState | null, debateId: string): string {
 export const AssistantView: React.FC<AssistantViewProps> = ({
   state,
   canScan,
-  onReceiveQrBallot,
-  onOpenResults,
-  onOpenCheckin,
+  run,
   renderScanner,
 }) => {
   const [entries, setEntries] = React.useState<ScanEntry[]>([]);
@@ -48,7 +48,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
 
   const handleCodes = React.useCallback(
     (codes: string[]): void => {
-      void onReceiveQrBallot(codes)
+      void run(importQrBallotAction, { codes })
         .then((result) => {
           const text = result.ok
             ? t("assistant.scanAccepted", { room: roomName(stateRef.current, result.debateId) })
@@ -62,7 +62,7 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
           );
         });
     },
-    [onReceiveQrBallot],
+    [run],
   );
 
   if (state === null) {
@@ -75,10 +75,24 @@ export const AssistantView: React.FC<AssistantViewProps> = ({
       <p className="simpletab-hint">{t("assistant.hint")}</p>
 
       <div className="simpletab-actions">
-        <button type="button" className="theia-button secondary" onClick={onOpenResults}>
+        <button
+          type="button"
+          className="theia-button secondary"
+          data-action={openResultsPageAction.id}
+          onClick={() => {
+            void run(openResultsPageAction, {});
+          }}
+        >
           {t("assistant.openResults")}
         </button>
-        <button type="button" className="theia-button secondary" onClick={onOpenCheckin}>
+        <button
+          type="button"
+          className="theia-button secondary"
+          data-action={openCheckinPageAction.id}
+          onClick={() => {
+            void run(openCheckinPageAction, {});
+          }}
+        >
           {t("assistant.openCheckin")}
         </button>
       </div>

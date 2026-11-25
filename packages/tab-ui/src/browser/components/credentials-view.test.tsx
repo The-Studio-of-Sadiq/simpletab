@@ -2,7 +2,9 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { BUILT_IN_ROLES } from "@simpletab/core/permissions";
 import {
   CREDENTIAL_NAMES,
+  type CredentialName,
   type CredentialStatusEntry,
+  type CredentialTestResult,
 } from "@simpletab/host/lib/common/credentials-protocol";
 import {
   DEFAULT_ONLINE_SETTINGS,
@@ -11,6 +13,20 @@ import {
   type ProjectedState,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "react";
+import {
+  clearCredentialSecretAction,
+  normalizeOnlinePatch,
+  setCredentialSecretAction,
+  testCredentialSecretAction,
+  updateOnlineSettingsAction,
+  type ClearSecretArgs,
+  type SecretFormValues,
+  type SetSecretArgs,
+  type TestSecretArgs,
+  type UpdateOnlineSettingsArgs,
+} from "../actions/credentials-actions";
+import type { ActionRunner } from "../actions/action";
+import { t } from "../i18n";
 import { CredentialsView } from "./credentials-view";
 
 function makeState(role: (typeof BUILT_IN_ROLES)[keyof typeof BUILT_IN_ROLES]): ProjectedState {
@@ -80,6 +96,64 @@ function initialCredentials(): CredentialStatusEntry[] {
   return CREDENTIAL_NAMES.map((name) => ({ name, set: false }));
 }
 
+interface RunnerHandlers {
+  set?: (name: CredentialName, values: SecretFormValues) => void;
+  clear?: (name: CredentialName) => void;
+  test?: (name: CredentialName) => CredentialTestResult;
+  update?: (patch: Partial<OnlineSettings>) => void;
+}
+
+function testRunner(handlers: RunnerHandlers): ActionRunner {
+  return (async (action: { id: string }, args: unknown) => {
+    switch (action.id) {
+      case setCredentialSecretAction.id: {
+        const { name, values } = args as SetSecretArgs;
+        handlers.set?.(name, values);
+        return { ok: true, status: [] };
+      }
+      case clearCredentialSecretAction.id: {
+        const { name } = args as ClearSecretArgs;
+        handlers.clear?.(name);
+        return { ok: true, status: [] };
+      }
+      case testCredentialSecretAction.id: {
+        const { name } = args as TestSecretArgs;
+        const test = handlers.test?.(name) ?? { ok: true };
+        return test.ok
+          ? { ok: true, status: [], test }
+          : {
+              ok: false,
+              status: [],
+              test,
+              errors: [test.error ?? t("credentials.testFailedGeneric")],
+            };
+      }
+      case updateOnlineSettingsAction.id: {
+        const { patch } = args as UpdateOnlineSettingsArgs;
+        const normalized = normalizeOnlinePatch(patch);
+        if (normalized.errorKey !== undefined || normalized.patch === undefined) {
+          return {
+            ok: false,
+            errors: [t(normalized.errorKey ?? "credentials.validationEmpty")],
+          };
+        }
+        handlers.update?.(normalized.patch);
+        return {
+          ok: true,
+          status: [],
+          onlineSettings: { ...DEFAULT_ONLINE_SETTINGS, ...normalized.patch },
+        };
+      }
+      default:
+        throw new Error(`Unexpected action ${action.id}`);
+    }
+  }) as ActionRunner;
+}
+
+function okRunner(): ActionRunner {
+  return testRunner({});
+}
+
 describe("CredentialsView", () => {
   it("hides credentials, online switches, and checklist for non-host-owner roles", () => {
     for (const role of [
@@ -93,11 +167,7 @@ describe("CredentialsView", () => {
           status={makeStatus()}
           available={true}
           credentialsStatus={initialCredentials()}
-          onRefreshCredentials={vi.fn(async () => initialCredentials())}
-          onSetCredential={vi.fn(async () => undefined)}
-          onClearCredential={vi.fn(async () => undefined)}
-          onTestCredential={vi.fn(async () => ({ ok: true }))}
-          onUpdateOnlineSettings={vi.fn(async () => ({ ...DEFAULT_ONLINE_SETTINGS }))}
+          run={okRunner()}
         />,
       );
 
@@ -124,40 +194,40 @@ describe("CredentialsView", () => {
           status={statusState}
           available={true}
           credentialsStatus={credState}
-          onRefreshCredentials={async () => credState}
-          onSetCredential={async (name, _value) => {
-            creds = credState.map((entry) =>
-              entry.name === name ? { name, set: true } : entry,
-            );
-            setCredState(creds);
-          }}
-          onClearCredential={async (name) => {
-            creds = credState.map((entry) =>
-              entry.name === name ? { name, set: false } : entry,
-            );
-            setCredState(creds);
-          }}
-          onTestCredential={async (name) => {
-            const ok = name === "cdnToken";
-            const error = ok ? undefined : "Credential is not set.";
-            creds = credState.map((entry) =>
-              entry.name === name
-                ? {
-                    ...entry,
-                    testedAt: "2026-11-24T05:00:00.000Z",
-                    ok,
-                    ...(error ? { error } : {}),
-                  }
-                : entry,
-            );
-            setCredState(creds);
-            return ok ? { ok: true } : { ok: false, error };
-          }}
-          onUpdateOnlineSettings={async (patch) => {
-            online = { ...online, ...patch };
-            setStatusState(makeStatus(online));
-            return online;
-          }}
+          run={testRunner({
+            set: (name) => {
+              creds = credState.map((entry) =>
+                entry.name === name ? { name, set: true } : entry,
+              );
+              setCredState(creds);
+            },
+            clear: (name) => {
+              creds = credState.map((entry) =>
+                entry.name === name ? { name, set: false } : entry,
+              );
+              setCredState(creds);
+            },
+            test: (name) => {
+              const ok = name === "cdnToken";
+              const error = ok ? undefined : "Credential is not set.";
+              creds = credState.map((entry) =>
+                entry.name === name
+                  ? {
+                      ...entry,
+                      testedAt: "2026-11-24T05:00:00.000Z",
+                      ok,
+                      ...(error ? { error } : {}),
+                    }
+                  : entry,
+              );
+              setCredState(creds);
+              return ok ? { ok: true } : { ok: false, error };
+            },
+            update: (patch) => {
+              online = { ...online, ...patch };
+              setStatusState(makeStatus(online));
+            },
+          })}
         />
       );
     };
@@ -234,11 +304,7 @@ describe("CredentialsView", () => {
         })}
         available={true}
         credentialsStatus={initialCredentials()}
-        onRefreshCredentials={vi.fn(async () => initialCredentials())}
-        onSetCredential={vi.fn(async () => undefined)}
-        onClearCredential={vi.fn(async () => undefined)}
-        onTestCredential={vi.fn(async () => ({ ok: true }))}
-        onUpdateOnlineSettings={vi.fn(async () => ({ ...DEFAULT_ONLINE_SETTINGS }))}
+        run={okRunner()}
       />,
     );
 
@@ -248,10 +314,7 @@ describe("CredentialsView", () => {
   });
 
   it("saves valid public site host name and rejects URLs with protocol or path", async () => {
-    const updateOnlineSettings = vi.fn(async (patch: Partial<OnlineSettings>) => ({
-      ...DEFAULT_ONLINE_SETTINGS,
-      ...patch,
-    }));
+    const updates: Partial<OnlineSettings>[] = [];
 
     render(
       <CredentialsView
@@ -259,11 +322,7 @@ describe("CredentialsView", () => {
         status={makeStatus({ ...DEFAULT_ONLINE_SETTINGS })}
         available={true}
         credentialsStatus={initialCredentials()}
-        onRefreshCredentials={vi.fn(async () => initialCredentials())}
-        onSetCredential={vi.fn(async () => undefined)}
-        onClearCredential={vi.fn(async () => undefined)}
-        onTestCredential={vi.fn(async () => ({ ok: true }))}
-        onUpdateOnlineSettings={updateOnlineSettings}
+        run={testRunner({ update: (patch) => updates.push(patch) })}
       />,
     );
 
@@ -274,15 +333,13 @@ describe("CredentialsView", () => {
     await waitFor(() => {
       expect(screen.getByText(/Enter a valid bare hostname/i)).toBeTruthy();
     });
-    expect(updateOnlineSettings).not.toHaveBeenCalled();
+    expect(updates).toEqual([]);
 
     fireEvent.change(cdnInput, { target: { value: "wudc2027.pages.dev" } });
     fireEvent.click(screen.getByRole("button", { name: "Save host name" }));
 
     await waitFor(() => {
-      expect(updateOnlineSettings).toHaveBeenCalledWith({
-        cdnHost: "wudc2027.pages.dev",
-      });
+      expect(updates).toContainEqual({ cdnHost: "wudc2027.pages.dev" });
     });
   });
 });

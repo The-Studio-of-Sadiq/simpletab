@@ -1,6 +1,5 @@
 import {
   DEFAULT_ONLINE_SETTINGS,
-  type HostIntegrityCheckResult,
   type HostStatus,
   type OnlineSettings,
   type ProjectedState,
@@ -8,6 +7,12 @@ import {
   type SyncStatus,
 } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import {
+  createDemoTournamentAction,
+  pullNowAction,
+  runFullCheckAction,
+} from "../actions/status-actions";
 import { t } from "../i18n";
 import { defaultTournamentTimeZone, formatDeadlineDateTime } from "../lib/deadline";
 import { getDefaultRoundId } from "./round-picker";
@@ -17,10 +22,12 @@ export interface StatusViewProps {
   state: ProjectedState | null;
   loading: boolean;
   error: string | null;
+  /** Refresh only reloads the view; it is deliberately not a command. */
   onRefresh: () => Promise<HostStatus | null | void>;
-  onRunFullCheck: () => Promise<HostIntegrityCheckResult>;
-  onPullNow?: () => Promise<SyncStatus | void>;
-  onCreateDemo: () => Promise<void> | void;
+  /** Runs the same commands the palette offers. */
+  run: ActionRunner;
+  /** The pull-now command only applies when the host can sync. */
+  canPullNow?: boolean;
 }
 
 interface AddonRow {
@@ -163,9 +170,8 @@ export const StatusView: React.FC<StatusViewProps> = ({
   loading,
   error,
   onRefresh,
-  onRunFullCheck,
-  onPullNow,
-  onCreateDemo,
+  run,
+  canPullNow = false,
 }) => {
   const [runningFullCheck, setRunningFullCheck] = React.useState(false);
   const [pulling, setPulling] = React.useState(false);
@@ -299,19 +305,16 @@ export const StatusView: React.FC<StatusViewProps> = ({
   const handleFullCheck = async (): Promise<void> => {
     setRunningFullCheck(true);
     try {
-      await onRunFullCheck();
+      await run(runFullCheckAction, {});
     } finally {
       setRunningFullCheck(false);
     }
   };
 
   const handlePullNow = async (): Promise<void> => {
-    if (!onPullNow) {
-      return;
-    }
     setPulling(true);
     try {
-      await onPullNow();
+      await run(pullNowAction, {});
     } finally {
       setPulling(false);
     }
@@ -325,16 +328,18 @@ export const StatusView: React.FC<StatusViewProps> = ({
           <button
             type="button"
             className="theia-button secondary"
+            data-view-only
             onClick={() => {
               void onRefresh();
             }}
           >
             {t("status.refresh")}
           </button>
-          {onPullNow ? (
+          {canPullNow ? (
             <button
               type="button"
               className="theia-button secondary"
+              data-action={pullNowAction.id}
               disabled={!status.open || pulling}
               onClick={() => {
                 void handlePullNow();
@@ -346,6 +351,7 @@ export const StatusView: React.FC<StatusViewProps> = ({
           <button
             type="button"
             className="theia-button secondary"
+            data-action={runFullCheckAction.id}
             disabled={!status.open || runningFullCheck}
             onClick={() => {
               void handleFullCheck();
@@ -358,8 +364,9 @@ export const StatusView: React.FC<StatusViewProps> = ({
           <button
             type="button"
             className="theia-button"
+            data-action={createDemoTournamentAction.id}
             onClick={() => {
-              void onCreateDemo();
+              void run(createDemoTournamentAction, { directory: "" });
             }}
           >
             {t("status.createDemo")}

@@ -7,6 +7,16 @@ import {
   type ProjectorMode,
 } from "@simpletab/host/lib/common/projector-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import {
+  closeProjectorAction,
+  openProjectorAction,
+  pauseProjectorCountdownAction,
+  resetProjectorCountdownAction,
+  startProjectorCountdownAction,
+  toggleProjectorFullscreenAction,
+  updateProjectorControlAction,
+} from "../actions/projector-actions";
 import { t } from "../i18n";
 import { RoundPicker } from "./round-picker";
 
@@ -15,19 +25,8 @@ export interface ProjectorControlViewProps {
   available: boolean;
   control: ProjectorControlState;
   nowMs?: number;
-  onOpenProjector: () => Promise<ProjectorControlState | void>;
-  onCloseProjector: () => Promise<ProjectorControlState | void>;
-  onToggleFullscreen: () => Promise<ProjectorControlState | void>;
-  onUpdateControl: (
-    patch: ProjectorControlPatch,
-  ) => Promise<ProjectorControlState | void>;
-  onStartCountdown: (
-    durationSeconds?: number,
-  ) => Promise<ProjectorControlState | void>;
-  onPauseCountdown: () => Promise<ProjectorControlState | void>;
-  onResetCountdown: (
-    durationSeconds?: number,
-  ) => Promise<ProjectorControlState | void>;
+  /** Every button runs the same command the palette offers. */
+  run: ActionRunner;
 }
 
 export const ProjectorControlView: React.FC<ProjectorControlViewProps> = ({
@@ -35,13 +34,7 @@ export const ProjectorControlView: React.FC<ProjectorControlViewProps> = ({
   available,
   control,
   nowMs,
-  onOpenProjector,
-  onCloseProjector,
-  onToggleFullscreen,
-  onUpdateControl,
-  onStartCountdown,
-  onPauseCountdown,
-  onResetCountdown,
+  run,
 }) => {
   const baseId = React.useId();
   const [durationMinutes, setDurationMinutes] = React.useState(() =>
@@ -99,9 +92,10 @@ export const ProjectorControlView: React.FC<ProjectorControlViewProps> = ({
           <button
             type="button"
             className="theia-button"
+            data-action={openProjectorAction.id}
             disabled={!available}
             onClick={() => {
-              void onOpenProjector();
+              void run(openProjectorAction, {});
             }}
           >
             {t("projector.openWindow")}
@@ -109,9 +103,10 @@ export const ProjectorControlView: React.FC<ProjectorControlViewProps> = ({
           <button
             type="button"
             className="theia-button secondary"
+            data-action={closeProjectorAction.id}
             disabled={!available || !control.open}
             onClick={() => {
-              void onCloseProjector();
+              void run(closeProjectorAction, {});
             }}
           >
             {t("projector.closeWindow")}
@@ -119,9 +114,10 @@ export const ProjectorControlView: React.FC<ProjectorControlViewProps> = ({
           <button
             type="button"
             className="theia-button secondary"
+            data-action={toggleProjectorFullscreenAction.id}
             disabled={!available || !control.open}
             onClick={() => {
-              void onToggleFullscreen();
+              void run(toggleProjectorFullscreenAction, {});
             }}
           >
             {t("projector.toggleFullscreen")}
@@ -137,7 +133,7 @@ export const ProjectorControlView: React.FC<ProjectorControlViewProps> = ({
                 rounds={state?.rounds ?? []}
                 selectedRoundId={control.roundId ?? ""}
                 onSelectRound={(roundId) => {
-                  void onUpdateControl({ roundId });
+                  void run(updateProjectorControlAction, { patch: { roundId } });
                 }}
               />
             </div>
@@ -151,8 +147,8 @@ export const ProjectorControlView: React.FC<ProjectorControlViewProps> = ({
                 value={control.mode}
                 disabled={!available}
                 onChange={(e) => {
-                  void onUpdateControl({
-                    mode: e.target.value as ProjectorMode,
+                  void run(updateProjectorControlAction, {
+                    patch: { mode: e.target.value as ProjectorMode },
                   });
                 }}
               >
@@ -179,7 +175,9 @@ export const ProjectorControlView: React.FC<ProjectorControlViewProps> = ({
                 onChange={(e) => {
                   const val = Number(e.target.value);
                   if (Number.isFinite(val) && val >= 2) {
-                    void onUpdateControl({ pageIntervalSeconds: val });
+                    void run(updateProjectorControlAction, {
+                      patch: { pageIntervalSeconds: val },
+                    });
                   }
                 }}
               />
@@ -199,7 +197,9 @@ export const ProjectorControlView: React.FC<ProjectorControlViewProps> = ({
                 onChange={(e) => {
                   const val = Number(e.target.value);
                   if (Number.isFinite(val) && val >= 1) {
-                    void onUpdateControl({ roomsPerPage: val });
+                    void run(updateProjectorControlAction, {
+                      patch: { roomsPerPage: val },
+                    });
                   }
                 }}
               />
@@ -237,11 +237,16 @@ export const ProjectorControlView: React.FC<ProjectorControlViewProps> = ({
           <button
             type="button"
             className="theia-button"
+            data-action={startProjectorCountdownAction.id}
             disabled={!available}
             onClick={() => {
-              void onStartCountdown(
-                control.countdown.running ? undefined : remainingSeconds > 0 ? undefined : configuredSeconds,
-              );
+              void run(startProjectorCountdownAction, {
+                durationSeconds: control.countdown.running
+                  ? undefined
+                  : remainingSeconds > 0
+                    ? undefined
+                    : configuredSeconds,
+              });
             }}
           >
             {t("projector.startTimer")}
@@ -249,9 +254,10 @@ export const ProjectorControlView: React.FC<ProjectorControlViewProps> = ({
           <button
             type="button"
             className="theia-button secondary"
+            data-action={pauseProjectorCountdownAction.id}
             disabled={!available || !control.countdown.running}
             onClick={() => {
-              void onPauseCountdown();
+              void run(pauseProjectorCountdownAction, {});
             }}
           >
             {t("projector.pauseTimer")}
@@ -259,9 +265,12 @@ export const ProjectorControlView: React.FC<ProjectorControlViewProps> = ({
           <button
             type="button"
             className="theia-button secondary"
+            data-action={resetProjectorCountdownAction.id}
             disabled={!available}
             onClick={() => {
-              void onResetCountdown(configuredSeconds);
+              void run(resetProjectorCountdownAction, {
+                durationSeconds: configuredSeconds,
+              });
             }}
           >
             {t("projector.resetTimer")}

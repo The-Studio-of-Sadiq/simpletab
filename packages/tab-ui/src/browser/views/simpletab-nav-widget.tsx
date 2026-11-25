@@ -116,6 +116,7 @@ export class SimpleTabNavWidget extends ReactWidget {
           <button
             type="button"
             className="theia-button secondary simpletab-nav-btn"
+            data-action={SIMPLETAB_OPEN_SETUP_COMMAND}
             onClick={() => {
               void this.commandService.executeCommand(SIMPLETAB_OPEN_SETUP_COMMAND);
             }}
@@ -125,6 +126,7 @@ export class SimpleTabNavWidget extends ReactWidget {
           <button
             type="button"
             className="theia-button secondary simpletab-nav-btn"
+            data-action={SIMPLETAB_OPEN_PARTICIPANTS_COMMAND}
             onClick={() => {
               void this.commandService.executeCommand(
                 SIMPLETAB_OPEN_PARTICIPANTS_COMMAND,
@@ -136,6 +138,7 @@ export class SimpleTabNavWidget extends ReactWidget {
           <button
             type="button"
             className="theia-button secondary simpletab-nav-btn"
+            data-action={SIMPLETAB_OPEN_CHECKIN_COMMAND}
             onClick={() => {
               void this.commandService.executeCommand(
                 SIMPLETAB_OPEN_CHECKIN_COMMAND,
@@ -147,6 +150,7 @@ export class SimpleTabNavWidget extends ReactWidget {
           <button
             type="button"
             className="theia-button secondary simpletab-nav-btn"
+            data-action={SIMPLETAB_OPEN_DRAW_COMMAND}
             onClick={() => {
               void this.commandService.executeCommand(SIMPLETAB_OPEN_DRAW_COMMAND);
             }}
@@ -156,6 +160,7 @@ export class SimpleTabNavWidget extends ReactWidget {
           <button
             type="button"
             className="theia-button secondary simpletab-nav-btn"
+            data-action={SIMPLETAB_OPEN_ALLOCATION_COMMAND}
             onClick={() => {
               void this.commandService.executeCommand(
                 SIMPLETAB_OPEN_ALLOCATION_COMMAND,
@@ -167,6 +172,7 @@ export class SimpleTabNavWidget extends ReactWidget {
           <button
             type="button"
             className="theia-button secondary simpletab-nav-btn"
+            data-action={SIMPLETAB_OPEN_MOTIONS_COMMAND}
             onClick={() => {
               void this.commandService.executeCommand(
                 SIMPLETAB_OPEN_MOTIONS_COMMAND,
@@ -178,6 +184,7 @@ export class SimpleTabNavWidget extends ReactWidget {
           <button
             type="button"
             className="theia-button secondary simpletab-nav-btn"
+            data-action={SIMPLETAB_OPEN_RESULTS_COMMAND}
             onClick={() => {
               void this.commandService.executeCommand(
                 SIMPLETAB_OPEN_RESULTS_COMMAND,
@@ -190,6 +197,7 @@ export class SimpleTabNavWidget extends ReactWidget {
             <button
               type="button"
               className="theia-button secondary simpletab-nav-btn"
+              data-action={SIMPLETAB_OPEN_FEEDBACK_COMMAND}
               onClick={() => {
                 void this.commandService.executeCommand(
                   SIMPLETAB_OPEN_FEEDBACK_COMMAND,
@@ -202,6 +210,7 @@ export class SimpleTabNavWidget extends ReactWidget {
           <button
             type="button"
             className="theia-button secondary simpletab-nav-btn"
+            data-action={SIMPLETAB_OPEN_STANDINGS_COMMAND}
             onClick={() => {
               void this.commandService.executeCommand(
                 SIMPLETAB_OPEN_STANDINGS_COMMAND,
@@ -213,6 +222,7 @@ export class SimpleTabNavWidget extends ReactWidget {
           <button
             type="button"
             className="theia-button secondary simpletab-nav-btn"
+            data-action={SIMPLETAB_OPEN_BREAK_COMMAND}
             onClick={() => {
               void this.commandService.executeCommand(SIMPLETAB_OPEN_BREAK_COMMAND);
             }}
@@ -222,6 +232,7 @@ export class SimpleTabNavWidget extends ReactWidget {
           <button
             type="button"
             className="theia-button secondary simpletab-nav-btn"
+            data-action={SIMPLETAB_OPEN_RELEASES_COMMAND}
             onClick={() => {
               void this.commandService.executeCommand(
                 SIMPLETAB_OPEN_RELEASES_COMMAND,
@@ -233,6 +244,7 @@ export class SimpleTabNavWidget extends ReactWidget {
           <button
             type="button"
             className="theia-button secondary simpletab-nav-btn"
+            data-action={SIMPLETAB_OPEN_CHANGELOG_COMMAND}
             onClick={() => {
               void this.commandService.executeCommand(
                 SIMPLETAB_OPEN_CHANGELOG_COMMAND,
@@ -245,6 +257,7 @@ export class SimpleTabNavWidget extends ReactWidget {
             <button
               type="button"
               className="theia-button secondary simpletab-nav-btn"
+              data-action={SIMPLETAB_OPEN_ASSISTANT_COMMAND}
               onClick={() => {
                 void this.commandService.executeCommand(
                   SIMPLETAB_OPEN_ASSISTANT_COMMAND,
@@ -258,6 +271,7 @@ export class SimpleTabNavWidget extends ReactWidget {
             <button
               type="button"
               className="theia-button secondary simpletab-nav-btn"
+              data-action={SIMPLETAB_OPEN_DEVICES_COMMAND}
               onClick={() => {
                 void this.commandService.executeCommand(
                   SIMPLETAB_OPEN_DEVICES_COMMAND,
@@ -271,6 +285,7 @@ export class SimpleTabNavWidget extends ReactWidget {
             <button
               type="button"
               className="theia-button secondary simpletab-nav-btn"
+              data-action={SIMPLETAB_OPEN_PROPOSALS_COMMAND}
               onClick={() => {
                 void this.commandService.executeCommand(
                   SIMPLETAB_OPEN_PROPOSALS_COMMAND,
@@ -284,6 +299,7 @@ export class SimpleTabNavWidget extends ReactWidget {
             <button
               type="button"
               className="theia-button secondary simpletab-nav-btn"
+              data-action={SIMPLETAB_OPEN_LINKS_COMMAND}
               onClick={() => {
                 void this.commandService.executeCommand(
                   SIMPLETAB_OPEN_LINKS_COMMAND,
@@ -297,6 +313,7 @@ export class SimpleTabNavWidget extends ReactWidget {
             <button
               type="button"
               className="theia-button secondary simpletab-nav-btn"
+              data-action={SIMPLETAB_OPEN_CREDENTIALS_COMMAND}
               onClick={() => {
                 void this.commandService.executeCommand(
                   SIMPLETAB_OPEN_CREDENTIALS_COMMAND,
@@ -309,6 +326,7 @@ export class SimpleTabNavWidget extends ReactWidget {
           <button
             type="button"
             className="theia-button secondary simpletab-nav-btn"
+            data-action={SIMPLETAB_OPEN_PROJECTOR_CONTROL_COMMAND}
             onClick={() => {
               void this.commandService.executeCommand(
                 SIMPLETAB_OPEN_PROJECTOR_CONTROL_COMMAND,
@@ -320,6 +338,7 @@ export class SimpleTabNavWidget extends ReactWidget {
           <button
             type="button"
             className="theia-button secondary simpletab-nav-btn"
+            data-action={SIMPLETAB_OPEN_STATUS_COMMAND}
             onClick={() => {
               void this.commandService.executeCommand(SIMPLETAB_OPEN_STATUS_COMMAND);
             }}

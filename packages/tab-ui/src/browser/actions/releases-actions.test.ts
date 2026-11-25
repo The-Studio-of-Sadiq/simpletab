@@ -372,8 +372,9 @@ describe("release actions", () => {
   });
 
   it("opens Setup from the empty Releases page", async () => {
+    // "Open Setup" is the navigation command, offered whenever.
     expect(can(openSetupAction, null)).toBe(true);
-    expect(can(openSetupAction, releaseState())).toBe(false);
+    expect(can(openSetupAction, releaseState())).toBe(true);
     const { store } = fakeStore(null, SUBMIT);
     const openPage = vi.fn(async () => undefined);
     const ctx = testContext(store, scriptedPrompts([]), openPage);

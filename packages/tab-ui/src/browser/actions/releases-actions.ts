@@ -28,6 +28,7 @@ import type {
 import { t } from "../i18n";
 import { stateHasPermission } from "../lib/permissions";
 import type { TournamentStoreSnapshot } from "../store/tournament-store";
+import { openSetupPageAction } from "./navigation-actions";
 import { defineAction, type ActionContext } from "./action";
 
 /** Widget id of the Releases page. */
@@ -677,21 +678,8 @@ export const setArchiveMirrorAction = defineAction<SetMirrorArgs>({
   },
 });
 
-export const openSetupAction = defineAction<NoArgs>({
-  id: "simpletab.releases.open-setup",
-  labelKey: "action.releases.openSetup",
-  page: RELEASES_PAGE,
-  isEnabled(snapshot) {
-    return snapshot.state === null;
-  },
-  async prompt() {
-    return {};
-  },
-  async run(ctx) {
-    await ctx.openPage(SETUP_PAGE);
-    return { ok: true };
-  },
-});
+/** "Open Setup" on any page is the navigation command; re-exported here for the pages. */
+export const openSetupAction = openSetupPageAction;
 
 export const RELEASES_ACTIONS = [
   setGateAction,
@@ -704,5 +692,4 @@ export const RELEASES_ACTIONS = [
   setLivePublicSiteAction,
   archiveNowAction,
   setArchiveMirrorAction,
-  openSetupAction,
 ] as const;

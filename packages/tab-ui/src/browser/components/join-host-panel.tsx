@@ -1,9 +1,12 @@
-import type { JoinHostParams, JoinProgress } from "@simpletab/host/lib/common/host-protocol";
+import type { JoinProgress } from "@simpletab/host/lib/common/host-protocol";
 import * as React from "@theia/core/shared/react";
+import type { ActionRunner } from "../actions/action";
+import { joinHostAction } from "../actions/device-mode-actions";
 import { t } from "../i18n";
 
 export interface JoinHostPanelProps {
-  onStartJoin: (params: JoinHostParams) => Promise<JoinProgress>;
+  /** Runs the same command the palette offers; the page never calls the host itself. */
+  run: ActionRunner;
   loadProgress: () => Promise<JoinProgress>;
   pollMs?: number;
 }
@@ -13,7 +16,7 @@ export interface JoinHostPanelProps {
  * the address and code from the host's Devices page; while the host decides, this laptop shows the
  * six words it computed, to compare with the host's screen.
  */
-export const JoinHostPanel: React.FC<JoinHostPanelProps> = ({ onStartJoin, loadProgress, pollMs = 1000 }) => {
+export const JoinHostPanel: React.FC<JoinHostPanelProps> = ({ run, loadProgress, pollMs = 1000 }) => {
   const baseId = React.useId();
   const [address, setAddress] = React.useState("");
   const [code, setCode] = React.useState("");
@@ -45,7 +48,11 @@ export const JoinHostPanel: React.FC<JoinHostPanelProps> = ({ onStartJoin, loadP
     event.preventDefault();
     setError(null);
     try {
-      setProgress(await onStartJoin({ address, code, deviceName }));
+      const result = await run(joinHostAction, { address, code, deviceName });
+      if (!result.ok) {
+        throw new Error(result.errors.join(" "));
+      }
+      setProgress(result.progress);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     }
@@ -96,7 +103,12 @@ export const JoinHostPanel: React.FC<JoinHostPanelProps> = ({ onStartJoin, loadP
           onChange={(e) => setDeviceName(e.target.value)}
         />
         <div className="simpletab-actions">
-          <button type="submit" className="theia-button" disabled={active}>
+          <button
+            type="submit"
+            className="theia-button"
+            data-action={joinHostAction.id}
+            disabled={active}
+          >
             {active ? t("deviceMode.joining") : t("deviceMode.join")}
           </button>
         </div>
