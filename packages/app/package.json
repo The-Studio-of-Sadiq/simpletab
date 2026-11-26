@@ -5,7 +5,7 @@
   "license": "AGPL-3.0-or-later",
   "main": "lib/backend/electron-main.js",
   "scripts": {
-    "prebuild": "npm run fetch:public-site && npm run build -w @simpletab/host && npm run build -w @simpletab/tab-ui",
+    "prebuild": "npm run fetch:public-site && npm run build -w @simpletab/host && npm run build -w @simpletab/extensions && npm run build -w @simpletab/tab-ui",
     "fetch:public-site": "node scripts/fetch-public-site.mjs",
     "download:plugins": "theia download:plugins --rate-limit 15 --parallel false",
     "build": "node scripts/ensure-plugins.mjs && theia build --mode development",
@@ -14,6 +14,7 @@
     "rebuild:node": "theia rebuild:browser --modules native-keymap drivelist keytar better-sqlite3"
   },
   "dependencies": {
+    "@simpletab/extensions": "*",
     "@simpletab/host": "*",
     "@simpletab/tab-ui": "*",
     "@theia/core": "1.77.0",

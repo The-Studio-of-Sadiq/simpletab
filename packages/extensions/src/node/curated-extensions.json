@@ -1,0 +1,50 @@
+{
+  "comment": "SimpleTab's curated extension list (design section 11, item 6). Reviewed like code; each entry is checked in the built app before release (docs/checks/M9.md).",
+  "extensions": [
+    {
+      "id": "mechatroner.rainbow-csv",
+      "version": "3.24.1",
+      "url": "https://open-vsx.org/api/mechatroner/rainbow-csv/3.24.1/file/mechatroner.rainbow-csv-3.24.1.vsix",
+      "sha256": "0ecb7da3fb2a54517cd41fce8e858d6276ea8523bed6fbfd64d5ed281bd7514a",
+      "license": "MIT",
+      "name": "Rainbow CSV",
+      "purpose": "Colours and aligns CSV columns, and checks each row's column count."
+    },
+    {
+      "id": "janisdd.vscode-edit-csv",
+      "version": "0.11.10",
+      "url": "https://open-vsx.org/api/janisdd/vscode-edit-csv/0.11.10/file/janisdd.vscode-edit-csv-0.11.10.vsix",
+      "sha256": "b5dc0c54f01c0e43c86fdb0d30fc466d92a3d7e53e2eaca43a9cfae87ce0c8bc",
+      "license": "MIT",
+      "name": "Edit CSV",
+      "purpose": "Edits a CSV file as a table."
+    },
+    {
+      "id": "GrapeCity.gc-excelviewer",
+      "version": "4.2.58",
+      "url": "https://open-vsx.org/api/GrapeCity/gc-excelviewer/4.2.58/file/GrapeCity.gc-excelviewer-4.2.58.vsix",
+      "sha256": "c5dd520f68f60d2ccafdf1239ff8391b8b15bfb34ad054694b94e4d375abc862",
+      "license": "MIT",
+      "name": "Excel Viewer",
+      "purpose": "Shows .xlsx and CSV files as a grid."
+    },
+    {
+      "id": "vscode.markdown-language-features",
+      "version": "1.95.3",
+      "url": "https://open-vsx.org/api/vscode/markdown-language-features/1.95.3/file/vscode.markdown-language-features-1.95.3.vsix",
+      "sha256": "d2ba7aa2c1265e349862aa542a35daa45f81f2efbec8b51184d672999204d09e",
+      "license": "MIT",
+      "name": "Markdown preview",
+      "purpose": "Previews Markdown notes and briefings."
+    },
+    {
+      "id": "streetsidesoftware.code-spell-checker",
+      "version": "4.10.0",
+      "url": "https://open-vsx.org/api/streetsidesoftware/code-spell-checker/4.10.0/file/streetsidesoftware.code-spell-checker-4.10.0.vsix",
+      "sha256": "0b587a38c4c78887a782158f727bbdaddfab2deae3ce0d80efbab40d56475638",
+      "license": "GPL-3.0-or-later",
+      "name": "Code Spell Checker",
+      "purpose": "Spell-checks motions, info slides and notes in English."
+    }
+  ]
+}

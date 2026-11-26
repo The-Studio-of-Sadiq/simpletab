@@ -1,0 +1,22 @@
+{
+  "name": "@simpletab/extensions",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "SimpleTab's curated extensions: which organiser-installed VS Code extensions load (design section 11, item 6).",
+  "scripts": {
+    "build": "tsc -p tsconfig.build.json --noEmit && node scripts/build.mjs"
+  },
+  "theiaExtensions": [
+    {
+      "backend": "lib/node/extensions-backend-module"
+    }
+  ],
+  "dependencies": {
+    "@simpletab/host": "*",
+    "@theia/core": "1.77.0",
+    "@theia/plugin-ext": "1.77.0",
+    "@theia/plugin-ext-vscode": "1.77.0",
+    "jsonc-parser": "3.3.1"
+  }
+}

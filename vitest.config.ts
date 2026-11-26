@@ -33,6 +33,22 @@ export default defineConfig({
       },
       {
         test: {
+          name: "extensions",
+          root: "packages/extensions",
+          include: ["src/**/*.test.ts"],
+          globals: true,
+          environment: "node",
+        },
+        resolve: {
+          alias: {
+            "@": path.resolve(__dirname, "packages/core/src"),
+            "@simpletab/core": path.resolve(__dirname, "packages/core/src"),
+            "@simpletab/host/src": path.resolve(__dirname, "packages/host/src"),
+          },
+        },
+      },
+      {
+        test: {
           name: "cli",
           root: "packages/cli",
           include: ["src/**/*.test.ts"],

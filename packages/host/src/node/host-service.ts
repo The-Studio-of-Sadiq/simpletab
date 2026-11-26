@@ -59,6 +59,7 @@ import {
   type SyncStatus,
 } from "../common/host-protocol";
 import type { CredentialsFetchClient } from "../common/credentials-protocol";
+import { assertMayHostWithExtensions, getExtensionsRuntime } from "./extensions-runtime";
 import { seedDemoTournament } from "./demo-fixture";
 import { HostEngine, type HostApplyResult, type UndoResult } from "./engine/engine";
 import type { DetailedActiveLock } from "./engine/locks";
@@ -463,6 +464,8 @@ export class HostServiceImpl
 
   async openTournament(dbPath: string): Promise<HostStatus> {
     this.assertNotDevice("open a tournament of its own");
+    // Design section 11, item 6: no hosting while extensions are loaded, unless developer mode is on.
+    assertMayHostWithExtensions();
     const resolvedPath = path.resolve(dbPath);
     await this.closeCurrentEngine();
     const nextEngine = HostEngine.open(resolvedPath, {
@@ -487,6 +490,8 @@ export class HostServiceImpl
 
   async createDemoTournament(dir: string): Promise<CreateDemoResult> {
     this.assertNotDevice("create a tournament of its own");
+    // Design section 11, item 6: no hosting while extensions are loaded, unless developer mode is on.
+    assertMayHostWithExtensions();
     const targetDir =
       dir.trim().length > 0
         ? path.resolve(dir)
@@ -516,6 +521,8 @@ export class HostServiceImpl
     params: CreateTournamentParams,
   ): Promise<CreateTournamentResult> {
     this.assertNotDevice("create a tournament of its own");
+    // Design section 11, item 6: no hosting while extensions are loaded, unless developer mode is on.
+    assertMayHostWithExtensions();
     const trimmedName = params.name.trim();
     if (trimmedName.length === 0) {
       throw new Error("Tournament name must not be empty.");
@@ -1534,6 +1541,12 @@ export class HostServiceImpl
   }
 
   private buildStatus(): HostStatus {
+    const status = this.buildStatusWithoutExtensions();
+    const loaded = getExtensionsRuntime()?.loaded ?? [];
+    return loaded.length > 0 ? { ...status, extensionsLoaded: [...loaded] } : status;
+  }
+
+  private buildStatusWithoutExtensions(): HostStatus {
     const remote = this.remote();
     if (remote !== null) {
       const state = remote.getState();

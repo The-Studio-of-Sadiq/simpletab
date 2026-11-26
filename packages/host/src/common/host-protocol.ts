@@ -312,6 +312,11 @@ export interface HostStatus {
   presence?: PresenceEntry[];
   /** This host was replaced by a promoted one and is read-only. */
   replacedBy?: ReplacedInfo;
+  /**
+   * Organiser-installed extensions loaded in this process (id@version), until a restart. A laptop
+   * promoted to host while they are loaded shows a warning (design section 11, item 6).
+   */
+  extensionsLoaded?: string[];
 }
 
 export interface CreateDemoResult {
