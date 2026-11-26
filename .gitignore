@@ -7,6 +7,8 @@ node_modules/
 /packages/app/plugins/
 /packages/app/resources/public-site/
 coverage/
+# Saved copies of the curated extensions for e2e:extensions (npm run fetch:extensions).
+/tools/e2e/fixtures/extensions/
 *.tsbuildinfo
 .env
 .env.*

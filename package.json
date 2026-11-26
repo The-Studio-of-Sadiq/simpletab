@@ -24,6 +24,8 @@
     "e2e:demo": "vitest run --project e2e tools/e2e/demo.test.ts",
     "e2e:collab": "vitest run --project e2e tools/e2e/collab.test.ts",
     "e2e:cli": "npm run build -w @simpletab/cli && vitest run --project e2e --silent=false tools/e2e/cli.test.ts",
+    "fetch:extensions": "node tools/e2e/fetch-extensions.mjs",
+    "e2e:extensions": "npm run fetch:extensions && vitest run --project e2e --silent=false tools/e2e/extensions.test.ts",
     "e2e:commands": "vitest run --project tab-ui --project e2e --silent=false action-inventory action-commands.test tools/e2e/commands.test",
     "determinism": "vitest run --project core packages/core/test/determinism",
     "determinism:update": "node tools/update-draw-hashes.mjs",

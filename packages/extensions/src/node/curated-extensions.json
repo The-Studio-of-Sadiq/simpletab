@@ -29,13 +29,13 @@
       "purpose": "Shows .xlsx and CSV files as a grid."
     },
     {
-      "id": "vscode.markdown-language-features",
+      "id": "vscode.markdown",
       "version": "1.95.3",
-      "url": "https://open-vsx.org/api/vscode/markdown-language-features/1.95.3/file/vscode.markdown-language-features-1.95.3.vsix",
-      "sha256": "d2ba7aa2c1265e349862aa542a35daa45f81f2efbec8b51184d672999204d09e",
+      "url": "https://open-vsx.org/api/vscode/markdown/1.95.3/file/vscode.markdown-1.95.3.vsix",
+      "sha256": "53591b889e8941db812f263d8e5eaa34ec83718e399ecd7a1e178410bd3877a9",
       "license": "MIT",
-      "name": "Markdown preview",
-      "purpose": "Previews Markdown notes and briefings."
+      "name": "Markdown language",
+      "purpose": "Recognises Markdown files, with highlighting, so notes and briefings read well and can be spell-checked."
     },
     {
       "id": "streetsidesoftware.code-spell-checker",

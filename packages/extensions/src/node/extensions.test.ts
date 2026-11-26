@@ -46,7 +46,7 @@ describe("the curated list", () => {
       "mechatroner.rainbow-csv",
       "janisdd.vscode-edit-csv",
       "GrapeCity.gc-excelviewer",
-      "vscode.markdown-language-features",
+      "vscode.markdown",
       "streetsidesoftware.code-spell-checker",
     ]);
   });

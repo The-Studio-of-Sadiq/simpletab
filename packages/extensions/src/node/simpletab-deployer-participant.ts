@@ -97,10 +97,13 @@ export class SimpleTabDeployerParticipant implements PluginDeployerParticipant {
       // Removing the unpacked copy makes Theia unpack again from the file just verified, so what
       // runs always matches the checksum.
       for (const entry of CURATED_EXTENSIONS) {
-        rmSync(await getExtensionDeploymentDir(this.vscodeEnvironment, `${entry.id}@${entry.version}`), {
-          recursive: true,
-          force: true,
-        });
+        // Theia names the folder from the extension's own package.json, which may differ in case
+        // from the list (it unpacked "GrapeCity.gc-excelviewer" as "grapecity..."); on a
+        // case-sensitive file system both names must go.
+        const versionedId = `${entry.id}@${entry.version}`;
+        for (const name of new Set([versionedId, versionedId.toLowerCase()])) {
+          rmSync(await getExtensionDeploymentDir(this.vscodeEnvironment, name), { recursive: true, force: true });
+        }
       }
       context.userEntries.push(...plan.entries);
       setExtensionsRuntime(plan.runtime);

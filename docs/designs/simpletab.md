@@ -832,6 +832,18 @@ The live site stays on the tournament's Cloudflare Pages project. The archive is
      - Creating a demo with developer mode on showed the host warning on Setup and the loaded extension on Host Status.
      - "Remove an extension" confirmed and removed the file.
      - Installing from a file uses Windows' own file dialog, which the scripted check cannot drive; the service's file install is covered by unit tests.
+     **As built (M9 step c).** `npm run e2e:extensions` first runs `npm run fetch:extensions`, which saves the pinned files in `tools/e2e/fixtures/extensions` and checks each SHA-256; then it runs `tools/e2e/extensions.test.ts` against those saved copies. The copies are kept out of git: the five come to about 12 MB, more than the repository's whole history, and one is GPL-licensed, so committing it would make this public repository redistribute it. `npm test` skips the file, with a message, when the copies are missing, so it never needs the network. The checkpoint checks that:
+     - each file is the listed extension, and needs no VS Code API newer than Theia 1.77's (1.144);
+     - each installs from "Open VSX" (the saved copy of the listed URL) and from a renamed file, only with a matching SHA-256;
+     - a file with one byte changed is refused, and ignored if dropped into the folder;
+     - all load on a staff laptop and in developer mode, none on a laptop that may host;
+     - the host refuses to create a tournament with them loaded unless developer mode is on.
+     The manual check is `docs/checks/M9.md`. Rainbow CSV, Edit CSV, Excel Viewer (CSV preview) and Code Spell Checker (on CSV) worked in the built app.
+     The list changed:
+     - Markdown preview (`vscode.markdown-language-features`) is removed. Its preview did not open, and the cause was not found.
+     - Markdown language (`vscode.markdown` 1.95.3, MIT) is added. Without it Theia opens `.md` files as plain text.
+     - Theia names an unpacked extension's folder from its own `package.json` (`grapecity.gc-excelviewer`), so the start-up cleanup removes the folder under both the listed and the lower-case name. Otherwise a case-sensitive file system would skip that extension from the second start.
+     - Unpacking every listed extension again at each start adds about 3.5 s to start-up with all five. That is the price of running only checked files.
      M9 is built in steps: (a) the list file, the startup loading rule and the host-transition rule, with unit tests; (b) the Extensions page and its commands (install with the hash check, from Open VSX or a file; remove; turn on or off; restart); (c) the M9 checkpoint `npm run e2e:extensions`, plus `docs/checks/M9.md`, a manual check that each listed extension works in the built app.
      **Open questions for the author.** Is the first list right? (Bangla spell-checking has no listed extension.) May the checkpoint download from Open VSX on each run, or should it use files saved in the repository's test fixtures?
 - **Tab screens** are React 19 widgets inside Theia. They use Theia's own CSS variables and widget styles, with no Tailwind and no extra UI kit. The screens' behaviour follows CrabbyTab's matching pages.
