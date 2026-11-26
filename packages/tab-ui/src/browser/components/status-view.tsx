@@ -434,6 +434,15 @@ export const StatusView: React.FC<StatusViewProps> = ({
         <div className="simpletab-status-label">{t("status.devices")}</div>
         <div className="simpletab-status-value">{t("status.devicesNone")}</div>
 
+        {status.extensionsLoaded !== undefined && status.extensionsLoaded.length > 0 ? (
+          <>
+            <div className="simpletab-status-label">{t("extensions.statusLoaded")}</div>
+            <div className="simpletab-status-value">
+              {status.extensionsLoaded.join(", ")}
+            </div>
+          </>
+        ) : null}
+
         <div className="simpletab-status-label">{t("status.lastPush")}</div>
         <div className="simpletab-status-value">
           {syncStatus?.lastPushAt ?? t("status.never")}

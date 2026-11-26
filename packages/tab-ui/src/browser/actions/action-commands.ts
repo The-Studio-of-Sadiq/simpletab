@@ -1,5 +1,6 @@
 import { CredentialsService } from "@simpletab/host/lib/common/credentials-protocol";
 import { ProjectorService } from "@simpletab/host/lib/common/projector-protocol";
+import { ExtensionsRestartService, ExtensionsService } from "@simpletab/extensions/lib/common/extensions-protocol";
 import { ApplicationShell } from "@theia/core/lib/browser/shell/application-shell";
 import { ConfirmDialog } from "@theia/core/lib/browser/dialogs";
 import { WidgetManager } from "@theia/core/lib/browser/widget-manager";
@@ -49,6 +50,14 @@ export class ActionCommandContribution implements CommandContribution {
   @optional()
   protected readonly projectorService?: ProjectorService;
 
+  @inject(ExtensionsService)
+  @optional()
+  protected readonly extensionsService?: ExtensionsService;
+
+  @inject(ExtensionsRestartService)
+  @optional()
+  protected readonly restartService?: ExtensionsRestartService;
+
   protected readonly prompts: ActionPrompts = {
     pick: async (items, placeholder) => {
       const picked = await this.quickInput.showQuickPick(
@@ -94,6 +103,8 @@ export class ActionCommandContribution implements CommandContribution {
       services: {
         credentials: this.credentialsService,
         projector: this.projectorService,
+        extensions: this.extensionsService,
+        restart: this.restartService,
       },
     };
   }

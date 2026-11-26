@@ -30,7 +30,9 @@ The palette asks before anything that cannot easily be undone. This includes som
 - discarding a ballot;
 - clearing a break;
 - undoing a change;
-- leaving the host.
+- leaving the host;
+- removing an extension;
+- restarting SimpleTab.
 
 ## When something is refused
 

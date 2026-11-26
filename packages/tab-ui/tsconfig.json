@@ -9,7 +9,8 @@
     "paths": {
       "@/*": ["../core/src/*"],
       "@simpletab/core/*": ["../core/src/*"],
-      "@simpletab/host/lib/common/*": ["../host/src/common/*"]
+      "@simpletab/host/lib/common/*": ["../host/src/common/*"],
+      "@simpletab/extensions/lib/common/*": ["../extensions/src/common/*"]
     }
   },
   "include": ["src/**/*.ts", "src/**/*.tsx"]

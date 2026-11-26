@@ -8,6 +8,7 @@ import { CSV_IMPORT_ACTIONS } from "./csv-import-actions";
 import { DEVICE_MODE_ACTIONS } from "./device-mode-actions";
 import { DEVICES_ACTIONS } from "./devices-actions";
 import { DRAW_ACTIONS } from "./draw-actions";
+import { EXTENSIONS_ACTIONS } from "./extensions-actions";
 import { FEEDBACK_ACTIONS } from "./feedback-actions";
 import { LINKS_ACTIONS } from "./links-actions";
 import { MOTIONS_ACTIONS } from "./motions-actions";
@@ -23,6 +24,7 @@ import { RESULTS_ACTIONS } from "./results-actions";
 /** Every SimpleTab action. Each becomes a command (see action-commands.ts). */
 export const ALL_ACTIONS: readonly AnyAction[] = [
   ...NAVIGATION_ACTIONS,
+  ...EXTENSIONS_ACTIONS,
   ...PROPOSALS_ACTIONS,
   ...RELEASES_ACTIONS,
   ...DEVICES_ACTIONS,

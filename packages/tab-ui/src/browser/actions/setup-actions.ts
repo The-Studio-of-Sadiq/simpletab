@@ -19,6 +19,7 @@ import { t } from "../i18n";
 import type { ActionContext, SimpleTabAction } from "./action";
 import { defineAction } from "./action";
 import { saveBreakCategoriesAction } from "./break-actions";
+import { isExtensionsLoadedError } from "./extensions-actions";
 import { inputNumber, inputRequired, pickYesNo } from "./prompt-helpers";
 
 export const SETUP_PAGE = "simpletab-setup-widget";
@@ -82,6 +83,21 @@ export type CreateTournamentActionResult =
   | { ok: true; result: CreateTournamentResult }
   | { ok: false; code: "INVALID"; errors: string[] };
 
+export type OpenTournamentActionResult =
+  | { ok: true; status: HostStatus }
+  | { ok: false; code: "INVALID"; errors: string[] };
+
+/**
+ * The backend refuses to host while extensions are loaded. Replace its English protocol error
+ * with the translated instruction; every other error keeps its existing behaviour.
+ */
+function refusalResult(error: unknown): { ok: false; code: "INVALID"; errors: string[] } | null {
+  const message = error instanceof Error ? error.message : String(error);
+  return isExtensionsLoadedError(message)
+    ? { ok: false, code: "INVALID", errors: [t("extensions.refusedToHost")] }
+    : null;
+}
+
 export const createTournamentAction: SimpleTabAction<CreateTournamentInput, CreateTournamentActionResult> = defineAction({
   id: "simpletab.setup.create-tournament",
   labelKey: "action.setup.createTournament",
@@ -136,12 +152,18 @@ export const createTournamentAction: SimpleTabAction<CreateTournamentInput, Crea
       prelimRounds: args.prelimRounds,
       directory: args.directory.trim(),
     };
-    const result = await ctx.store.createTournament(params);
-    return { ok: true, result };
+    try {
+      const result = await ctx.store.createTournament(params);
+      return { ok: true, result };
+    } catch (error) {
+      const refused = refusalResult(error);
+      if (refused !== null) return refused;
+      throw error;
+    }
   },
 });
 
-export const openTournamentAction: SimpleTabAction<{ dbPath: string }, { ok: true; status: HostStatus }> = defineAction({
+export const openTournamentAction: SimpleTabAction<{ dbPath: string }, OpenTournamentActionResult> = defineAction({
   id: "simpletab.setup.open-tournament",
   labelKey: "action.setup.openTournament",
   page: SETUP_PAGE,
@@ -151,7 +173,15 @@ export const openTournamentAction: SimpleTabAction<{ dbPath: string }, { ok: tru
     const dbPath = await ctx.prompts.pickFile(t("setup.openExisting"), ["db"]);
     return dbPath === undefined ? undefined : { dbPath };
   },
-  run: async (ctx, args) => ({ ok: true, status: await ctx.store.openTournament(args.dbPath) }),
+  run: async (ctx, args) => {
+    try {
+      return { ok: true, status: await ctx.store.openTournament(args.dbPath) };
+    } catch (error) {
+      const refused = refusalResult(error);
+      if (refused !== null) return refused;
+      throw error;
+    }
+  },
 });
 
 export interface SaveSettingsInput {

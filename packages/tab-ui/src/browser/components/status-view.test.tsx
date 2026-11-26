@@ -12,6 +12,7 @@ import {
   pullNowAction,
   runFullCheckAction,
 } from "../actions/status-actions";
+import { t } from "../i18n";
 import { formatStatusBarText, StatusView } from "./status-view";
 
 interface RunCall {
@@ -202,6 +203,39 @@ describe("StatusView & formatStatusBarText", () => {
         onlineSettings: { ...DEFAULT_ONLINE_SETTINGS, ballotPortal: true },
       }),
     ).toBe("SimpleTab: wudc · seq 42 · Integrity failed · Online: Paused");
+  });
+
+  it("shows loaded extensions in the status grid when there are any", () => {
+    const { run } = makeRunner();
+    const status: HostStatus = {
+      open: true,
+      locks: [],
+      extensionsLoaded: ["Example extension", "Another extension"],
+    };
+    const { rerender } = render(
+      <StatusView
+        status={status}
+        state={makeStatusState()}
+        loading={false}
+        error={null}
+        onRefresh={vi.fn(async () => status)}
+        run={run}
+      />,
+    );
+    expect(screen.getByText(t("extensions.statusLoaded"))).toBeTruthy();
+    expect(screen.getByText("Example extension, Another extension")).toBeTruthy();
+
+    rerender(
+      <StatusView
+        status={{ open: true, locks: [], extensionsLoaded: [] }}
+        state={makeStatusState()}
+        loading={false}
+        error={null}
+        onRefresh={vi.fn(async () => status)}
+        run={run}
+      />,
+    );
+    expect(screen.queryByText(t("extensions.statusLoaded"))).toBeNull();
   });
 
   it("renders integrity labels, full-check button, online add-ons, and ballots-in counts per room", async () => {

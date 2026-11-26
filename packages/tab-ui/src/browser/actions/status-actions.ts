@@ -4,6 +4,7 @@ import type {
   SyncStatus,
 } from "@simpletab/host/lib/common/host-protocol";
 import { t } from "../i18n";
+import { isExtensionsLoadedError } from "./extensions-actions";
 import { defineAction, type ActionContext, type SimpleTabAction } from "./action";
 
 /** Widget id of the Status page. */
@@ -78,6 +79,10 @@ export const createDemoTournamentAction: SimpleTabAction<
     try {
       return { ok: true, result: await ctx.store.createDemoTournament(directory) };
     } catch (error) {
+      // The host refuses while extensions are loaded; show the translated instruction.
+      if (error instanceof Error && isExtensionsLoadedError(error.message)) {
+        return { ok: false, errors: [t("extensions.refusedToHost")] };
+      }
       return failure(error);
     }
   },

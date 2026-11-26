@@ -1,4 +1,5 @@
-import { fork, type ForkOptions } from "node:child_process";
+import { fork, type ChildProcess, type ForkOptions } from "node:child_process";
+import { appendFileSync } from "node:fs";
 import path from "node:path";
 import { CredentialsVault } from "./credentials-store";
 import { FileUri } from "@theia/core/lib/common/file-uri";
@@ -64,11 +65,22 @@ export class SimpleTabElectronMainApplication extends ElectronMainApplication {
     }
 
     process.env.THEIA_ELECTRON_VERSION = process.versions.electron;
+    const forkOptions = await this.getForkOptions();
     const backendProcess = fork(
       this.globals.THEIA_BACKEND_MAIN_PATH,
       this.processArgv.getProcessArgvWithoutBin(),
-      await this.getForkOptions(),
+      {
+        ...forkOptions,
+        // Theia's backend exits when the process named here is gone. Started from `theia start`,
+        // this process inherits the CLI's id; after "Restart SimpleTab" relaunches the app (design
+        // section 11, item 6), that process no longer exists and the new backend would quit within
+        // seconds. The backend's real parent is this process.
+        env: { ...forkOptions.env, THEIA_PARENT_PID: String(process.pid) },
+        // Pipes that this process drains, so SIMPLETAB_BACKEND_LOG can copy the backend's output.
+        silent: true,
+      },
     );
+    forwardBackendOutput(backendProcess);
 
     this.detachIpcHandlers();
     this.detachCredentialsIpc = attachCredentialsIpcHandler(
@@ -216,6 +228,44 @@ export class HostElectronMainContribution implements ElectronMainApplicationCont
       clearTimeout(this.smokeTimeoutHandle);
       this.smokeTimeoutHandle = null;
     }
+  }
+}
+
+/**
+ * Copies the backend's output to this process's output, and to `SIMPLETAB_BACKEND_LOG` when set
+ * (a relaunched or packaged app has no console to read it in). A failed copy never reaches the
+ * backend: its pipes are always drained.
+ */
+function forwardBackendOutput(child: ChildProcess): void {
+  const forward = (from: NodeJS.ReadableStream | null, to: NodeJS.WriteStream): void => {
+    if (from === null) return;
+    // A failed write to this process's own output is log loss only; it must not stop the app.
+    to.on("error", () => undefined);
+    from.on("data", (chunk: Buffer) => {
+      try {
+        if (to.writable) to.write(chunk);
+      } catch {
+        // Same: the chunk is dropped, the backend keeps running.
+      }
+    });
+  };
+  forward(child.stdout, process.stdout);
+  forward(child.stderr, process.stderr);
+  // For diagnosing a backend that has no console (a relaunched or packaged app).
+  const logFile = process.env.SIMPLETAB_BACKEND_LOG;
+  if (logFile !== undefined && logFile.trim().length > 0) {
+    const append = (chunk: Buffer): void => {
+      try {
+        appendFileSync(logFile, chunk);
+      } catch {
+        // Diagnostics only.
+      }
+    };
+    child.stdout?.on("data", append);
+    child.stderr?.on("data", append);
+    child.on("exit", (code, signal) => append(Buffer.from(`
+[backend exited: code=${String(code)} signal=${String(signal)}]
+`)));
   }
 }
 

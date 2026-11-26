@@ -20,6 +20,7 @@ import { ChangelogWidget } from "./views/changelog-widget";
 import { CheckinWidget } from "./views/checkin-widget";
 import { CredentialsWidget } from "./views/credentials-widget";
 import { DrawWidget } from "./views/draw-widget";
+import { ExtensionsWidget } from "./views/extensions-widget";
 import { FeedbackWidget } from "./views/feedback-widget";
 import { LinksWidget } from "./views/links-widget";
 import { MotionsWidget } from "./views/motions-widget";
@@ -41,6 +42,7 @@ import {
   SIMPLETAB_OPEN_ASSISTANT_COMMAND,
   SIMPLETAB_OPEN_PROPOSALS_COMMAND,
   SIMPLETAB_OPEN_DRAW_COMMAND,
+  SIMPLETAB_OPEN_EXTENSIONS_COMMAND,
   SIMPLETAB_OPEN_FEEDBACK_COMMAND,
   SIMPLETAB_OPEN_LINKS_COMMAND,
   SIMPLETAB_OPEN_MOTIONS_COMMAND,
@@ -78,6 +80,8 @@ export const SIMPLETAB_CHANGELOG_TOGGLE_COMMAND_ID =
   "simpletab.changelog.toggle";
 export const SIMPLETAB_CREDENTIALS_TOGGLE_COMMAND_ID =
   "simpletab.credentials.toggle";
+export const SIMPLETAB_EXTENSIONS_TOGGLE_COMMAND_ID =
+  "simpletab.extensions.toggle";
 export const SIMPLETAB_LINKS_TOGGLE_COMMAND_ID = "simpletab.links.toggle";
 export const SIMPLETAB_PROJECTOR_CONTROL_TOGGLE_COMMAND_ID =
   "simpletab.projectorControl.toggle";
@@ -334,6 +338,21 @@ export class CredentialsViewContribution extends AbstractViewContribution<Creden
         area: "main",
       },
       toggleCommandId: SIMPLETAB_CREDENTIALS_TOGGLE_COMMAND_ID,
+    });
+  }
+
+}
+
+@injectable()
+export class ExtensionsViewContribution extends AbstractViewContribution<ExtensionsWidget> {
+  constructor() {
+    super({
+      widgetId: ExtensionsWidget.ID,
+      widgetName: t("extensions.widgetLabel"),
+      defaultWidgetOptions: {
+        area: "main",
+      },
+      toggleCommandId: SIMPLETAB_EXTENSIONS_TOGGLE_COMMAND_ID,
     });
   }
 

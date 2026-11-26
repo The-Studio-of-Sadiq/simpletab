@@ -1,7 +1,8 @@
+import type { ExtensionsLoadingReason } from "../common/extensions-protocol";
 import type { CuratedExtension } from "./curated-list";
 
 /** Why extensions do or do not load on this laptop at this start. */
-export type LoadingReason = "staff-device" | "developer-mode" | "may-host";
+export type LoadingReason = ExtensionsLoadingReason;
 
 export interface LoadingDecision {
   reason: LoadingReason;

@@ -13,7 +13,9 @@ await esbuild.build({
   logLevel: "info",
   external: ["@theia/*", "electron", "better-sqlite3", "jsonc-parser"],
   entryPoints: {
+    "common/extensions-protocol": path.join(packageDir, "src/common/extensions-protocol.ts"),
     "node/extensions-backend-module": path.join(packageDir, "src/node/extensions-backend-module.ts"),
+    "electron-main/extensions-main-module": path.join(packageDir, "src/electron-main/extensions-main-module.ts"),
   },
   outdir: path.join(packageDir, "lib"),
 });

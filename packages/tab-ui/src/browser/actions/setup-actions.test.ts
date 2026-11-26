@@ -7,6 +7,7 @@ import type {
 import { describe, expect, it } from "vitest";
 import { t } from "../i18n";
 import type { ActionRunner } from "./action";
+import { EXTENSIONS_LOADED_ERROR_PREFIX } from "./extensions-actions";
 import {
   createTournamentAction,
   openTournamentAction,
@@ -178,6 +179,71 @@ describe("setup actions", () => {
     });
     expect(result.ok).toBe(true);
     expect(harness.calls.openTournamentPaths).toEqual(["/tmp/demo.db"]);
+  });
+
+  it("turns a backend extension hosting refusal into a translated INVALID result", async () => {
+    const refusal = `${EXTENSIONS_LOADED_ERROR_PREFIX}Example extension)`;
+    const createHarness = fakeStore(null, undefined, {
+      createTournamentResult: () => {
+        throw new Error(refusal);
+      },
+    });
+    const createResult = await directRunner(createHarness.store)<
+      CreateTournamentInput,
+      CreateTournamentActionResult
+    >(createTournamentAction, {
+      name: "Example",
+      slug: "example",
+      format: "bp",
+      presetId: "bp",
+      prelimRounds: 4,
+      directory: "",
+    });
+    expect(createResult).toEqual({
+      ok: false,
+      code: "INVALID",
+      errors: [t("extensions.refusedToHost")],
+    });
+
+    const openHarness = fakeStore(null, undefined, {
+      openTournamentStatus: () => {
+        throw new Error(refusal);
+      },
+    });
+    expect(
+      await directRunner(openHarness.store)(openTournamentAction, { dbPath: "/tmp/demo.db" }),
+    ).toEqual({
+      ok: false,
+      code: "INVALID",
+      errors: [t("extensions.refusedToHost")],
+    });
+  });
+
+  it("keeps other create and open errors as thrown errors", async () => {
+    const createHarness = fakeStore(null, undefined, {
+      createTournamentResult: () => {
+        throw new Error("Disk full");
+      },
+    });
+    await expect(
+      directRunner(createHarness.store)(createTournamentAction, {
+        name: "Example",
+        slug: "example",
+        format: "bp",
+        presetId: "bp",
+        prelimRounds: 4,
+        directory: "",
+      }),
+    ).rejects.toThrow("Disk full");
+
+    const openHarness = fakeStore(null, undefined, {
+      openTournamentStatus: () => {
+        throw new Error("File missing");
+      },
+    });
+    await expect(
+      directRunner(openHarness.store)(openTournamentAction, { dbPath: "/tmp/missing.db" }),
+    ).rejects.toThrow("File missing");
   });
 
   it("asks for every two-team settings field and re-asks invalid numbers", async () => {

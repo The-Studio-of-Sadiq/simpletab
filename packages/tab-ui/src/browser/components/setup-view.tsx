@@ -14,12 +14,17 @@ import type {
 import * as React from "@theia/core/shared/react";
 import type { ActionRunner } from "../actions/action";
 import {
+  isExtensionsLoadedError,
+  restartSimpleTabAction,
+} from "../actions/extensions-actions";
+import {
   createTournamentAction,
   openTournamentAction,
   saveSettingsAction,
   validateCreateInput,
   type CreateTournamentActionResult,
   type CreateTournamentInput,
+  type OpenTournamentActionResult,
   type SaveSettingsInput,
   type SaveSettingsResult,
   type SettingsFieldKey,
@@ -43,8 +48,13 @@ function presetsForFormat(format: SimpleTabFormatChoice): RulesPreset[] {
   });
 }
 
+function isRefusalMessage(message: string): boolean {
+  return message === t("extensions.refusedToHost");
+}
+
 export const SetupView: React.FC<SetupViewProps> = ({
   state,
+  status,
   run,
   onPickDirectory,
   onPickDbFile,
@@ -66,6 +76,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
     prelimRounds?: string;
   }>({});
   const [createError, setCreateError] = React.useState<string | null>(null);
+  const [extensionsRefused, setExtensionsRefused] = React.useState(false);
   const [createSuccess, setCreateSuccess] = React.useState<string | null>(null);
   const [creating, setCreating] = React.useState(false);
 
@@ -175,23 +186,36 @@ export const SetupView: React.FC<SetupViewProps> = ({
       return;
     }
     setCreateError(null);
+    setExtensionsRefused(false);
     setCreateSuccess(null);
     try {
-      const opened = await run<{ dbPath: string }, { ok: true; status: HostStatus }>(
+      const opened = await run<{ dbPath: string }, OpenTournamentActionResult>(
         openTournamentAction,
         { dbPath: picked },
       );
+      if (!opened.ok) {
+        setExtensionsRefused(opened.errors.some(isRefusalMessage));
+        setCreateError(opened.errors.join("; "));
+        return;
+      }
       setCreateSuccess(
         t("setup.openedSuccess", { slug: opened.status.slug ?? picked }),
       );
     } catch (error) {
-      setCreateError(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      if (isExtensionsLoadedError(message)) {
+        setExtensionsRefused(true);
+        setCreateError(t("extensions.refusedToHost"));
+      } else {
+        setCreateError(message);
+      }
     }
   };
 
   const handleCreateSubmit = async (event: React.FormEvent): Promise<void> => {
     event.preventDefault();
     setCreateError(null);
+    setExtensionsRefused(false);
     setCreateSuccess(null);
 
     const prelimNum = Number(createPrelimRounds);
@@ -216,6 +240,7 @@ export const SetupView: React.FC<SetupViewProps> = ({
         params,
       );
       if (!result.ok) {
+        setExtensionsRefused(result.errors.some(isRefusalMessage));
         setCreateError(result.errors.join("; "));
         return;
       }
@@ -227,7 +252,13 @@ export const SetupView: React.FC<SetupViewProps> = ({
         }),
       );
     } catch (error) {
-      setCreateError(error instanceof Error ? error.message : String(error));
+      const message = error instanceof Error ? error.message : String(error);
+      if (isExtensionsLoadedError(message)) {
+        setExtensionsRefused(true);
+        setCreateError(t("extensions.refusedToHost"));
+      } else {
+        setCreateError(message);
+      }
     } finally {
       setCreating(false);
     }
@@ -327,6 +358,24 @@ export const SetupView: React.FC<SetupViewProps> = ({
         </div>
       </div>
 
+      {status.open &&
+      status.device === undefined &&
+      (status.extensionsLoaded?.length ?? 0) > 0 ? (
+        <div className="simpletab-alert simpletab-alert-warning" role="alert">
+          <span>{t("extensions.hostWarning")}</span>{" "}
+          <button
+            type="button"
+            className="theia-button secondary"
+            data-action={restartSimpleTabAction.id}
+            onClick={() => {
+              void run(restartSimpleTabAction, {});
+            }}
+          >
+            {t("extensions.restart")}
+          </button>
+        </div>
+      ) : null}
+
       {createSuccess !== null ? (
         <div className="simpletab-alert simpletab-alert-success" role="status">
           {createSuccess}
@@ -335,7 +384,19 @@ export const SetupView: React.FC<SetupViewProps> = ({
 
       {createError !== null ? (
         <div className="simpletab-alert simpletab-alert-error" role="alert">
-          {createError}
+          <span>{createError}</span>{" "}
+          {extensionsRefused ? (
+            <button
+              type="button"
+              className="theia-button secondary"
+              data-action={restartSimpleTabAction.id}
+              onClick={() => {
+                void run(restartSimpleTabAction, {});
+              }}
+            >
+              {t("extensions.restart")}
+            </button>
+          ) : null}
         </div>
       ) : null}
 

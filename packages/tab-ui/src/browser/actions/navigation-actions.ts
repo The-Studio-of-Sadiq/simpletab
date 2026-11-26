@@ -39,6 +39,7 @@ export const openStatusPageAction = openAction("simpletab.status.open", "action.
 export const openDevicesPageAction = openAction("simpletab.devices.open", "action.nav.openDevices", "simpletab-devices-widget");
 export const openAssistantPageAction = openAction("simpletab.assistant.open", "action.nav.openAssistant", "simpletab-assistant-widget");
 export const openProposalsPageAction = openAction("simpletab.proposals.open", "action.nav.openProposals", "simpletab.proposals");
+export const openExtensionsPageAction = openAction("simpletab.extensions.open", "action.nav.openExtensions", "simpletab-extensions-widget");
 
 export const NAVIGATION_ACTIONS = [
   openSetupPageAction,
@@ -60,4 +61,5 @@ export const NAVIGATION_ACTIONS = [
   openDevicesPageAction,
   openAssistantPageAction,
   openProposalsPageAction,
+  openExtensionsPageAction,
 ] as const;

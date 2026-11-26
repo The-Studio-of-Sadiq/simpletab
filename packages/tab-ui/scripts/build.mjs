@@ -55,6 +55,7 @@ await esbuild.build({
   external: [
     "@theia/*",
     "@simpletab/host/*",
+    "@simpletab/extensions/*",
     "react",
     "react-dom",
     "intl-messageformat",

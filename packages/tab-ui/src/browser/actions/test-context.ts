@@ -1,6 +1,13 @@
 import type { PublicChainItem } from "@simpletab/core/changelog";
 import type { OpRequest } from "@simpletab/core/ops";
 import type {
+  ExtensionEntryStatus,
+  ExtensionsResult,
+  ExtensionsRestartService,
+  ExtensionsService,
+  ExtensionsStatus,
+} from "@simpletab/extensions/lib/common/extensions-protocol";
+import type {
   CredentialName,
   CredentialStatusEntry,
   CredentialTestResult,
@@ -471,6 +478,104 @@ export function fakeProjectorService(
     },
   } as unknown as ProjectorService;
   return { service, calls, getControl: () => control };
+}
+
+/** A minimal live status for an Extensions action or page test. */
+export function fakeExtensionsStatus(
+  overrides: Partial<ExtensionsStatus> = {},
+): ExtensionsStatus {
+  return {
+    extensions: [],
+    reason: "may-host",
+    startupReason: null,
+    restartNeeded: false,
+    ignoredFiles: [],
+    ...overrides,
+  };
+}
+
+/** A sample entry with all the fields the Extensions page shows. */
+export function fakeExtensionEntry(
+  overrides: Partial<ExtensionEntryStatus> = {},
+): ExtensionEntryStatus {
+  return {
+    id: "pub.example@1.0.0",
+    version: "1.0.0",
+    name: "Example extension",
+    purpose: "Example purpose",
+    license: "MIT",
+    installed: false,
+    on: true,
+    loaded: false,
+    ...overrides,
+  };
+}
+
+export interface FakeExtensionsCalls {
+  statusReads: number;
+  installs: string[];
+  installFromFilePaths: string[];
+  removes: string[];
+  setOns: Array<{ id: string; on: boolean }>;
+}
+
+export function fakeExtensionsService(
+  options: {
+    status?: ExtensionsStatus | (() => Promise<ExtensionsStatus>);
+    result?: ExtensionsResult;
+  } = {},
+): { service: ExtensionsService; calls: FakeExtensionsCalls } {
+  const calls: FakeExtensionsCalls = {
+    statusReads: 0,
+    installs: [],
+    installFromFilePaths: [],
+    removes: [],
+    setOns: [],
+  };
+  const readStatus = async (): Promise<ExtensionsStatus> => {
+    calls.statusReads += 1;
+    return typeof options.status === "function"
+      ? options.status()
+      : (options.status ?? fakeExtensionsStatus());
+  };
+  const result = async (): Promise<ExtensionsResult> =>
+    options.result ?? { ok: true, status: await readStatus() };
+  const service = {
+    status: readStatus,
+    install: async (id: string) => {
+      calls.installs.push(id);
+      return result();
+    },
+    installFromFile: async (filePath: string) => {
+      calls.installFromFilePaths.push(filePath);
+      return result();
+    },
+    remove: async (id: string) => {
+      calls.removes.push(id);
+      return result();
+    },
+    setOn: async (id: string, on: boolean) => {
+      calls.setOns.push({ id, on });
+      return result();
+    },
+  } as ExtensionsService;
+  return { service, calls };
+}
+
+export function fakeExtensionsRestartService(
+  options: { relaunch?: () => Promise<void> } = {},
+): {
+  service: ExtensionsRestartService;
+  calls: { relaunches: number };
+} {
+  const calls = { relaunches: 0 };
+  const service = {
+    relaunch: async () => {
+      calls.relaunches += 1;
+      await options.relaunch?.();
+    },
+  } as ExtensionsRestartService;
+  return { service, calls };
 }
 
 export function testContext(

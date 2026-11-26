@@ -5,6 +5,7 @@ import {
   pullNowAction,
   runFullCheckAction,
 } from "./status-actions";
+import { t } from "../i18n";
 import { fakeStore, scriptedPrompts, testContext } from "./test-context";
 
 function context(
@@ -77,6 +78,18 @@ describe("status actions", () => {
     });
     expect(result.ok).toBe(true);
     expect(calls.demoDirectories).toEqual(["/tmp/demo"]);
+  });
+
+  it("shows the translated refusal when extensions keep this laptop from hosting", async () => {
+    const { store } = fakeStore(null, undefined, {
+      createDemoResult: () => {
+        throw new Error("Extensions are loaded (pub.one@1.0.0). Restart SimpleTab to unload them.");
+      },
+    });
+    const result = await createDemoTournamentAction.run(testContext(store, scriptedPrompts([])), {
+      directory: "",
+    });
+    expect(result).toEqual({ ok: false, errors: [t("extensions.refusedToHost")] });
   });
 
   it("enables the checks only for an open tournament", () => {

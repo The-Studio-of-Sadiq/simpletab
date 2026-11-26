@@ -52,6 +52,7 @@ import {
   CheckinViewContribution,
   CredentialsViewContribution,
   DrawViewContribution,
+  ExtensionsViewContribution,
   FeedbackViewContribution,
   LinksViewContribution,
   MotionsViewContribution,
@@ -85,6 +86,7 @@ import { ChangelogWidget } from "./views/changelog-widget";
 import { CheckinWidget } from "./views/checkin-widget";
 import { CredentialsWidget } from "./views/credentials-widget";
 import { DrawWidget } from "./views/draw-widget";
+import { ExtensionsWidget } from "./views/extensions-widget";
 import { FeedbackWidget } from "./views/feedback-widget";
 import { LinksWidget } from "./views/links-widget";
 import { MotionsWidget } from "./views/motions-widget";
@@ -99,6 +101,12 @@ import { SetupWidget } from "./views/setup-widget";
 import { SimpleTabNavWidget } from "./views/simpletab-nav-widget";
 import { StandingsWidget } from "./views/standings-widget";
 import { TerminalHostWarningContribution } from "./terminal-host-warning";
+import {
+  EXTENSIONS_RESTART_PATH,
+  EXTENSIONS_SERVICE_PATH,
+  ExtensionsRestartService,
+  ExtensionsService,
+} from "@simpletab/extensions/lib/common/extensions-protocol";
 
 export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
   bind(HostServiceClientDispatcher).toSelf().inSingletonScope();
@@ -150,6 +158,24 @@ export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
       throw new Error(
         "CredentialsService is available only when running in Electron.",
       );
+    })
+    .inSingletonScope();
+
+  bind(ExtensionsService)
+    .toDynamicValue((ctx) =>
+      ServiceConnectionProvider.createProxy<ExtensionsService>(ctx.container, EXTENSIONS_SERVICE_PATH),
+    )
+    .inSingletonScope();
+  // Relaunching the whole app needs Electron's main process; outside Electron it is not bound.
+  bind(ExtensionsRestartService)
+    .toDynamicValue((ctx) => {
+      if (ctx.container.isBound(ElectronMainConnectionProvider)) {
+        return ElectronIpcConnectionProvider.createProxy<ExtensionsRestartService>(
+          ctx.container,
+          EXTENSIONS_RESTART_PATH,
+        );
+      }
+      throw new Error("Restarting SimpleTab is available only when running in Electron.");
     })
     .inSingletonScope();
 
@@ -332,6 +358,14 @@ export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
     }))
     .inSingletonScope();
 
+  bind(ExtensionsWidget).toSelf().inSingletonScope();
+  bind(WidgetFactory)
+    .toDynamicValue((ctx) => ({
+      id: ExtensionsWidget.ID,
+      createWidget: () => ctx.container.get(ExtensionsWidget),
+    }))
+    .inSingletonScope();
+
   bind(LinksWidget).toSelf().inSingletonScope();
   bind(WidgetFactory)
     .toDynamicValue((ctx) => ({
@@ -373,6 +407,7 @@ export default new ContainerModule((bind, _unbind, _isBound, rebind) => {
   bindViewContribution(bind, AssistantViewContribution);
   bindViewContribution(bind, ChangelogViewContribution);
   bindViewContribution(bind, CredentialsViewContribution);
+  bindViewContribution(bind, ExtensionsViewContribution);
   bindViewContribution(bind, LinksViewContribution);
   bindViewContribution(bind, ProjectorControlViewContribution);
   bindViewContribution(bind, SimpleTabContribution);

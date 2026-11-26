@@ -17,6 +17,7 @@
   "nav.openLinks": "Links",
   "nav.openCredentials": "Credentials",
   "nav.openProjector": "Projector",
+  "nav.openExtensions": "Extensions",
   "nav.noTournament": "No tournament open",
   "nav.tournamentSummary": "{slug} · seq {seq}",
   "nav.languageLabel": "Language",

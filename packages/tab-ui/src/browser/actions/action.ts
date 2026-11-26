@@ -1,5 +1,9 @@
 import type { CredentialsService } from "@simpletab/host/lib/common/credentials-protocol";
 import type { ProjectorService } from "@simpletab/host/lib/common/projector-protocol";
+import type {
+  ExtensionsRestartService,
+  ExtensionsService,
+} from "@simpletab/extensions/lib/common/extensions-protocol";
 import type { SubmitResult } from "@simpletab/host/lib/common/host-protocol";
 import type { TournamentStore, TournamentStoreSnapshot } from "../store/tournament-store";
 
@@ -35,6 +39,10 @@ export interface ActionPrompts {
 export interface ActionServices {
   credentials?: CredentialsService;
   projector?: ProjectorService;
+  /** SimpleTab's curated extensions (design section 11, item 6). */
+  extensions?: ExtensionsService;
+  /** Relaunches the whole app; only in Electron. */
+  restart?: ExtensionsRestartService;
 }
 
 export interface ActionContext {

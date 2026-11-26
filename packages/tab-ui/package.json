@@ -14,6 +14,7 @@
   ],
   "dependencies": {
     "@simpletab/core": "*",
+    "@simpletab/extensions": "*",
     "@simpletab/host": "*",
     "@theia/core": "1.77.0",
     "@theia/editor": "1.77.0",

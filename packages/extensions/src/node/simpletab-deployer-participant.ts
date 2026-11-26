@@ -1,3 +1,4 @@
+import { rmSync } from "node:fs";
 import path from "node:path";
 import {
   setExtensionsRuntime,
@@ -9,6 +10,8 @@ import type {
   PluginDeployerStartContext,
 } from "@theia/plugin-ext/lib/common/plugin-protocol";
 import { PluginTheiaDeployerParticipant } from "@theia/plugin-ext/lib/main/node/plugin-theia-deployer-participant";
+import { PluginVSCodeEnvironment } from "@theia/plugin-ext-vscode/lib/common/plugin-vscode-environment";
+import { getExtensionDeploymentDir } from "@theia/plugin-ext-vscode/lib/node/plugin-vscode-utils";
 import { EnvVariablesServer } from "@theia/core/lib/common/env-variables";
 import { FileUri } from "@theia/core/lib/common/file-uri";
 import { inject, injectable } from "@theia/core/shared/inversify";
@@ -57,6 +60,13 @@ export function planStartup(inputs: StartupInputs): {
   };
 }
 
+let startupReason: LoadingDecision["reason"] | null = null;
+
+/** The loading rule that applied at this start-up; null when nothing was decided (an error). */
+export function getStartupReason(): LoadingDecision["reason"] | null {
+  return startupReason;
+}
+
 /**
  * Replaces Theia's VS Code deployer participant, which would load everything in
  * `~/.theia/deployedPlugins` and every drop-in `.vsix` in `~/.theia/extensions`. Only verified,
@@ -67,6 +77,9 @@ export function planStartup(inputs: StartupInputs): {
 export class SimpleTabDeployerParticipant implements PluginDeployerParticipant {
   @inject(EnvVariablesServer)
   protected readonly envVariables!: EnvVariablesServer;
+
+  @inject(PluginVSCodeEnvironment)
+  protected readonly vscodeEnvironment!: PluginVSCodeEnvironment;
 
   async onWillStart(context: PluginDeployerStartContext): Promise<void> {
     // Anything another participant added for the user is dropped: SimpleTab decides alone.
@@ -79,8 +92,19 @@ export class SimpleTabDeployerParticipant implements PluginDeployerParticipant {
         list: CURATED_EXTENSIONS,
         pairedAsStaffDevice: new PairingStore().load() !== undefined,
       });
+      // Theia unpacks a `.vsix` into its deployment folder once and afterwards skips the file as
+      // "already installed", expecting that folder to load instead; SimpleTab no longer loads it.
+      // Removing the unpacked copy makes Theia unpack again from the file just verified, so what
+      // runs always matches the checksum.
+      for (const entry of CURATED_EXTENSIONS) {
+        rmSync(await getExtensionDeploymentDir(this.vscodeEnvironment, `${entry.id}@${entry.version}`), {
+          recursive: true,
+          force: true,
+        });
+      }
       context.userEntries.push(...plan.entries);
       setExtensionsRuntime(plan.runtime);
+      startupReason = plan.decision.reason;
       console.info(
         `SimpleTab extensions: ${plan.decision.reason}; loading ${plan.runtime.loaded.length} (${plan.runtime.loaded.join(", ") || "none"}); ignored ${plan.rejected.length} file(s).`,
       );

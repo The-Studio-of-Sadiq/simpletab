@@ -34,6 +34,7 @@ export const SIMPLETAB_OPEN_STATUS_COMMAND = "simpletab.status.open";
 export const SIMPLETAB_OPEN_DEVICES_COMMAND = "simpletab.devices.open";
 export const SIMPLETAB_OPEN_ASSISTANT_COMMAND = "simpletab.assistant.open";
 export const SIMPLETAB_OPEN_PROPOSALS_COMMAND = "simpletab.proposals.open";
+export const SIMPLETAB_OPEN_EXTENSIONS_COMMAND = "simpletab.extensions.open";
 
 @injectable()
 export class SimpleTabNavWidget extends ReactWidget {
@@ -344,6 +345,16 @@ export class SimpleTabNavWidget extends ReactWidget {
             }}
           >
             {t("nav.openStatus")}
+          </button>
+          <button
+            type="button"
+            className="theia-button secondary simpletab-nav-btn"
+            data-action={SIMPLETAB_OPEN_EXTENSIONS_COMMAND}
+            onClick={() => {
+              void this.commandService.executeCommand(SIMPLETAB_OPEN_EXTENSIONS_COMMAND);
+            }}
+          >
+            {t("nav.openExtensions")}
           </button>
         </nav>
 

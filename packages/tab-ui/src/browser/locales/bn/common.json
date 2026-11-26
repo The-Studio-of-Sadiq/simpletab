@@ -17,6 +17,7 @@
   "nav.openLinks": "TODO: Links",
   "nav.openCredentials": "TODO: Credentials",
   "nav.openProjector": "TODO: Projector",
+  "nav.openExtensions": "এক্সটেনশন",
   "nav.noTournament": "TODO: No tournament open",
   "nav.tournamentSummary": "TODO: {slug} · seq {seq}",
   "nav.languageLabel": "ভাষা",

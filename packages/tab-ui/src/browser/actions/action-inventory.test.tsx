@@ -16,7 +16,11 @@ import type { ActionResult, ActionRunner } from "./action";
 import { ALL_ACTION_IDS } from "./all-actions";
 import { t } from "../i18n";
 import { NAVIGATION_ACTIONS } from "./navigation-actions";
-import { runnerFor } from "./test-context";
+import {
+  fakeExtensionEntry,
+  fakeExtensionsStatus,
+  runnerFor,
+} from "./test-context";
 import { AllocationView } from "../components/allocation-view";
 import { AssistantView } from "../components/assistant-view";
 import { BreakView } from "../components/break-view";
@@ -27,6 +31,7 @@ import { CsvImportPanel } from "../components/csv-import-panel";
 import { DeviceBanner } from "../components/device-banner";
 import { DevicesView } from "../components/devices-view";
 import { DrawView } from "../components/draw-view";
+import { ExtensionsView } from "../components/extensions-view";
 import { FeedbackView } from "../components/feedback-view";
 import { JoinHostPanel } from "../components/join-host-panel";
 import { LinksView } from "../components/links-view";
@@ -552,6 +557,25 @@ describe("M8 action inventory", () => {
             status={status}
             available
             credentialsStatus={[]}
+            run={run}
+          />
+        ),
+      },
+      {
+        name: "extensions",
+        element: (
+          <ExtensionsView
+            status={fakeExtensionsStatus({
+              reason: "developer-mode",
+              restartNeeded: true,
+              extensions: [
+                fakeExtensionEntry({ id: "pub.not-installed@1", installed: false }),
+                fakeExtensionEntry({ id: "pub.on@1", installed: true, on: true }),
+                fakeExtensionEntry({ id: "pub.off@1", installed: true, on: false }),
+              ],
+              ignoredFiles: [{ file: "stray.vsix", reason: "not-listed" }],
+            })}
+            available
             run={run}
           />
         ),

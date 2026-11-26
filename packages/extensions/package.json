@@ -9,12 +9,14 @@
   },
   "theiaExtensions": [
     {
-      "backend": "lib/node/extensions-backend-module"
+      "backend": "lib/node/extensions-backend-module",
+      "electronMain": "lib/electron-main/extensions-main-module"
     }
   ],
   "dependencies": {
     "@simpletab/host": "*",
     "@theia/core": "1.77.0",
+    "@theia/electron": "1.77.0",
     "@theia/plugin-ext": "1.77.0",
     "@theia/plugin-ext-vscode": "1.77.0",
     "jsonc-parser": "3.3.1"
